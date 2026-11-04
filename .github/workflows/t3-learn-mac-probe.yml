@@ -1,0 +1,15 @@
+# REL-29 throwaway: which macOS labels get a hosted runner. Delete before merge.
+name: T3 Learn mac probe
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15, macos-14, macos-latest, macos-26-intel, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - run: uname -m; sw_vers; sysctl -n hw.ncpu
