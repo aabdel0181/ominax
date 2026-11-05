@@ -126,6 +126,7 @@ import { SettingsAboutRouteScreen } from "./features/settings/SettingsAboutRoute
 import { SettingsNotificationsRouteScreen } from "./features/settings/SettingsNotificationsRouteScreen";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
 import { SettingsLabsRouteScreen } from "./features/settings/ThreadSettingsSections";
+import { SettingsKnowledgeMapRouteScreen } from "./features/settings/SettingsKnowledgeMapRouteScreen";
 import { SettingsEnvironmentFilterProvider } from "./features/settings/settings-environment-filter";
 import { openSettings, settingsOpenIn } from "./features/settings/settings-navigation";
 import { DEFAULT_SETTINGS_PAGE } from "./features/workspace/workspace-tab-navigation";
@@ -364,6 +365,11 @@ const SETTINGS_SCREENS = {
       title: "Scheduled tasks",
       headerTitleStyle: { fontSize: 16, fontWeight: "800" },
     },
+  }),
+  SettingsKnowledgeMap: createNativeStackScreen({
+    screen: SettingsKnowledgeMapRouteScreen,
+    linking: "settings/knowledge-map",
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "What you know" },
   }),
   SettingsScheduledTaskNew: createNativeStackScreen({
     screen: SettingsScheduledTaskNewRouteScreen,

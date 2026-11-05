@@ -36,6 +36,7 @@ import {
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
 import { filterSettingsSections } from "./settings-search";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
+import { knowledgeMapTargets } from "./knowledgeMapSettings";
 
 export function SettingsRouteScreen() {
   const { layout } = useAdaptiveWorkspaceLayout();
@@ -233,6 +234,7 @@ function useSettingsIndexSections(): SettingsListSection[] {
   ): SettingsListRow => ({ id: target, icon, label, target, ...extra });
   const serverPage = (target: SettingsPageTarget, icon: SettingsListRow["icon"], label: string) =>
     page(target, icon, label, { disabled: noServerTargets });
+  const hasKnowledgeMap = knowledgeMapTargets(selectedTargets).length > 0;
   // The same pages and groups as Settings on web, minus what mobile has no setting for.
   return [
     {
@@ -253,6 +255,7 @@ function useSettingsIndexSections(): SettingsListSection[] {
         serverPage("SettingsProviderAccounts", "person.crop.circle", "Providers"),
         serverPage("SettingsThreads", "text.bubble", "Threads"),
         page("SettingsScheduledTasks", "clock", "Scheduled tasks"),
+        ...(hasKnowledgeMap ? [page("SettingsKnowledgeMap", "brain", "What you know")] : []),
       ],
     },
     {
