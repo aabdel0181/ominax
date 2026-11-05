@@ -16,7 +16,7 @@ Open **Settings → Threads → Side chats** to choose the model for new side ch
 
 ## What you know
 
-OminaX keeps a per-environment map of topics you have explained back correctly. In a lesson, say `mark X done` and explain the topic in your own words. Review or remove entries in Settings → Threads → What you know. Mobile does not show this map yet.
+OminaX keeps a per-environment map of topics you have explained back correctly. In a lesson, say `mark X done` and explain the topic in your own words. Review or remove entries in Settings → Threads → What you know. The mobile app shows the map read-only.
 
 The agent grades your explanation against its own full answer and says plainly what is missing; it saves only an explanation that holds. When you start a topic that isn't on the map, it asks one quick question first to find where to begin.
 
