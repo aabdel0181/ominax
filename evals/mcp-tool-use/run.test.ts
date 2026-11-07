@@ -784,6 +784,45 @@ it.effect("saves a pasted value with no card where request_secret takes one", ()
   }).pipe(Effect.provide(FetchHttpClient.layer)),
 );
 
+it.effect("answers a tool's calls in turn from a $calls mock, failing on $error", () =>
+  Effect.gen(function* () {
+    const base = buildBase(template, { model: "claude-sonnet-5-5", keepUserInstructions: false });
+    const config = {
+      apiKey: "",
+      model: "claude-sonnet-5-5",
+      effort: "high",
+      maxSteps: 6,
+      shellModel: "claude-haiku-5-5",
+    } as const;
+    const sample = makeSample(
+      {
+        ...childCase,
+        setup: {
+          ...childCase.setup,
+          mocks: { html_preview: { $calls: [{ $error: "Timed out." }, { contentHeight: 300 }] } },
+        },
+      },
+      base,
+    );
+    sample.tools.push({ name: "mcp__t3-code__html_preview" });
+    const call = (id: string) =>
+      answerToolCall(sample, config, {
+        type: "tool_use",
+        id,
+        name: "mcp__t3-code__html_preview",
+        input: {},
+      });
+    const first = yield* call("a");
+    assert.isTrue(first.is_error);
+    assert.include(String(first.content), "Timed out.");
+    for (const id of ["b", "c"]) {
+      const next = yield* call(id);
+      assert.notEqual(next.is_error, true);
+      assert.equal(JSON.parse(String(next.content)).contentHeight, 300);
+    }
+  }).pipe(Effect.provide(FetchHttpClient.layer)),
+);
+
 const decodeDeviceCase = Schema.decodeSync(Schema.fromJsonString(McpToolUseCase));
 const deviceCases = () =>
   NodeFS.readFileSync(new URL("./cases/device-manager.ndjson", import.meta.url), "utf8")

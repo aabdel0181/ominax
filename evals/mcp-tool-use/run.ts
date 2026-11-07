@@ -854,6 +854,8 @@ type Sample = {
   devices?: DeviceTools;
   /** T3's results for prior device calls whose case result is "default". */
   readonly priorResults: Map<unknown, string>;
+  /** Calls answered so far by each tool's `$calls` mock. */
+  readonly mockCalls: Map<string, number>;
 };
 
 const SHELL_TOOLS = new Set(["Bash", "Read", "Edit", "Write", "WebFetch"]);
@@ -898,6 +900,7 @@ export const makeSample = (testCase: McpToolUseCase, base: Base): Sample => {
     secretFiles: [],
     secretRequests: 0,
     priorResults: new Map(),
+    mockCalls: new Map(),
   };
 };
 
@@ -1628,6 +1631,14 @@ const savedSecretFile = (sample: Sample, result: unknown) => {
   if (isRecord(result) && typeof result.file === "string") sample.secretFiles.push(result.file);
 };
 
+/** A `$calls` mock answers a tool's nth call with its nth entry; the last entry repeats. */
+const nthMock = (sample: Sample, name: string, mock: unknown) => {
+  if (!isRecord(mock) || !Array.isArray(mock.$calls) || mock.$calls.length === 0) return mock;
+  const n = sample.mockCalls.get(name) ?? 0;
+  sample.mockCalls.set(name, n + 1);
+  return mock.$calls[Math.min(n, mock.$calls.length - 1)];
+};
+
 /** The result for one tool call. */
 export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(function* (
   sample: Sample,
@@ -1658,7 +1669,8 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
     if (found.length === 0) return toolResult(call.id, "No matching deferred tools found");
     return loadTools(tools, call.id, found);
   }
-  const mock = testCase.setup.mocks?.[name];
+  const mock = nthMock(sample, name, testCase.setup.mocks?.[name]);
+  if (isRecord(mock) && typeof mock.$error === "string") return failed(mock.$error);
   // T3 answers device calls from the world. A mock that is a T3 device error fails inside T3.
   const failure = deviceFailure(mock);
   const fromWorld = mock === undefined || mock === "default" || failure !== undefined;
