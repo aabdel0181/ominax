@@ -28,7 +28,7 @@ Say `practice X` (or `practice what I know`) for problems on topics from your ma
 
 ## Pictures and animations
 
-Lessons write the explanation first, then add a picture, an interactive demo, or a short animated clip when it helps, or when you ask ("draw it", "animate it"). Pictures and demos usually follow the text within one to three minutes, and clips within about a minute. Clips need Manim on the machine running OminaX; without it, the lesson shows a demo instead.
+Lessons write the explanation first, then add a picture, an interactive demo, or a short animated clip when it helps, or when you ask ("draw it", "animate it"). Pictures and clips arrive on their own after the text; say "no pictures" or "fewer pictures" to stop them for the rest of the lesson. Clips need Manim on the machine running OminaX.
 
 ## Quizzes
 

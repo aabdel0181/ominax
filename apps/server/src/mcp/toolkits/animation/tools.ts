@@ -16,6 +16,32 @@ import * as ServerConfig from "../../../config.ts";
 import * as CourseService from "../../../course/CourseService.ts";
 import { CourseId } from "../course/tools.ts";
 
+const VisualBriefTool = Tool.make("visual_brief", {
+  description:
+    "Start a background visual helper for this lesson. Explain what the learner should see, why it helps, their level, and every exact number and label. The helper's whole world is this brief; keep teaching without waiting for it.",
+  parameters: Schema.Struct({
+    kind: Schema.Literals(["picture", "demo", "clip"]),
+    title: Schema.String.check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(HTML_RENDER_MAX_TITLE_LENGTH),
+    ),
+    brief: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(16_000)),
+  }),
+  success: Schema.Struct({ started: Schema.Literal(true), message: Schema.String }),
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies: [
+    McpInvocationContext.McpInvocationContext,
+    ThreadManagementService.ThreadManagementService,
+    CourseService.CourseService,
+  ],
+})
+  .annotate(Tool.Title, "Start visual helper")
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, false)
+  .annotate(Tool.OpenWorld, false);
+
 const AnimationRenderTool = Tool.make(ANIMATION_RENDER_TOOL_NAME, {
   description:
     "Render a short ManimCE clip and show it inline in this thread. `code` is a full Python file with `class Lesson(Scene)`, 10 to 25 s, 3Blue1Brown style, no external files or sound; code needs a full-access thread in default mode. Use when motion teaches; skip after 2 failures too. In a course lesson, first check `course_read`'s `cachedConcepts`: pass a fitting `concept` with no `code` to show that prepared clip at once; pass `concept` with `code` to save a new one.",
@@ -63,4 +89,4 @@ const AnimationRenderTool = Tool.make(ANIMATION_RENDER_TOOL_NAME, {
   .annotate(Tool.Idempotent, false)
   .annotate(Tool.OpenWorld, true);
 
-export const AnimationToolkit = Toolkit.make(AnimationRenderTool);
+export const AnimationToolkit = Toolkit.make(AnimationRenderTool, VisualBriefTool);

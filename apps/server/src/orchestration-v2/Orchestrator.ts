@@ -654,6 +654,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.side_chat.opening.complete":
     case "thread.side_chat.outcome.complete":
     case "thread.side_chat.notes.attach":
+    case "thread.visual.attach":
       return command.threadId;
     case "delegated_task.request":
     case "delegated_task.remote.request":
@@ -13111,6 +13112,67 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  const dispatchVisualAttach = Effect.fn("orchestrationV2.dispatch.visualAttach")(function* (
+    command: Extract<OrchestrationV2InternalCommand, { readonly type: "thread.visual.attach" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const projection = yield* projectionStore
+      .getThreadRecords(command.threadId, ["thread", "runs", "nodes", "turnItems"])
+      .pipe(
+        Effect.catchTags({ ProjectionStoreThreadNotFoundError: () => Effect.succeed(null) }),
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    if (
+      projection === null ||
+      projection.thread.deletedAt !== null ||
+      projection.thread.archivedAt !== null
+    )
+      return;
+    const run =
+      (command.runId === undefined
+        ? undefined
+        : projection.runs.find((candidate) => candidate.id === command.runId)) ??
+      projection.runs.findLast((candidate) => candidate.status !== "queued");
+    if (run === undefined) return;
+    const now = yield* DateTime.now;
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      runId: run.id,
+      ...(run.rootNodeId === null ? {} : { nodeId: run.rootNodeId }),
+      providerInstanceId: run.providerInstanceId,
+      occurredAt: now,
+      payload: {
+        id: idAllocator.derive.runSignalTurnItem({
+          runId: run.id,
+          signal: `visual:${command.sourceThreadId}:${command.htmlRender.attachmentId}`,
+        }),
+        threadId: command.threadId,
+        runId: run.id,
+        nodeId: run.rootNodeId,
+        providerThreadId: run.providerThreadId,
+        providerTurnId: providerTurnForRun(projection, run)?.id ?? null,
+        nativeItemRef: null,
+        parentItemId: null,
+        ordinal: yield* nextTurnItemOrdinal(projection),
+        status: "completed",
+        title: command.htmlRender.title,
+        startedAt: now,
+        completedAt: now,
+        updatedAt: now,
+        type: "dynamic_tool",
+        toolName: "html_render",
+        input: {},
+        output: { htmlRender: command.htmlRender },
+      },
+    });
+  });
+
   const dispatchCheckpointRollback = Effect.fn("Orchestrator.dispatchCheckpointRollback")(
     function* (
       command: Extract<OrchestrationV2Command, { readonly type: "checkpoint.rollback" }>,
@@ -14668,6 +14730,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "thread.side_chat.notes.attach":
         yield* dispatchSideChatNotesAttach(command, events);
+        break;
+      case "thread.visual.attach":
+        yield* dispatchVisualAttach(command, events);
         break;
       case "delegated_task.request":
         yield* dispatchDelegatedTaskRequest(command, events, effects);

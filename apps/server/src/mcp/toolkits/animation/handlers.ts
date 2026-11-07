@@ -15,7 +15,14 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { assertFullAccess, loadCaller } from "../../threadAccess.ts";
 import * as ServerConfig from "../../../config.ts";
+import * as VisualHelperRegistry from "../../VisualHelperRegistry.ts";
+import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import { AnimationToolkit } from "./tools.ts";
+
+const VISUAL_HELPER_BRIEF = `You are a background visual helper. Make one finished card for the lesson from this brief:
+{{brief}}
+
+For a picture or demo, write one self-contained HTML page, call html_preview once, fix only real problems (console errors or wrong/missing labels) at most once, then call html_render with the requested title. For a clip, write one ManimCE scene lasting 10–25 seconds and call animation_render with code, the requested title, and a concept slug. If it fails, fix from the error at most twice, then stop quietly. Never message, wake, delegate into another thread, call visual_brief, or add explanatory prose; reply only "done" after the card is rendered.`;
 
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const INVALID_REQUEST_ERRORS = new Set([
@@ -84,9 +91,12 @@ const handlers = {
         }
         const html = `<html><body style="margin:0;background:#000"><video src="data:video/mp4;base64,${Base64.encode(clip)}" autoplay muted playsinline controls style="width:100%;display:block"></video></body></html>`;
         const htmlRenderService = yield* HtmlRender.HtmlRender;
+        const registry = yield* Effect.serviceOption(VisualHelperRegistry.VisualHelperRegistry);
+        const visualHelper =
+          registry._tag === "Some" ? yield* registry.value.lookup(thread.threadId) : undefined;
         const htmlRender = yield* htmlRenderService
           .publish({
-            threadId: thread.threadId,
+            threadId: visualHelper?.threadId ?? thread.threadId,
             html,
             title: input.title,
             height: Math.round((HTML_RENDER_COLUMN_WIDTH * 480) / 854) + 8,
@@ -121,11 +131,73 @@ const handlers = {
             Effect.catch((error) => Effect.logWarning("Could not cache the animation clip", error)),
           );
         }
+        yield* VisualHelperRegistry.attachVisualCard({
+          sourceThreadId: thread.threadId,
+          reference: htmlRender,
+        });
         return {
           htmlRender,
           message: "Shown to the reader above your reply. Don't describe the clip.",
         };
       }),
+  ),
+  visual_brief: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "visual_brief");
+      const registry = yield* Effect.serviceOption(VisualHelperRegistry.VisualHelperRegistry);
+      if (registry._tag === "Some" && (yield* registry.value.lookup(thread.threadId)))
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: "A visual helper cannot start another visual helper.",
+        });
+      const caller = yield* loadCaller();
+      const clientRequestId = `visual:${thread.threadId}:${DateTime.toEpochMillis(yield* DateTime.now)}:${input.title}`;
+      const helperThreadId = OrchestratorMcpService.stableThreadId({
+        scope,
+        requestKey: clientRequestId,
+        index: 0,
+      });
+      if (registry._tag === "None")
+        return yield* new OrchestratorMcpFailure({
+          code: "orchestration_error",
+          message: "Visual helpers are unavailable.",
+        });
+      yield* registry.value.register(helperThreadId, {
+        threadId: thread.threadId,
+        runId: caller.caller?.activeRunId ?? caller.caller?.latestRunId ?? undefined,
+      });
+      const prompt = VISUAL_HELPER_BRIEF.replace(
+        "{{brief}}",
+        `Kind: ${input.kind}\nTitle: ${input.title}\n${input.brief}`,
+      );
+      const orchestrator = yield* Effect.serviceOption(
+        OrchestratorMcpService.OrchestratorMcpService,
+      );
+      if (orchestrator._tag === "None")
+        return yield* registry.value.remove(helperThreadId).pipe(
+          Effect.andThen(
+            new OrchestratorMcpFailure({
+              code: "orchestration_error",
+              message: "Visual helpers are unavailable.",
+            }),
+          ),
+        );
+      yield* orchestrator.value
+        .createThreads(scope, {
+          clientRequestId,
+          threads: [{ title: `Visual: ${input.title}`, prompt }],
+        })
+        .pipe(
+          Effect.mapError((error) => error),
+          Effect.tapError(() => registry.value.remove(helperThreadId)),
+        );
+      return {
+        started: true as const,
+        message:
+          "Keep teaching. The visual appears in the lesson by itself; don't wait for it or mention it.",
+      };
+    }),
   ),
 } satisfies McpToolAccess.Handlers<typeof AnimationToolkit.tools>;
 

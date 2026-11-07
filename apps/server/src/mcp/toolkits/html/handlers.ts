@@ -2,6 +2,7 @@ import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
+import * as VisualHelperRegistry from "../../VisualHelperRegistry.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { HtmlPreviewToolkit, HtmlRenderToolkit, type HtmlToolkit } from "./tools.ts";
@@ -40,10 +41,14 @@ const handlers = {
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "html_render");
+      const registry = yield* Effect.serviceOption(VisualHelperRegistry.VisualHelperRegistry);
+      const visualHelper =
+        registry._tag === "Some" ? yield* registry.value.lookup(thread.threadId) : undefined;
       const htmlRender = yield* HtmlRender.HtmlRender;
       const reference = yield* htmlRender
-        .publish({ threadId: thread.threadId, ...input })
+        .publish({ threadId: visualHelper?.threadId ?? thread.threadId, ...input })
         .pipe(Effect.mapError(toFailure));
+      yield* VisualHelperRegistry.attachVisualCard({ sourceThreadId: thread.threadId, reference });
       return {
         htmlRender: reference,
         message:

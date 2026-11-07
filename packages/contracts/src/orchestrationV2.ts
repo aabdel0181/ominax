@@ -3760,6 +3760,19 @@ const OrchestrationV2InternalCommand = Schema.Union([
     threadId: ThreadId,
     runId: RunId,
   }),
+  Schema.Struct({
+    type: Schema.Literal("thread.visual.attach"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: Schema.optional(RunId),
+    sourceThreadId: ThreadId,
+    htmlRender: Schema.Struct({
+      attachmentId: TrimmedNonEmptyString,
+      title: Schema.String,
+      height: Schema.Number,
+      heights: Schema.optional(Schema.Array(Schema.Tuple([Schema.Int, Schema.Int]))),
+    }),
+  }),
   /**
    * Records or updates a link an agent asked the user to make. Internal so no
    * client can mark a request linked without the link being made.

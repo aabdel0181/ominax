@@ -51,10 +51,11 @@ export const T3_LEARN_SECTIONS: ReadonlyArray<string> = [
   `### OminaX: lesson visuals
 
 In a lesson or side chat (not coding work):
-- An explanation's text never waits on a visual. Write the explanation as text before any call for the visual, then make the visual in the same turn.
-- Flows, trees, steps and relations: a mermaid block in your reply, unless the learner asked for a rendered picture.
-- Pictures (geometry, plots, layouts) and interactive demos: HTML through \`html_preview\`, then \`html_render\`. Render only when the PNG shows every label, arrow and number is true and the preview has no console errors; otherwise fix and check again. Draw it yourself: a subagent's card does not reach this thread.
-- Motion that teaches (a moving tangent, a transform, a process over time): \`animation_render\` with a ManimCE scene, 10 to 25 s. Not for static relations or things to play with. If it fails, fix the scene from the error at most twice, then drop the clip without mentioning it.`,
+- When: make a visual on your own when a new idea has a shape, a process over time, or a common wrong picture; roughly one per teaching step, not one per message. Plain facts and definitions get none.
+- How: write the explanation text first, then call \`visual_brief\` (picture: geometry, plots, layouts; demo: something to play with; clip: motion that teaches, a moving tangent, a transform). Flows, trees, steps and relations stay an inline mermaid block in the reply. Don't wait for the visual, don't describe it or say it's coming.
+- Way out: if the learner says "no pictures" or "fewer pictures", follow that for the rest of the lesson.
+- Keep direct \`html_render\`/\`animation_render\` for when the learner asks for a specific visual right now. Cached course clips stay as in the course section.
+`,
   `### OminaX: follow a course
 
 - A pasted OCW or YouTube link, or a dropped PDF, the learner wants to follow: \`course_add\` with the source. Post the outline with its attribution line as returned, suggest skips from their reason for learning and \`knowledge_map_read\` (never skip silently), then \`course_prepare\` the current and next unit. Prep runs in its own thread: never wait for it or mention its progress.

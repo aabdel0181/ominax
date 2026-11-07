@@ -87,6 +87,7 @@ import { KnowledgeToolkit } from "./toolkits/knowledge/tools.ts";
 import * as QuizHandlers from "./toolkits/quiz/handlers.ts";
 import { QuizToolkit } from "./toolkits/quiz/tools.ts";
 import * as CourseHandlers from "./toolkits/course/handlers.ts";
+import * as VisualHelperRegistry from "./VisualHelperRegistry.ts";
 import { CourseToolkit } from "./toolkits/course/tools.ts";
 
 const mcpResourceMetadataUrl = (request: HttpServerRequest.HttpServerRequest) =>
@@ -1152,7 +1153,7 @@ export const layerHtmlToolkit = Layer.mergeAll(
   toolkitRegistration(AnimationToolkit, AnimationHandlers.layer).pipe(
     Layer.provide(ManimRender.layer),
   ),
-).pipe(Layer.provide(HtmlRender.layer));
+).pipe(Layer.provide(HtmlRender.layer), Layer.provide(VisualHelperRegistry.layer));
 
 const layerPreviewStandardToolkitRegistration = toolkitRegistration(
   PreviewStandardToolkit,
