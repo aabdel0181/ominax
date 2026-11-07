@@ -91,9 +91,8 @@ const handlers = {
         }
         const html = `<html><body style="margin:0;background:#000"><video src="data:video/mp4;base64,${Base64.encode(clip)}" autoplay muted playsinline controls style="width:100%;display:block"></video></body></html>`;
         const htmlRenderService = yield* HtmlRender.HtmlRender;
-        const registry = yield* Effect.serviceOption(VisualHelperRegistry.VisualHelperRegistry);
-        const visualHelper =
-          registry._tag === "Some" ? yield* registry.value.lookup(thread.threadId) : undefined;
+        const registry = yield* VisualHelperRegistry.VisualHelperRegistry;
+        const visualHelper = yield* registry.lookup(thread.threadId);
         const htmlRender = yield* htmlRenderService
           .publish({
             threadId: visualHelper?.threadId ?? thread.threadId,
@@ -145,8 +144,8 @@ const handlers = {
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "visual_brief");
-      const registry = yield* Effect.serviceOption(VisualHelperRegistry.VisualHelperRegistry);
-      if (registry._tag === "Some" && (yield* registry.value.lookup(thread.threadId)))
+      const registry = yield* VisualHelperRegistry.VisualHelperRegistry;
+      if (yield* registry.lookup(thread.threadId))
         return yield* new OrchestratorMcpFailure({
           code: "invalid_request",
           message: "A visual helper cannot start another visual helper.",
@@ -158,12 +157,7 @@ const handlers = {
         requestKey: clientRequestId,
         index: 0,
       });
-      if (registry._tag === "None")
-        return yield* new OrchestratorMcpFailure({
-          code: "orchestration_error",
-          message: "Visual helpers are unavailable.",
-        });
-      yield* registry.value.register(helperThreadId, {
+      yield* registry.register(helperThreadId, {
         threadId: thread.threadId,
         runId: caller.caller?.activeRunId ?? caller.caller?.latestRunId ?? undefined,
       });
@@ -171,27 +165,13 @@ const handlers = {
         "{{brief}}",
         `Kind: ${input.kind}\nTitle: ${input.title}\n${input.brief}`,
       );
-      const orchestrator = yield* Effect.serviceOption(
-        OrchestratorMcpService.OrchestratorMcpService,
-      );
-      if (orchestrator._tag === "None")
-        return yield* registry.value.remove(helperThreadId).pipe(
-          Effect.andThen(
-            new OrchestratorMcpFailure({
-              code: "orchestration_error",
-              message: "Visual helpers are unavailable.",
-            }),
-          ),
-        );
-      yield* orchestrator.value
+      const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
+      yield* orchestrator
         .createThreads(scope, {
           clientRequestId,
           threads: [{ title: `Visual: ${input.title}`, prompt }],
         })
-        .pipe(
-          Effect.mapError((error) => error),
-          Effect.tapError(() => registry.value.remove(helperThreadId)),
-        );
+        .pipe(Effect.tapError(() => registry.remove(helperThreadId)));
       return {
         started: true as const,
         message:

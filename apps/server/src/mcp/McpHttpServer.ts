@@ -1152,6 +1152,7 @@ export const layerHtmlToolkit = Layer.mergeAll(
   imageToolRegistration(registerHtmlPreview(), HtmlHandlers.layerPreview),
   toolkitRegistration(AnimationToolkit, AnimationHandlers.layer).pipe(
     Layer.provide(ManimRender.layer),
+    Layer.provide(OrchestratorMcpService.layer),
   ),
 ).pipe(Layer.provide(HtmlRender.layer), Layer.provide(VisualHelperRegistry.layer));
 

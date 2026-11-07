@@ -13117,7 +13117,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
   ) {
     const projection = yield* projectionStore
-      .getThreadRecords(command.threadId, ["thread", "runs", "nodes", "turnItems"])
+      .getThreadRecords(command.threadId, [
+        "thread",
+        "runs",
+        "nodes",
+        "turnItems",
+        "attempts",
+        "providerTurns",
+      ])
       .pipe(
         Effect.catchTags({ ProjectionStoreThreadNotFoundError: () => Effect.succeed(null) }),
         Effect.mapError(
@@ -14873,6 +14880,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           command.type === "thread.interrupt.unresponsive" ||
           command.type === "thread.stop" ||
           command.type === "subagent.stop" ||
+          command.type === "thread.visual.attach" ||
           // Closing a share again, or after it ended, is not an error.
           command.type === "thread.guest-share.close" ||
           (command.type === "thread.delete" && command.onlyIfUnused === true),

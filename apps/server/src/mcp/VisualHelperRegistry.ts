@@ -52,9 +52,8 @@ export const attachVisualCard = Effect.fn("mcp.attachVisualCard")(function* (inp
   readonly sourceThreadId: ThreadId;
   readonly reference: HtmlRenderReference;
 }) {
-  const registry = yield* Effect.serviceOption(VisualHelperRegistry);
-  if (registry._tag === "None") return;
-  const registration = yield* registry.value.lookup(input.sourceThreadId);
+  const registry = yield* VisualHelperRegistry;
+  const registration = yield* registry.lookup(input.sourceThreadId);
   if (registration === undefined) return;
   yield* (yield* ThreadManagementService.ThreadManagementService)
     .dispatch({

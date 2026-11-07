@@ -40,6 +40,7 @@ import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { htmlRenderFromToolItem } from "@t3tools/shared/toolOutput";
 
 const instanceId = ProviderInstanceId.make("codex");
 const modelSelection = { instanceId, model: "gpt-5.1-codex" };
@@ -60,6 +61,78 @@ const layerTest = Layer.mergeAll(
     ProviderAdapterRegistry.layerFromAdapters([adapter]),
     { databaseLayer: layerDatabase, runEffectWorker: false },
   ),
+);
+
+it.effect("attaches a visual card without waking or creating a run", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const threadId = ThreadId.make("thread:visual-attach");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-visual-attach"),
+      threadId,
+      projectId: ProjectId.make("project:visual-attach"),
+      title: "Lesson",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* orchestrator.dispatch({
+      type: "message.dispatch",
+      commandId: CommandId.make("message-visual-attach"),
+      threadId,
+      messageId: MessageId.make("message:visual-attach"),
+      text: "Explain vectors",
+      attachments: [],
+      dispatchMode: { type: "start_immediately" },
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const before = yield* projections.getThreadProjection(threadId);
+    const run = before.runs.at(-1);
+    assert.isDefined(run);
+    const reference = { attachmentId: "visual-attachment", title: "Vectors", height: 360 };
+    const attached = yield* orchestrator.dispatch({
+      type: "thread.visual.attach",
+      commandId: CommandId.make("attach-visual-card"),
+      threadId,
+      runId: run!.id,
+      sourceThreadId: ThreadId.make("thread:visual-helper"),
+      htmlRender: reference,
+    });
+    assert.lengthOf(attached.storedEvents, 1);
+    const after = yield* projections.getThreadProjection(threadId);
+    assert.deepEqual(after.runs, before.runs);
+    assert.deepEqual(after.messages, before.messages);
+    const visualItems = after.turnItems.filter(
+      (item) => item.type === "dynamic_tool" && item.toolName === "html_render",
+    );
+    assert.lengthOf(visualItems, 1);
+    assert.deepEqual(htmlRenderFromToolItem(visualItems[0]!), reference);
+
+    yield* orchestrator.dispatch({
+      type: "thread.archive",
+      commandId: CommandId.make("archive-visual-attach"),
+      threadId,
+    });
+    const dropped = yield* orchestrator.dispatch({
+      type: "thread.visual.attach",
+      commandId: CommandId.make("attach-visual-card-archived"),
+      threadId,
+      sourceThreadId: ThreadId.make("thread:visual-helper-archived"),
+      htmlRender: { ...reference, attachmentId: "archived-attachment" },
+    });
+    assert.lengthOf(dropped.storedEvents, 0);
+    assert.lengthOf(
+      (yield* projections.getThreadProjection(threadId)).turnItems,
+      after.turnItems.length,
+    );
+  }).pipe(Effect.provide(layerTest)),
 );
 
 it.effect(

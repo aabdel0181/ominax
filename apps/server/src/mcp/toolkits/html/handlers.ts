@@ -41,9 +41,8 @@ const handlers = {
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "html_render");
-      const registry = yield* Effect.serviceOption(VisualHelperRegistry.VisualHelperRegistry);
-      const visualHelper =
-        registry._tag === "Some" ? yield* registry.value.lookup(thread.threadId) : undefined;
+      const registry = yield* VisualHelperRegistry.VisualHelperRegistry;
+      const visualHelper = yield* registry.lookup(thread.threadId);
       const htmlRender = yield* HtmlRender.HtmlRender;
       const reference = yield* htmlRender
         .publish({ threadId: visualHelper?.threadId ?? thread.threadId, ...input })

@@ -55,6 +55,7 @@ import * as ServerSettings from "../../serverSettings.ts";
 import * as McpHttpServer from "../McpHttpServer.ts";
 import * as McpInvocationContext from "../McpInvocationContext.ts";
 import * as McpToolAccessTestkit from "../McpToolAccess.testkit.ts";
+import * as VisualHelperRegistry from "../VisualHelperRegistry.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import { dispatchFailure } from "../threadAccess.ts";
 import * as EnvironmentHandlers from "./environment/handlers.ts";
@@ -69,6 +70,8 @@ import * as ProcessRunner from "../../processRunner.ts";
 import * as OrchestratorMcpService from "../OrchestratorMcpService.ts";
 import * as AnimationHandlers from "./animation/handlers.ts";
 import { AnimationToolkit } from "./animation/tools.ts";
+import * as HtmlHandlers from "./html/handlers.ts";
+import { HtmlRenderToolkit } from "./html/tools.ts";
 import * as CourseHandlers from "./course/handlers.ts";
 import { CourseToolkit } from "./course/tools.ts";
 import * as FileSystem from "effect/FileSystem";
@@ -287,18 +290,21 @@ it.effect("returns an HTML render reference that Codex and Claude tool rows both
     ).toEqual(reference);
   }).pipe(
     Effect.provide(
-      McpHttpServer.layerHtmlToolkit.pipe(
+      McpHttpServer.toolkitRegistration(HtmlRenderToolkit, HtmlHandlers.layerRender).pipe(
         Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
-        Layer.provide(Layer.succeed(CourseService.CourseService, CourseService.unavailable)),
-        Layer.provide(McpProviderSessions.layer),
-        Layer.provide(PreviewBrowser.layer),
+        Layer.provide(VisualHelperRegistry.layer),
         Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-mcp-html-render-" })),
+        Layer.provide(NodeServices.layer),
         Layer.provide(
-          DocumentText.layer.pipe(
-            Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
-          ),
+          Layer.mock(HtmlRender.HtmlRender)({
+            publish: (input) =>
+              Effect.succeed({
+                attachmentId: "html-render-test",
+                title: input.title,
+                height: input.height,
+              }),
+          }),
         ),
-        Layer.provide(FetchHttpClient.layer),
         Layer.provide(
           Layer.mock(ThreadManagement.ThreadManagementService)({
             getThreadShell: () =>
@@ -1211,6 +1217,7 @@ it.effect("animation_render caches a concept clip and replays it without renderi
     Effect.provide(
       McpHttpServer.toolkitRegistration(AnimationToolkit, AnimationHandlers.layer).pipe(
         Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
+        Layer.provide(VisualHelperRegistry.layer),
         Layer.provide(
           Layer.succeed(
             ManimRender.ManimRender,
@@ -1234,10 +1241,107 @@ it.effect("animation_render caches a concept clip and replays it without renderi
               }),
           }),
         ),
+        Layer.provide(Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({})),
         Layer.provideMerge(courseServiceLayer),
         Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "t3-mcp-animation-" })),
         Layer.provideMerge(NodeServices.layer),
         Layer.provide(liveCallerLayer),
+      ),
+    ),
+  );
+});
+
+it.effect("visual helpers attach HTML cards and cannot start another helper", () => {
+  const helperThreadId = ThreadId.make("visual-helper-thread");
+  const lessonThreadId = ThreadId.make("visual-lesson-thread");
+  const attached: unknown[] = [];
+  let created = 0;
+  const helperScope = {
+    ...scope,
+    thread: { ...scope.thread!, threadId: helperThreadId },
+  };
+  const call = (name: string, arguments_: Record<string, unknown>) =>
+    Effect.gen(function* () {
+      return yield* (yield* McpServer.McpServer)
+        .callTool({ name, arguments: arguments_ })
+        .pipe(
+          Effect.provideService(McpInvocationContext.McpInvocationContext, helperScope),
+          Effect.provideService(McpSchema.McpServerClient, client),
+        );
+    });
+  return Effect.gen(function* () {
+    const registry = yield* VisualHelperRegistry.VisualHelperRegistry;
+    yield* registry.register(helperThreadId, { threadId: lessonThreadId, runId: undefined });
+    const rendered = yield* call("html_render", {
+      html: "<html><body>Vectors</body></html>",
+      title: "Vectors",
+      height: 240,
+    });
+    expect(rendered.isError).toBe(false);
+    expect(attached).toEqual([
+      expect.objectContaining({
+        type: "thread.visual.attach",
+        threadId: lessonThreadId,
+        sourceThreadId: helperThreadId,
+        htmlRender: { attachmentId: "visual-helper-card", title: "Vectors", height: 240 },
+      }),
+    ]);
+    const refused = yield* call("visual_brief", {
+      kind: "picture",
+      title: "Nested",
+      brief: "This must not start another helper.",
+    });
+    expect(declaredFailure(refused)).toMatchObject({
+      code: "invalid_request",
+      message: "A visual helper cannot start another visual helper.",
+    });
+    expect(created).toBe(0);
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        McpHttpServer.toolkitRegistration(HtmlRenderToolkit, HtmlHandlers.layerRender),
+        McpHttpServer.toolkitRegistration(AnimationToolkit, AnimationHandlers.layer),
+      ).pipe(
+        Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
+        Layer.provideMerge(VisualHelperRegistry.layer),
+        Layer.provide(
+          Layer.mock(HtmlRender.HtmlRender)({
+            publish: (input) =>
+              Effect.succeed({
+                attachmentId: "visual-helper-card",
+                title: input.title,
+                height: input.height,
+              }),
+          }),
+        ),
+        Layer.provide(
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: (id) =>
+              Effect.succeed({
+                ...McpToolAccessTestkit.liveThreadShell(id),
+                id,
+              }),
+            dispatch: (command) =>
+              Effect.sync(() => {
+                attached.push(command);
+                return {} as never;
+              }),
+          }),
+        ),
+        Layer.provide(
+          Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({
+            createThreads: () =>
+              Effect.sync(() => {
+                created += 1;
+                return {} as never;
+              }),
+          }),
+        ),
+        Layer.provide(ServerSettings.layerTest()),
+        Layer.provide(Layer.mock(CourseService.CourseService)({})),
+        Layer.provide(Layer.mock(ManimRender.ManimRender)({})),
+        Layer.provide(Layer.mock(ProcessRunner.ProcessRunner)({})),
+        Layer.provide(NodeServices.layer),
       ),
     ),
   );
