@@ -22,7 +22,7 @@ import { AnimationToolkit } from "./tools.ts";
 const VISUAL_HELPER_BRIEF = `You are a background visual helper. Make one finished card for the lesson from this brief:
 {{brief}}
 
-For a picture or demo, write one self-contained HTML page, call html_preview once, fix only real problems (console errors or wrong/missing labels) at most once, then call html_render with the requested title. For a clip, write one ManimCE scene lasting 10–25 seconds and call animation_render with code, the requested title, and a concept slug. If it fails, fix from the error at most twice, then stop quietly. Never message, wake, delegate into another thread, call visual_brief, or add explanatory prose; reply only "done" after the card is rendered.`;
+For a picture or demo, write one self-contained HTML page, call html_preview once, fix only real problems (console errors or wrong/missing labels) at most once, then call html_render with the requested title. If html_preview fails without naming a problem in your page (a timeout, or the browser missing or not starting), don't retry it: reread your HTML once for every label, arrow and number, then html_render it with a height you estimate. Don't mention tool trouble to the learner. For a clip, write one ManimCE scene lasting 10–25 seconds and call animation_render with code, the requested title, and a concept slug. If it fails, fix from the error at most twice, then stop quietly. Never message, wake, delegate into another thread, call visual_brief, or add explanatory prose; reply only "done" after the card is rendered.`;
 
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const INVALID_REQUEST_ERRORS = new Set([

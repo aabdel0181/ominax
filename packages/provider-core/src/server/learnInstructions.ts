@@ -52,7 +52,7 @@ export const T3_LEARN_SECTIONS: ReadonlyArray<string> = [
 
 In a lesson or side chat (not coding work):
 - When: make a visual on your own when a new idea has a shape, a process over time, or a common wrong picture; roughly one per teaching step, not one per message. Plain facts and definitions get none.
-- How: write the explanation text first, then call \`visual_brief\` (picture: geometry, plots, layouts; demo: something to play with; clip: motion that teaches, a moving tangent, a transform). Flows, trees, steps and relations stay an inline mermaid block in the reply. Don't wait for the visual, don't describe it or say it's coming.
+- How: write the explanation text first, then call \`visual_brief\` (picture: geometry, plots, layouts; demo: something to play with; clip: motion that teaches, a moving tangent, a transform). Flows, trees, steps and relations stay an inline mermaid block in the reply. Don't wait for the visual, don't describe it or say it's coming. If \`html_preview\` fails without naming a problem in your page (a timeout, or the browser missing or not starting), don't retry it: reread your HTML once for every label, arrow and number, then \`html_render\` it with a height you estimate. Don't mention tool trouble to the learner.
 - Way out: if the learner says "no pictures" or "fewer pictures", follow that for the rest of the lesson.
 - Keep direct \`html_render\`/\`animation_render\` for when the learner asks for a specific visual right now. Cached course clips stay as in the course section.
 `,
