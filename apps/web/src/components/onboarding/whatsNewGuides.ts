@@ -5,7 +5,8 @@ export type WhatsNewGuide = {
     | "what-you-know"
     | "quiz-cards"
     | "courses"
-    | "chat-sync";
+    | "chat-sync"
+    | "lesson-visuals";
   readonly version: string;
   readonly title: string;
   readonly benefit: string;
@@ -54,6 +55,13 @@ export const whatsNewGuides: readonly WhatsNewGuide[] = [
     title: "Bring over your T3 Code chats",
     benefit: "Continue learning from chats you already made in T3 Code.",
     actionLabel: "Try chat sync",
+  },
+  {
+    id: "lesson-visuals",
+    version: "0.1.7",
+    title: "Pictures and clips on their own",
+    benefit: "Lessons draw pictures and animations for new ideas while you keep chatting.",
+    actionLabel: "Try a visual lesson",
   },
 ];
 

@@ -34,6 +34,7 @@ describe("resolveWhatsNewGuides", () => {
       "what-you-know",
       "quiz-cards",
       "chat-sync",
+      "lesson-visuals",
     ]);
   });
 

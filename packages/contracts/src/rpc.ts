@@ -859,6 +859,7 @@ const WsLearnFeatureUsedRpc = Rpc.make(WS_METHODS.learnFeatureUsed, {
         "quiz-cards",
         "courses",
         "chat-sync",
+        "lesson-visuals",
       ]),
     }),
     Schema.Struct({ feature: Schema.Literal("knowledge_map.view") }),
