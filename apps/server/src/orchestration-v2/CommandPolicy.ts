@@ -255,6 +255,8 @@ const ensureQueuedMessages: CommandPolicyV2Shape["ensureQueuedMessages"] = (inpu
       );
 
 const decideSteeringExecution: CommandPolicyV2Shape["decideSteeringExecution"] = (input) => {
+  // REL-60: deliberately broken to prove the scripted learner goes red. Never merge.
+  return Effect.fail(unsupported(input, "active_steering", "REL-60 deliberately broken"));
   if (!input.forceRestart && input.capabilities.turns.supportsActiveSteering) {
     return Effect.succeed("active_steering");
   }
