@@ -1070,10 +1070,7 @@ it("goes to the source of a sent side-chat citation in the panel, not on its rou
   setupSide1History(`${serializeAssistantCitation(SIDE_1_CITATION)} what is this?`);
   await using screen = await renderPanel({ router: LESSON_PATH });
 
-  await screen
-    .getByRole("button", { name: "Quoted assistant text: a bounded space. Show details" })
-    .click();
-  await page.getByRole("link", { name: "Go to source" }).click();
+  await screen.getByRole("link", { name: "Go to quoted response: a bounded space" }).click();
 
   await vi.waitFor(() => expect(citedReplies()).toEqual([SIDE_1_REPLY]));
   expect(screen.router?.state.location.pathname).toBe(LESSON_PATH);

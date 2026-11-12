@@ -78,7 +78,7 @@ export const deliverContextHandoffs = Effect.fn("orchestrationV2.deliverContextH
         .join("\n");
       if (historyCost([], coverage) > Math.min(4_000, budget / 2)) {
         const strategies = Array.from(new Set(handoffs.map((handoff) => handoff.strategy)));
-        coverage = `Context handoff (${strategies.join(", ")}). ${handoffs.length} handoff records; detailed coverage references omitted. Recover history with t3_thread_read({threadId:"${input.providerThread.appThreadId ?? handoffs[0]!.threadId}",view:"activity",limit:20,maxCharsPerItem:4000}); paginate with afterPosition=nextPosition. Follow fork/handoff source references in activity. For long items use itemId and textOffset=nextTextOffset until null.`;
+        coverage = `Context handoff (${strategies.join(", ")}). ${handoffs.length} handoff records; detailed coverage references omitted. Recover an omitted item only when the request needs it, with t3_thread_read({threadId:"${input.providerThread.appThreadId ?? handoffs[0]!.threadId}",view:"activity",itemId:"<omitted item ID>",maxCharsPerItem:4000}); continue long text with textOffset=nextTextOffset until null. Follow fork/handoff source references in activity. Items included below need no read.`;
       }
       const seen = new Set(input.alreadyDeliveredItemIds);
       const messages = handoffs
@@ -123,6 +123,7 @@ export const deliverContextHandoffs = Effect.fn("orchestrationV2.deliverContextH
             (sum, handoff) => sum + (handoff.history?.omittedItems ?? 0),
             0,
           ),
+          omittedItemIds: handoffs.flatMap((handoff) => handoff.history?.omittedItemIds ?? []),
           budget,
         }),
         summariesIncluded: oldContext === "" || fullCoverage !== coverage,
