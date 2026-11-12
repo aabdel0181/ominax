@@ -6,7 +6,9 @@ export type WhatsNewGuide = {
     | "quiz-cards"
     | "question-cards"
     | "answer-types"
-    | "courses"
+    | "lesson-pictures"
+    | "course-psets"
+    | "course-outline"
     | "chat-sync"
     | "queued-follow-ups";
   readonly version: string;
@@ -64,14 +66,6 @@ export const whatsNewGuides: readonly WhatsNewGuide[] = [
     actionLabel: "Try a lesson",
   },
   {
-    id: "courses",
-    version: "0.1.7",
-    title: "Follow a course",
-    benefit:
-      "Paste an MIT OpenCourseWare or YouTube course link into New lesson, and the lesson posts the outline and gets the next units ready.",
-    actionLabel: "Try a course",
-  },
-  {
     id: "chat-sync",
     version: "0.1.7",
     title: "Sync from T3 Code",
@@ -85,6 +79,30 @@ export const whatsNewGuides: readonly WhatsNewGuide[] = [
     benefit:
       "Messages you send while the tutor replies now wait their turn; ⌘-click (Ctrl-click) to steer.",
     actionLabel: "See the setting",
+  },
+  {
+    id: "lesson-pictures",
+    version: "0.1.9",
+    title: "Real pictures in lessons",
+    benefit:
+      "Lessons draw diagrams and short clips for you, and the picture for a question you just answered shows with your grade.",
+    actionLabel: "Try a lesson",
+  },
+  {
+    id: "course-psets",
+    version: "0.1.9",
+    title: "Problem sets from your course",
+    benefit:
+      "After a unit, work the course's own problem sets with hints that don't give it away, grading that links the published solution, and \"just tell me\" to skip.",
+    actionLabel: "Try a course",
+  },
+  {
+    id: "course-outline",
+    version: "0.1.9",
+    title: "Paste a course link",
+    benefit:
+      "Paste an MIT OpenCourseWare or YouTube course link into New lesson, and the course arrives in order, with its outline and credit on the first screen.",
+    actionLabel: "Paste a course link",
   },
 ];
 

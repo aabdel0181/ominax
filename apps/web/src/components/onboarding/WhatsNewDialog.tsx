@@ -133,7 +133,10 @@ function WhatsNewDialog({
         case "new-lesson":
         case "quiz-cards":
         case "question-cards":
-        case "answer-types": {
+        case "answer-types":
+        case "lesson-pictures":
+        case "course-psets":
+        case "course-outline": {
           const button = document.querySelector<HTMLButtonElement>('[aria-label="New lesson"]');
           if (button) button.click();
           else openCommandPalette({ query: "New lesson" });
@@ -144,9 +147,6 @@ function WhatsNewDialog({
           break;
         case "what-you-know":
           void navigate({ to: "/settings/threads", hash: "knowledge-map" });
-          break;
-        case "courses":
-          void navigate({ to: "/settings/threads", hash: "courses" });
           break;
         case "chat-sync":
           void navigate({ to: "/settings/threads", hash: "chat-sync" });

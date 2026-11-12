@@ -33,17 +33,28 @@ describe("resolveWhatsNewGuides", () => {
       "answer-types",
       "chat-sync",
       "queued-follow-ups",
+      "lesson-pictures",
+      "course-psets",
+      "course-outline",
     ]);
   });
 
   it("returns only guides missing from the current record", () => {
     const result = resolveWhatsNewGuides({
-      seen: allIds.filter((id) => id !== "courses"),
+      // A profile that dismissed every 0.1.7 guide, including the retired "courses".
+      seen: [
+        ...allIds.filter((id) => !id.startsWith("course") && id !== "lesson-pictures"),
+        "courses",
+      ],
       legacySeen: [],
       legacyInstall: true,
       chatSyncAvailable: true,
     });
-    expect(result.guides.map((guide) => guide.id)).toEqual(["courses"]);
+    expect(result.guides.map((guide) => guide.id)).toEqual([
+      "lesson-pictures",
+      "course-psets",
+      "course-outline",
+    ]);
   });
 
   it("excludes chat sync when no environment supports it", () => {
