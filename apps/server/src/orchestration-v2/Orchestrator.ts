@@ -4989,7 +4989,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 type: "provider-session.apply-model-selection",
                 providerSessionId,
                 providerThreadId: providerThread.id,
-                modelSelection: command.modelSelection,
+                modelSelection:
+                  thread.lesson === undefined && thread.sideChat === undefined
+                    ? command.modelSelection
+                    : withoutUltracode(command.modelSelection),
               },
             } satisfies PendingOrchestrationEffectV2,
           ]);

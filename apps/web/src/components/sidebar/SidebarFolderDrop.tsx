@@ -6,6 +6,7 @@ import * as Schema from "effect/Schema";
 import { FolderPlusIcon } from "lucide-react";
 import { useState, type DragEvent, type ReactNode } from "react";
 
+import { APP_BASE_NAME } from "../../branding";
 import { useOpenLocalWorkspace } from "../../hooks/useOpenLocalWorkspace";
 import { randomUUID } from "../../lib/utils";
 import { resolveDroppedFolderPath } from "../chat/folderDrop";
@@ -72,7 +73,7 @@ export function SidebarFolderDrop(props: { children: ReactNode }) {
         stackedThreadToast({
           type: "error",
           title: `Could not add "${folder.name}"`,
-          description: response?.message ?? "T3 Code could not read the folder's path.",
+          description: response?.message ?? `${APP_BASE_NAME} could not read the folder's path.`,
         }),
       );
     }
