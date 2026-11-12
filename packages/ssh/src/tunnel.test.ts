@@ -9,7 +9,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NetService from "@t3tools/shared/Net";
-import { T3_LEARN_HOME_DIRECTORY } from "@t3tools/shared/t3LearnIdentity";
+import { T3_LEARN_HOME_DIRECTORY, T3_LEARN_REPOSITORY } from "@t3tools/shared/t3LearnIdentity";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -230,7 +230,10 @@ describe("ssh tunnel scripts", () => {
           assert.include(result.stderr, "download attempt");
           // A bare curl error does not tell the user that t3 itself could not be downloaded.
           assert.include(result.stderr, ARCHIVE.archiveVersion);
-          assert.include(result.stderr, "https://github.com/pingdotgg/t3code/releases/download");
+          assert.include(
+            result.stderr,
+            `https://github.com/${T3_LEARN_REPOSITORY}/releases/download`,
+          );
         } else {
           assert.notInclude(result.stderr, "download attempt");
           assert.include(result.stderr, "has no t3 release archive.");
@@ -914,7 +917,7 @@ server.listen(Number(flag("--port") ?? 0), "127.0.0.1", () => {
         holderPort,
         sshAsLocalShell,
         staleId: staleId === "an unrelated process" ? holder.pid : tid,
-        stateDir: `${home}/.t3/ssh-launch/${yield* remoteStateKey(target)}`,
+        stateDir: `${home}/${T3_LEARN_HOME_DIRECTORY}/ssh-launch/${yield* remoteStateKey(target)}`,
       };
     });
 
@@ -948,7 +951,7 @@ server.listen(Number(flag("--port") ?? 0), "127.0.0.1", () => {
       // Reboot: our server is gone and its recorded PID now names something that
       // answers on the recorded port.
       process.kill(firstPid, "SIGKILL");
-      yield* fs.remove(`${home}/.t3/userdata/server-runtime.json`);
+      yield* fs.remove(`${home}/${T3_LEARN_HOME_DIRECTORY}/userdata/server-runtime.json`);
       yield* fs.writeFileString(`${stateDir}/pid`, `${staleId}\n`);
       yield* fs.writeFileString(`${stateDir}/port`, `${holderPort}\n`);
 

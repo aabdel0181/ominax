@@ -104,6 +104,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
                   ...config,
                   mode,
                   desktopTelemetryControlFd: mode === "desktop" ? 3 : undefined,
+                  desktopAppUpdate: mode === "desktop" ? true : undefined,
                 }),
               ),
             ),
@@ -170,7 +171,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
         }).toEqual({
           serverSelfUpdate: "desktop-managed",
           desktopAppUpdate: advertised,
-          desktopAppChannelSwitch: advertised,
+          // T3 Learn has one update track, so it never offers a channel switch.
+          desktopAppChannelSwitch: undefined,
           serverSelfUpdateProgress: advertised,
         });
       }),
