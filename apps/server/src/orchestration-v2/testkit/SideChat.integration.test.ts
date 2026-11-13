@@ -5,6 +5,7 @@ import {
   MessageId,
   ProviderDriverKind,
   ProviderInstanceId,
+  NodeId,
   ProjectId,
   RunId,
   SIDE_CHAT_CONTEXT_FALLBACK_HANDOFF_TITLE,
@@ -1332,6 +1333,69 @@ describe("side chat cascade", () => {
         assert.equal(cascade?.status, "succeeded");
       }).pipe(Effect.provide(layer));
     }),
+  );
+
+  it.effect("refuses to archive a lesson while a side chat has a running delegated task", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const sink = yield* EventSink.EventSinkV2;
+      yield* createLesson();
+      const sideChat = yield* seedSideChatThread({
+        threadId: SIDE_CHAT_THREAD_ID,
+        anchorThreadId: LESSON_THREAD_ID,
+        sideChat: pendingSideChat({
+          anchor: observationAnchor(),
+          excerpt: OBSERVATION_EXCERPT,
+          requestId: "command:side-chat:open-archive-delegated",
+        }),
+      });
+      const now = yield* DateTime.now;
+      yield* sink.write({
+        events: [
+          {
+            id: EventId.make("event:side-chat:archive-delegated-task"),
+            type: "subagent.updated",
+            threadId: SIDE_CHAT_THREAD_ID,
+            occurredAt: now,
+            payload: {
+              id: NodeId.make("node:side-chat:archive-delegated-task"),
+              threadId: SIDE_CHAT_THREAD_ID,
+              runId: null,
+              parentNodeId: NodeId.make("node:side-chat:archive-delegated-parent"),
+              origin: "app_owned",
+              createdBy: "agent",
+              driver: ProviderDriverKind.make("codex"),
+              providerInstanceId: sideChat.providerInstanceId,
+              providerThreadId: null,
+              childThreadId: ThreadId.make("thread:side-chat:archive-delegated-child"),
+              nativeTaskRef: null,
+              prompt: "Keep working.",
+              title: null,
+              model: null,
+              status: "running",
+              result: null,
+              startedAt: now,
+              completedAt: null,
+              updatedAt: now,
+            },
+          },
+        ],
+      });
+
+      const error = yield* orchestrator
+        .dispatch({
+          type: "thread.archive",
+          commandId: CommandId.make("command:side-chat:archive-delegated"),
+          threadId: LESSON_THREAD_ID,
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(error, Orchestrator.OrchestratorDispatchError);
+      assert.equal(
+        error.cause,
+        `Thread ${LESSON_THREAD_ID} has a side chat with running delegated tasks. Wait for them or cancel them before archiving.`,
+      );
+      assert.isNull((yield* orchestrator.getThreadProjection(LESSON_THREAD_ID)).thread.archivedAt);
+    }).pipe(Effect.provide(openHarness())),
   );
 
   it.effect("retries a side-chat archive after a child dispatch fails", () =>

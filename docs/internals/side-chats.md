@@ -20,7 +20,8 @@ cancels queued messages, finishes open descendants deepest first and queues a no
 messages cancelled before they started while retaining failed or interrupted messages; an empty or
 discarded side chat is deleted instead. Archive, unarchive and delete reach descendants
 through a `side-chat.cascade` effect; a side
-chat under an archived parent cannot be unarchived alone. A side chat has no page of its own: its route
+chat under an archived parent cannot be unarchived alone, and a thread whose side chats have running
+delegated tasks cannot be archived, since the cascade would leave those side chats live. A side chat has no page of its own: its route
 settles on the lesson with it revealed in the panel
 ([ThreadRouteView](../../apps/web/src/components/ThreadRouteView.tsx)).
 
