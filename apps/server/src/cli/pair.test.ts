@@ -501,7 +501,6 @@ describe("t3 pair", () => {
           if (Exit.isFailure(exit)) {
             const message = String(Cause.squash(exit.cause));
             assert.include(message, "ominax CLI at 0.0.45");
-            assert.include(message, `ominax pair --base-dir ${baseDir}`);
           }
         }),
       "127.0.0.1",

@@ -320,6 +320,7 @@ it("a rejected send leaves the timeline when a new draft was typed meanwhile", a
 });
 
 it("Enter on an empty prompt resumes an interrupted thread", async () => {
+  using _welcomeGuide = skipLessonGuides();
   const history = threadWithHistory("interrupted", 1);
   const interruptedRun = { ...history.runs[0]!, status: "interrupted" as const };
   const thread = { ...history, runs: [interruptedRun] };
@@ -349,6 +350,7 @@ it("Enter on an empty prompt resumes an interrupted thread", async () => {
 });
 
 it("opening a thread or returning to the window on a touch tablet does not focus the composer", async () => {
+  using _welcomeGuide = skipLessonGuides();
   const realMatchMedia = window.matchMedia.bind(window);
   using _touch = vi
     .spyOn(window, "matchMedia")
