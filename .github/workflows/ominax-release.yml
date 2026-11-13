@@ -375,7 +375,8 @@ jobs:
             # the installer downloads from the version named in the asset.
             prev="$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
             gh release download "$prev" -R "$GITHUB_REPOSITORY" -p latest-mac.yml -p SHA256SUMS -D ../prev-release
-            sed '/^releaseNotes:/d' ../prev-release/latest-mac.yml > latest-mac.yml
+            # The feed base is releases/latest/download, so carried file URLs point at their own release.
+            sed -E -e '/^releaseNotes:/d' -e "s#^( *-? *(url|path): )((OminaX|T3-Learn)-)#\\1https://github.com/$GITHUB_REPOSITORY/releases/download/$prev/\\3#" ../prev-release/latest-mac.yml > latest-mac.yml
             grep -E ' \*?((OminaX|T3-Learn)-.*\.(dmg|zip)|t3-.*-darwin-.*\.tar\.gz)$' ../prev-release/SHA256SUMS > ../prev-sums
           fi
           if [ -f latest-win-arm64.yml ]; then
@@ -386,10 +387,10 @@ jobs:
           fi
           if [ ! -f latest-linux-arm64.yml ]; then
             # Keep arm64 installs and Linux arm64 updates on the latest release's build, as for
-            # Macs; Windows updates read the x64-only latest.yml until arm64 builds return.
+            # Macs. Windows on ARM follows the x64-only latest.yml onto x64 (a mixed-version feed would loop).
             prev="$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
             gh release download "$prev" -R "$GITHUB_REPOSITORY" -p latest-linux-arm64.yml -p SHA256SUMS -D ../prev-arm64 --clobber
-            sed '/^releaseNotes:/d' ../prev-arm64/latest-linux-arm64.yml > latest-linux-arm64.yml
+            sed -E -e '/^releaseNotes:/d' -e "s#^( *-? *(url|path): )((OminaX|T3-Learn)-)#\\1https://github.com/$GITHUB_REPOSITORY/releases/download/$prev/\\3#" ../prev-arm64/latest-linux-arm64.yml > latest-linux-arm64.yml
             grep -E ' \*?((OminaX|T3-Learn)-.*-arm64\.(AppImage|deb|exe)|t3-.*-(linux|win32)-arm64\.(tar\.gz|zip))$' ../prev-arm64/SHA256SUMS >> ../prev-sums || true
           fi
           # electron-builder's config dump, not a feed.
@@ -417,7 +418,7 @@ jobs:
         if: needs.desktop_linux_arm64.result != 'success' || needs.desktop_win_arm64.result != 'success'
         run: |
           set -euo pipefail
-          line='- No arm64 build in this release: arm64 installs and Linux arm64 updates stay on the previous version, and Windows on ARM may update to the x64 build (Windows runs it through emulation) until arm64 builds return'
+          line='- No arm64 build in this release: arm64 installs and Linux arm64 updates stay on the previous version. Windows on ARM updates to the x64 build (Windows runs it through emulation; WSL may not work there) and stays on it: reinstall with install.ps1 once arm64 builds return'
           awk -v line="$line" '/^<details>/ && !done { print line "\n"; done=1 } { print } END { if (!done) print "\n" line }' \
             release-notes.md > notes.tmp
           mv notes.tmp release-notes.md
