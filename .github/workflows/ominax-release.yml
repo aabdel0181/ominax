@@ -87,10 +87,8 @@ jobs:
             {"os":"ominax-linux-x64","scenario":"next-to-t3-code"},
             {"os":"ominax-linux-x64","scenario":"appimage"},
             {"os":"ominax-linux-x64","scenario":"service"},
-            {"os":"ubuntu-24.04-arm","scenario":"fresh"},
             {"os":"windows-2025","scenario":"fresh"},
-            {"os":"windows-2025","scenario":"next-to-t3-code"},
-            {"os":"windows-11-arm","scenario":"fresh"}]'
+            {"os":"windows-2025","scenario":"next-to-t3-code"}]'
           if [ -n "$MAC" ]; then
             rows="$(jq --arg m "$MAC" '. + [
               {os:$m,scenario:"fresh"}, {os:$m,scenario:"next-to-t3-code"},
@@ -229,9 +227,10 @@ jobs:
       cli_archive: true
       launch_check: true
 
-  # node-pty compiles from source on Linux, so arm64 builds on arm64 hardware.
+  # node-pty and the Linux arm64 CLI only build on arm64 hardware, and GitHub's arm64
+  # runners are off limits (med; REL-73, D107), so arm64 is skipped until it cross-builds.
   desktop_linux_arm64:
-    if: needs.preflight.outputs.skip != 'true'
+    if: false
     name: Desktop Linux arm64
     needs: [preflight, build_bundle]
     uses: ./.github/workflows/release-desktop.yml
@@ -278,8 +277,9 @@ jobs:
       resource_key: win32-x64
       cli_archive: true
 
+  # Embeds the Linux arm64 CLI as its WSL runtime, so it is skipped with desktop_linux_arm64.
   desktop_win_arm64:
-    if: needs.preflight.outputs.skip != 'true'
+    if: false
     name: Desktop Windows arm64
     needs: [preflight, build_bundle]
     uses: ./.github/workflows/release-desktop.yml
@@ -306,8 +306,8 @@ jobs:
   release:
     if: >-
       ${{ !cancelled() && needs.preflight.result == 'success' && needs.preflight.outputs.skip != 'true' &&
-      needs.desktop_linux_x64.result == 'success' && needs.desktop_linux_arm64.result == 'success' &&
-      needs.desktop_win_x64.result == 'success' && needs.desktop_win_arm64.result == 'success' }}
+      needs.desktop_linux_x64.result == 'success' && needs.desktop_win_x64.result == 'success' &&
+      needs.desktop_linux_arm64.result != 'failure' && needs.desktop_win_arm64.result != 'failure' }}
     name: Publish GitHub pre-release
     needs:
       [
@@ -375,11 +375,24 @@ jobs:
             # the installer downloads from the version named in the asset.
             prev="$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
             gh release download "$prev" -R "$GITHUB_REPOSITORY" -p latest-mac.yml -p SHA256SUMS -D ../prev-release
-            sed '/^releaseNotes:/d' ../prev-release/latest-mac.yml > latest-mac.yml
-            grep -E ' \*?((OminaX|T3-Learn)-.*\.(dmg|zip)|t3-.*-darwin-.*\.tar\.gz)$' ../prev-release/SHA256SUMS > ../prev-mac-sums
+            # The feed base is releases/latest/download, so carried file URLs point at their own release.
+            sed -E -e '/^releaseNotes:/d' -e "s#^( *-? *(url|path): )((OminaX|T3-Learn)-)#\\1https://github.com/$GITHUB_REPOSITORY/releases/download/$prev/\\3#" ../prev-release/latest-mac.yml > latest-mac.yml
+            grep -E ' \*?((OminaX|T3-Learn)-.*\.(dmg|zip)|t3-.*-darwin-.*\.tar\.gz)$' ../prev-release/SHA256SUMS > ../prev-sums
           fi
-          node ../scripts/merge-update-manifests.ts --platform win latest-win-x64.yml latest-win-arm64.yml latest.yml
-          rm latest-win-x64.yml latest-win-arm64.yml
+          if [ -f latest-win-arm64.yml ]; then
+            node ../scripts/merge-update-manifests.ts --platform win latest-win-x64.yml latest-win-arm64.yml latest.yml
+            rm latest-win-x64.yml latest-win-arm64.yml
+          else
+            mv latest-win-x64.yml latest.yml
+          fi
+          if [ ! -f latest-linux-arm64.yml ]; then
+            # Keep arm64 installs and Linux arm64 updates on the latest release's build, as for
+            # Macs. Windows on ARM follows the x64-only latest.yml onto x64 (a mixed-version feed would loop).
+            prev="$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
+            gh release download "$prev" -R "$GITHUB_REPOSITORY" -p latest-linux-arm64.yml -p SHA256SUMS -D ../prev-arm64 --clobber
+            sed -E -e '/^releaseNotes:/d' -e "s#^( *-? *(url|path): )((OminaX|T3-Learn)-)#\\1https://github.com/$GITHUB_REPOSITORY/releases/download/$prev/\\3#" ../prev-arm64/latest-linux-arm64.yml > latest-linux-arm64.yml
+            grep -E ' \*?((OminaX|T3-Learn)-.*-arm64\.(AppImage|deb|exe)|t3-.*-(linux|win32)-arm64\.(tar\.gz|zip))$' ../prev-arm64/SHA256SUMS >> ../prev-sums || true
+          fi
           # electron-builder's config dump, not a feed.
           rm -f builder-debug.yml
 
@@ -393,13 +406,22 @@ jobs:
           cd release-assets
           shopt -s nullglob
           sha256sum *.dmg *.zip *.AppImage *.deb *.exe t3-*.tar.gz install.sh install.ps1 > SHA256SUMS
-          [ ! -f ../prev-mac-sums ] || cat ../prev-mac-sums >> SHA256SUMS
+          [ ! -f ../prev-sums ] || cat ../prev-sums >> SHA256SUMS
           cat SHA256SUMS
 
       - name: Download release notes
         uses: actions/download-artifact@v8
         with:
           name: release-notes
+
+      - name: Note missing arm64 builds
+        if: needs.desktop_linux_arm64.result != 'success' || needs.desktop_win_arm64.result != 'success'
+        run: |
+          set -euo pipefail
+          line='- No arm64 build in this release: arm64 installs and Linux arm64 updates stay on the previous version. Windows on ARM updates to the x64 build (Windows runs it through emulation; WSL may not work there) and stays on it: reinstall with install.ps1 once arm64 builds return'
+          awk -v line="$line" '/^<details>/ && !done { print line "\n"; done=1 } { print } END { if (!done) print "\n" line }' \
+            release-notes.md > notes.tmp
+          mv notes.tmp release-notes.md
 
       - name: Note missing macOS build
         if: needs.desktop_mac_arm64.result != 'success' || needs.desktop_mac_x64.result != 'success'
