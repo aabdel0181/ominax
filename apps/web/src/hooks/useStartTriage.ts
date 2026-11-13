@@ -5,7 +5,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { T3_LEARN_COMMAND } from "@t3tools/shared/t3LearnIdentity";
-import { type EnvironmentId, TRIAGE_PROMPT_FILE_NAME } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
 
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
@@ -26,9 +26,6 @@ const copyTriageCliCommand = () =>
       title: `Could not copy. Type ${TRIAGE_CLI_COMMAND} instead.`,
     }),
   );
-
-/** A draft is a triage draft while its message still links the playbook file. */
-export const isTriagePrompt = (prompt: string) => prompt.includes(`[${TRIAGE_PROMPT_FILE_NAME}](`);
 
 /**
  * In-app `ominax triage`: the server writes the session files and starts cloning

@@ -318,11 +318,15 @@ describe("root reopen shortcut", () => {
     ).toEqual([{ id: "side-chat:side-1", kind: "side-chat", threadId: "side-1" }]);
   });
 
-  it("forwards address-bar focus from a focused desktop page", async () => {
+  it("forwards address-bar focus and zoom from a focused desktop page", async () => {
     setup();
     await using _shortcut = await renderShortcut();
     expect(state.setShortcuts).toHaveBeenLastCalledWith(
-      expect.arrayContaining([expect.objectContaining({ command: "preview.focusUrl" })]),
+      expect.arrayContaining(
+        ["preview.focusUrl", "preview.zoomIn", "preview.zoomOut", "preview.resetZoom"].map(
+          (command) => expect.objectContaining({ command }),
+        ),
+      ),
     );
   });
 });

@@ -111,7 +111,7 @@ const withStore = <A, E, R>(
     return yield* effect.pipe(
       Effect.provide(layerFor(baseDir, encryptionAvailable, null, legacyDecrypt)),
     );
-  }).pipe(Effect.provide(NodeServices.layer), Effect.scoped);
+  }).pipe(Effect.provide(NodeServices.layer));
 
 describe("DesktopConnectionCatalogStore", () => {
   it.effect("persists and reads an encrypted connection catalog", () =>
@@ -313,7 +313,7 @@ describe("DesktopConnectionCatalogStore", () => {
       assert.deepStrictEqual(yield* store.get, Option.none());
       yield* Ref.set(failDecrypt, false);
       assert.deepStrictEqual(yield* store.get, Option.some(newer));
-    }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("migrates a catalog decrypted with the legacy key and keeps a backup", () =>

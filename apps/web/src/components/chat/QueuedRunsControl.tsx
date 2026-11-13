@@ -261,8 +261,7 @@ export function QueuedRunsControl({
             : assistantCitationsToPlainText(
                 replaceComposerContextReferences(
                   withoutShownOptions(withoutCardAnswerTag(item.text)),
-                  (reference) =>
-                    reference.kind === "image" && item.thumbnails.length > 0 ? "" : reference.label,
+                  (reference) => reference.label,
                 ),
               ).trim();
           const isEditing = item.runId !== null && item.runId === props.editingRunId;
