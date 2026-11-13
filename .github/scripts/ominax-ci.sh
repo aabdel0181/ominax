@@ -9,7 +9,7 @@
 #   bash .github/scripts/ominax-ci.sh
 # Lint fails while the committed copy differs from this script's output.
 #
-# The fork never runs on GitHub's hosted Macs (med, REL-71), so the macOS-only
+# Linux CI runs in the isolated OminaX KVM pool; the fork never runs on GitHub's hosted Macs (med, REL-71), so the macOS-only
 # Mobile Native Static Analysis job is always skipped and Check accepts that.
 set -euo pipefail
 
@@ -26,13 +26,14 @@ output_file="$root/.github/workflows/ominax-ci.yml"
 # get 30s. vp run passes a `--` through, so the flags follow the script.
 transform='
 s/^name: CI$/name: OminaX CI/
-s/^( *)runs-on: blacksmith-[0-9]+vcpu-ubuntu-2404$/\1runs-on: ubuntu-24.04/
+s/^( *)runs-on: blacksmith-[0-9]+vcpu-ubuntu-2404$/\1runs-on: ominax-linux-x64/
+s/^( *)runs-on: ubuntu-24.04$/\1runs-on: ominax-linux-x64/
 s/^( *)runs-on: blacksmith-[0-9]+vcpu-macos-26$/\1runs-on: macos-26/
 /^  mobile_native_static_analysis:$/,/^  [a-z_]+:$/s/^    if: .*$/    if: false/
 s/mobile_native_static_analysis: \["mobile_native"\]/mobile_native_static_analysis: []/
 /^  test_web:$/,/^  [a-z_]+:$/{
   s/^(    name: Test Web)$/\1 ${{ matrix.shard }}/
-  /^    runs-on: ubuntu-24.04$/a\
+  /^    runs-on: ominax-linux-x64$/a\
     strategy:\
       fail-fast: false\
       matrix:\
