@@ -4162,22 +4162,42 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       });
     }
     if (command.type === "thread.archive") {
-      const records = yield* projectionStore
-        .getThreadRecords(command.threadId, ["subagents"])
-        .pipe(mapDispatchError(command));
-      if (
-        records.subagents.some(
-          (task) =>
-            task.origin === "app_owned" &&
-            task.childThreadId !== null &&
-            isOrchestrationV2WorkActive(task.status),
-        )
-      ) {
+      const hasRunningDelegatedTasks = (threadId: ThreadId) =>
+        projectionStore.getThreadRecords(threadId, ["subagents"]).pipe(
+          mapDispatchError(command),
+          Effect.map((records) =>
+            records.subagents.some(
+              (task) =>
+                task.origin === "app_owned" &&
+                task.childThreadId !== null &&
+                isOrchestrationV2WorkActive(task.status),
+            ),
+          ),
+        );
+      if (yield* hasRunningDelegatedTasks(command.threadId)) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
           cause: `Thread ${command.threadId} has running delegated tasks. Wait for them or cancel them before archiving.`,
         });
+      }
+      // Its side chats follow it through a cascade that cannot retry their own refusal, so a
+      // side chat left live under the archived thread is refused here instead.
+      if (
+        yield* projectionStore
+          .hasSideChatChildren({ projectId: thread.projectId, parentThreadId: thread.id })
+          .pipe(mapDispatchError(command))
+      ) {
+        const tree = yield* readSideChatTree(thread).pipe(mapDispatchError(command));
+        for (const { thread: sideChat } of sideChatDescendants(tree, thread.id)) {
+          if (sideChat.archivedAt === null && (yield* hasRunningDelegatedTasks(sideChat.id))) {
+            return yield* new OrchestratorDispatchError({
+              commandId: command.commandId,
+              commandType: command.type,
+              cause: `Thread ${command.threadId} has a side chat with running delegated tasks. Wait for them or cancel them before archiving.`,
+            });
+          }
+        }
       }
     }
     if (command.type === "thread.unarchive" && thread.archivedAt === null) {
