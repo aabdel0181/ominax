@@ -108,7 +108,7 @@ describe("DesktopUpdates", () => {
       Effect.gen(function* () {
         const updates = yield* DesktopUpdates.DesktopUpdates;
         yield* updates.configure;
-        yield* TestClock.adjust("4 minutes");
+        yield* TestClock.adjust("4 hours");
         yield* flushCallbacks;
         yield* flushCallbacks;
         assert.equal(harness.downloadCount(), 1);
@@ -126,7 +126,7 @@ describe("DesktopUpdates", () => {
       Effect.gen(function* () {
         const updates = yield* DesktopUpdates.DesktopUpdates;
         yield* updates.configure;
-        yield* TestClock.adjust("4 minutes");
+        yield* TestClock.adjust("4 hours");
         yield* flushCallbacks;
         assert.equal(harness.downloadCount(), 0);
         assert.equal(harness.quitAndInstalls(), 0);
