@@ -14,6 +14,7 @@ name: OminaX Release
 # for the macOS install tests. Without one, the release ships without macOS
 # and its notes say so. Only a host that gives each job a clean machine (the
 # rented Mac's throwaway VMs) may take the install tests: they write /Applications.
+# Windows x64 Verify and install tests run on the box's throwaway Windows VMs (ominax-windows-x64).
 
 on:
   push:
@@ -87,8 +88,8 @@ jobs:
             {"os":"ominax-linux-x64","scenario":"next-to-t3-code"},
             {"os":"ominax-linux-x64","scenario":"appimage"},
             {"os":"ominax-linux-x64","scenario":"service"},
-            {"os":"windows-2025","scenario":"fresh"},
-            {"os":"windows-2025","scenario":"next-to-t3-code"}]'
+            {"os":"ominax-windows-x64","scenario":"fresh"},
+            {"os":"ominax-windows-x64","scenario":"next-to-t3-code"}]'
           if [ -n "$MAC" ]; then
             rows="$(jq --arg m "$MAC" '. + [
               {os:$m,scenario:"fresh"}, {os:$m,scenario:"next-to-t3-code"},
@@ -269,7 +270,7 @@ jobs:
       relay_url: ""
       label: Windows x64
       runner: ominax-linux-x64
-      verify_runner: windows-2025
+      verify_runner: ominax-windows-x64
       platform: win
       target: nsis
       arch: x64
