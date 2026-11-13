@@ -44,7 +44,9 @@ jobs:
       commit: ${{ steps.version.outputs.commit }}
       skip: ${{ steps.version.outputs.skip }}
       install_matrix: ${{ steps.install_matrix.outputs.matrix }}
-    if: github.event_name == 'push' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # Sync merges land with [skip ci] so workflows a sync adds can't run before the disable script
+    # (REL-76); the sync then dispatches OminaX CI on main, which releases like a push.
+    if: github.event_name == 'push' || (github.event.workflow_run.conclusion == 'success' && contains(fromJSON('["push","workflow_dispatch"]'), github.event.workflow_run.event))
     steps:
       - name: Checkout tested commit
         uses: actions/checkout@v6
