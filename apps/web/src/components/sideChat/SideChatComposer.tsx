@@ -329,6 +329,7 @@ export function SideChatComposer(props: {
       reviewComments: [],
       threadContexts: [],
       environmentContexts: [],
+      replyTo: null,
     });
     const dispatchMode = props.sendQueuesBehindSetup
       ? "queue"

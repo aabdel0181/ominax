@@ -104,6 +104,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
                   ...config,
                   mode,
                   desktopTelemetryControlFd: mode === "desktop" ? 3 : undefined,
+                  desktopAppUpdate: mode === "desktop" ? true : undefined,
                 }),
               ),
             ),
@@ -130,6 +131,51 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
         });
       }
     }),
+  );
+  it.effect.each([
+    { desktopAppUpdate: false, advertised: undefined },
+    { desktopAppUpdate: true, advertised: true },
+  ])(
+    "advertises desktop app updates only when the desktop can install them ($desktopAppUpdate)",
+    ({ desktopAppUpdate, advertised }) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const baseDir = yield* fs.makeTempDirectoryScoped();
+        const config = yield* makeServerConfig(baseDir);
+        yield* fs.makeDirectory(config.stateDir, { recursive: true });
+        const descriptor = yield* Effect.gen(function* () {
+          const environment = yield* ServerEnvironment.ServerEnvironment;
+          return yield* environment.getDescriptor;
+        }).pipe(
+          Effect.provide(
+            ServerEnvironment.layer.pipe(
+              Layer.provide(layerEmptySecretStore),
+              Layer.provide(
+                ServerConfig.layer({
+                  ...config,
+                  mode: "desktop",
+                  desktopTelemetryControlFd: 5,
+                  desktopAppUpdate,
+                }),
+              ),
+            ),
+          ),
+          Effect.provideService(HostProcess.Environment, {}),
+        );
+        const capabilities = descriptor.capabilities;
+        expect({
+          serverSelfUpdate: capabilities.serverSelfUpdate,
+          desktopAppUpdate: capabilities.desktopAppUpdate,
+          desktopAppChannelSwitch: capabilities.desktopAppChannelSwitch,
+          serverSelfUpdateProgress: capabilities.serverSelfUpdateProgress,
+        }).toEqual({
+          serverSelfUpdate: "desktop-managed",
+          desktopAppUpdate: advertised,
+          // T3 Learn has one update track, so it never offers a channel switch.
+          desktopAppChannelSwitch: undefined,
+          serverSelfUpdateProgress: advertised,
+        });
+      }),
   );
   it.effect.each([
     { platform: "darwin", architecture: "arm64", supported: true },

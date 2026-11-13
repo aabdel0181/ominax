@@ -983,11 +983,11 @@ describe("side chat opening context", () => {
             }),
           );
 
-          const opening = yield* worker.runOnce.pipe(Effect.forkChild);
+          const opening = yield* worker.runOnce().pipe(Effect.forkChild);
           yield* Deferred.await(entered);
-          const turnStart = yield* worker.runOnce.pipe(
-            Effect.forkChild({ startImmediately: true }),
-          );
+          const turnStart = yield* worker
+            .runOnce()
+            .pipe(Effect.forkChild({ startImmediately: true }));
           // The side chat waits without holding the lesson's worktree, so the lesson can still
           // take it, here to let the summary land.
           yield* withWorkspaceLease(cwd, Deferred.succeed(gate, undefined));
@@ -1169,11 +1169,11 @@ describe("side chat opening context", () => {
               text: "What is an observation space?",
             }),
           );
-          const opening = yield* worker.runOnce.pipe(Effect.forkChild);
+          const opening = yield* worker.runOnce().pipe(Effect.forkChild);
           yield* Deferred.await(entered);
-          const turnStart = yield* worker.runOnce.pipe(
-            Effect.forkChild({ startImmediately: true }),
-          );
+          const turnStart = yield* worker
+            .runOnce()
+            .pipe(Effect.forkChild({ startImmediately: true }));
           yield* TestClock.adjust(Duration.millis(SIDE_CHAT_OPENING_WAIT_CAP_MS));
           assert.isTrue(yield* Fiber.join(turnStart));
           yield* Deferred.succeed(gate, undefined);

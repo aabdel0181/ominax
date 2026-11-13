@@ -156,7 +156,7 @@ function formatServiceStatus(
   protection?: ServiceProtection.ServiceProtectionState,
 ): string {
   if (!status.supported) {
-    return `${T3_LEARN_PRODUCT_NAME} service\n  Status: unavailable on this machine\n  Supported on: Linux with systemd, macOS with launchd`;
+    return `${T3_LEARN_PRODUCT_NAME} service\n  Status: unavailable on this machine\n  Supported on: Linux with systemd, macOS with launchd, Windows with Task Scheduler`;
   }
   if (!status.installed) {
     return `${T3_LEARN_PRODUCT_NAME} service\n  Status: not installed\n  Next: Run \`${T3_LEARN_COMMAND} service install\`.`;

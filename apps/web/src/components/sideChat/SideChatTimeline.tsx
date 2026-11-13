@@ -190,6 +190,7 @@ export function SideChatTimeline(props: {
           listRef={props.listRef}
           runs={projection?.runs ?? []}
           latestRun={activityRun}
+          providerStartingLabel={activityRun?.providerStartingLabel ?? null}
           runningRunId={runtime?.activeRunId ?? null}
           turnDiffSummaries={[]}
           activeThreadEnvironmentId={props.sideChatRef.environmentId}

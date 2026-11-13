@@ -19,7 +19,7 @@ output_file="$root/.github/workflows/ominax-ci.yml"
 
 # blacksmith-6vcpu-macos-26 is Apple silicon; GitHub's macos-26 is arm64 too.
 # Lint always runs and Check already needs it, so the drift guard lives there.
-# Test Web runs on one 8 vCPU runner upstream. Browser test files share one
+# Test Web runs on two 8 vCPU runners upstream. Browser test files share one
 # Chromium page, and on a slower 4 vCPU runner the heaviest file previews then
 # miss their 15s test and waitFor windows, so the fork splits Test Web across
 # four runners. Upstream's PDF reload test still takes 13-15s there, so tests
@@ -32,13 +32,8 @@ s/^( *)runs-on: blacksmith-[0-9]+vcpu-macos-26$/\1runs-on: macos-26/
 /^  mobile_native_static_analysis:$/,/^  [a-z_]+:$/s/^    if: .*$/    if: false/
 s/mobile_native_static_analysis: \["mobile_native"\]/mobile_native_static_analysis: []/
 /^  test_web:$/,/^  [a-z_]+:$/{
-  s/^(    name: Test Web)$/\1 ${{ matrix.shard }}/
-  /^    runs-on: ominax-linux-x64$/a\
-    strategy:\
-      fail-fast: false\
-      matrix:\
-        shard: [1, 2, 3, 4]
-  s/^(        run: vp run --filter @t3tools\/web test)$/\1 --shard ${{ matrix.shard }}\/${{ strategy.job-total }} --testTimeout=30000/
+  s/^(        shard: )\[1, 2\]$/\1[1, 2, 3, 4]/
+  s/^(        run: vp run --filter @t3tools\/web test --shard .+\}\})$/\1 --testTimeout=30000/
 }
 # The scripted learner (scripts/learner-e2e.ts) drives the web build this job
 # just made against a source server on Replay, so a server-only PR runs it too
@@ -99,8 +94,9 @@ count() { grep -c "$1" <<<"$generated" || true; }
   fail "drift guard not inserted into Lint"
 [[ $(count '^    name: Test Web \${{ matrix.shard }}$') -eq 1 ]] ||
   fail "Test Web shards not applied"
-[[ $(count '^        run: vp run --filter @t3tools/web test --shard ') -eq 1 ]] ||
-  fail "Test Web shard flag not applied"
+[[ $(count '^        shard: \[1, 2, 3, 4\]$') -eq 1 ]] || fail "Test Web shards not widened to four"
+[[ $(count '^        run: vp run --filter @t3tools/web test --shard .* --testTimeout=30000$') -eq 1 ]] ||
+  fail "Test Web timeout flag not applied"
 [[ $(count '^      - name: Run the scripted learner$') -eq 1 ]] ||
   fail "scripted learner step not appended to Build"
 [[ $(count "test_web != 'false' || needs.changes.outputs.test_server != 'false'") -eq 5 ]] ||

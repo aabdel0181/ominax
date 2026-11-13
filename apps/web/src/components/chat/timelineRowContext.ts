@@ -1,6 +1,7 @@
 import type { ToolCallDiffTarget } from "../../diffPanelStore";
 import type {
   ProviderApprovalDecision,
+  ResponseContextRecord,
   RuntimeRequestId,
   WorktreeSetupSnapshot,
 } from "@t3tools/contracts";
@@ -50,6 +51,8 @@ export interface TimelineRowSharedState {
     | ((requestId: RuntimeRequestId, decision: ProviderApprovalDecision) => Promise<unknown>)
     | undefined;
   citationRequest: AssistantCitationTarget | null;
+  /** Absent hides "Reply", as in the guest view. */
+  onReplyToResponse: ((response: ResponseContextRecord) => boolean) | undefined;
   listRef: React.RefObject<LegendListRef | null>;
   timestampFormat: TimestampFormat;
   routeThreadKey: string;
@@ -82,7 +85,10 @@ export interface TimelineRowSharedState {
     | undefined;
   /** Unset, expanded rows read detail and command output from the environment. */
   turnItemSource: TurnItemSource | undefined;
-  onOpenThread: (threadId: OrchestrationV2TurnItem["threadId"]) => void;
+  onOpenThread: (
+    threadId: OrchestrationV2TurnItem["threadId"],
+    environmentId?: EnvironmentId,
+  ) => void;
   /** Marks side chats in assistant replies; unset where none are shown, as in held timelines. */
   onOpenSideChat: ((threadId: ThreadId) => void) | undefined;
   workflowOpening: WorkflowOpening | null;
@@ -116,6 +122,7 @@ export interface TimelineRowActivityState {
   awaitingUser: boolean;
   isPreparingWorktree: boolean;
   sideChatWaitLabel: SideChatWaitLabel | null;
+  providerStartingLabel: string | null;
   latestRunId: RunId | null;
   backgroundWorktreeSetup: WorktreeSetupSnapshot | null;
   liveAnswerPreview: string | null;
