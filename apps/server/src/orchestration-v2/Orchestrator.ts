@@ -4188,13 +4188,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           .hasSideChatChildren({ projectId: thread.projectId, parentThreadId: thread.id })
           .pipe(mapDispatchError(command))
       ) {
-        const sideChats = yield* projectionStore
-          .getSideChatThreads({
-            projectId: thread.projectId,
-            lessonThreadId: sideChatLessonThreadId(thread),
-          })
-          .pipe(mapDispatchError(command));
-        for (const { thread: sideChat } of sideChatDescendants(sideChats, thread.id)) {
+        const tree = yield* readSideChatTree(thread).pipe(mapDispatchError(command));
+        for (const { thread: sideChat } of sideChatDescendants(tree, thread.id)) {
           if (sideChat.archivedAt === null && (yield* hasRunningDelegatedTasks(sideChat.id))) {
             return yield* new OrchestratorDispatchError({
               commandId: command.commandId,
