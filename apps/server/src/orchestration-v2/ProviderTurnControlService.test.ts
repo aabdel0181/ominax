@@ -29,6 +29,7 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
+import * as EventSink from "./EventSink.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
@@ -310,7 +311,13 @@ it.effect(
         }),
       );
       const layerControl = ProviderTurnControlService.layer.pipe(
-        Layer.provide(Layer.merge(layerProjection, layerSessionManager)),
+        Layer.provide(
+          Layer.mergeAll(
+            layerProjection,
+            layerSessionManager,
+            Layer.mock(EventSink.EventSinkV2)({}),
+          ),
+        ),
       );
 
       const [ordinaryInterrupt, unrelatedRestart] = yield* Effect.gen(function* () {
@@ -394,13 +401,14 @@ it.effect("steers the running turn with cited assistant quotes expanded", () =>
     } as unknown as ProjectionStore.ProjectionProviderControlContext;
     const layerControl = ProviderTurnControlService.layer.pipe(
       Layer.provide(
-        Layer.merge(
+        Layer.mergeAll(
           Layer.mock(ProjectionStore.ProjectionStoreV2)({
             getProviderControlContext: () => Effect.succeed(context),
           }),
           Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({
             get: () => Effect.succeedSome(runtime),
           }),
+          Layer.mock(EventSink.EventSinkV2)({}),
         ),
       ),
     );

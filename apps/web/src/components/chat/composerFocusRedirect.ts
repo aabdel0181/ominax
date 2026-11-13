@@ -59,6 +59,18 @@ function isSurfaceLauncherKey(event: KeyboardEvent): boolean {
   return key !== null && (launcherKeys?.includes(key) ?? false);
 }
 
+function isKeyClaimedInPath(event: KeyboardEvent): boolean {
+  if (event.shiftKey) return false;
+  const key = event.key.toUpperCase();
+  return event
+    .composedPath()
+    .some(
+      (target) =>
+        target instanceof Element &&
+        (target.getAttribute("aria-keyshortcuts")?.split(/\s+/).includes(key) ?? false),
+    );
+}
+
 /** The side chat in the right panel, which has its own composer. */
 export const SIDE_CHAT_PANEL_SELECTOR = "[data-side-chat-panel]";
 
@@ -87,6 +99,10 @@ export function shouldRedirectInputToComposer(
     }
     return false;
   }
+  // A maximized side chat hides the lesson's column, not its own composer.
+  if (scope === "lesson" && document.querySelector('[data-chat-column-maximized-away="true"]')) {
+    return false;
+  }
   return true;
 }
 
@@ -99,6 +115,7 @@ export function shouldTypeToFocusComposer(
   if (event.key.length !== 1) return false;
   if (!shouldRedirectInputToComposer(event, scope)) return false;
   if (isSurfaceLauncherKey(event)) return false;
+  if (isKeyClaimedInPath(event)) return false;
 
   return true;
 }
