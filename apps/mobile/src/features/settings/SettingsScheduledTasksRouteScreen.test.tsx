@@ -30,6 +30,7 @@ vi.mock("@react-navigation/native", () => ({
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 vi.mock("@expo/ui/community/datetime-picker", () => ({ DateTimePicker: () => null }));
 vi.mock("../../components/ui/Dialog", () => ({ alert: mocks.alert }));
+vi.mock("../cloud/publicConfig", () => ({ hasCloudPublicConfig: () => false }));
 vi.mock("../../components/ui/AppText", () => ({ AppText: Children }));
 vi.mock("../../components/ui/AppSymbol", () => ({ SymbolView: () => null }));
 vi.mock("../../components/EnvironmentMachineSymbol", () => ({
