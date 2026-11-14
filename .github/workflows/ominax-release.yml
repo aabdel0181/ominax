@@ -631,7 +631,6 @@ jobs:
           shopt -s nullglob
           cd release-assets
           node ../scripts/merge-update-manifests.ts --platform mac latest-mac.yml latest-mac-x64.yml
-          rm -f latest-mac-x64.yml builder-debug.yml
           gh release view "$TAG" --json body -q .body > ../body.md
           grep -vF -- '- No macOS build in this release:' ../body.md > ../release-notes.md
           notes="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" |
