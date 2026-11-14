@@ -10,7 +10,8 @@ name: OminaX Release
 # release.yml also matches these tags but only runs in pingdotgg/t3code.
 # Linux jobs run on OminaX KVM runners; Mac jobs never run on GitHub's hosted Macs (med, REL-71). They run only
 # when a repo variable names a self-hosted label: T3_LEARN_MAC_RUNNER for the
-# desktop builds of CI-triggered runs on main and T3_LEARN_MAC_INSTALL_RUNNER
+# desktop builds of CI-triggered runs on main and of Mac backfills (a dispatch
+# naming an existing release, which only adds its macOS files) and T3_LEARN_MAC_INSTALL_RUNNER
 # for the macOS install tests. Without one, the release ships without macOS
 # and its notes say so. Only a host that gives each job a clean machine (the
 # rented Mac's throwaway VMs) may take the install tests: they write /Applications.
@@ -24,6 +25,11 @@ on:
     workflows: ["OminaX CI"]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release that shipped without macOS, such as v0.1.9-learn.15 (the current Latest; its Mac feed uses relative URLs)
+        required: true
 
 concurrency:
   group: ominax-release
@@ -47,12 +53,12 @@ jobs:
       install_matrix: ${{ steps.install_matrix.outputs.matrix }}
     # Sync merges land with [skip ci] so workflows a sync adds can't run before the disable script
     # (REL-76); the sync then dispatches OminaX CI on main, which releases like a push.
-    if: github.event_name == 'push' || (github.event.workflow_run.conclusion == 'success' && contains(fromJSON('["push","workflow_dispatch"]'), github.event.workflow_run.event))
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && contains(fromJSON('["push","workflow_dispatch"]'), github.event.workflow_run.event))
     steps:
       - name: Checkout tested commit
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ inputs.tag || github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
           sparse-checkout: |
             /*
@@ -63,12 +69,21 @@ jobs:
         name: Compute release version
         env:
           RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
-        run: bash .github/scripts/ominax-release-version.sh
+          TAG: ${{ inputs.tag }}
+        # A backfill keeps the release's version and commit; the version script comes from that old commit.
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-learn\.[0-9]+$ ]] || { echo "Tag $TAG must look like v0.1.9-learn.15" >&2; exit 1; }
+            printf 'version=%s\ntag=%s\ncommit=%s\nskip=false\n' "${TAG#v}" "$TAG" "$(git rev-parse "$TAG^{commit}")" >> "$GITHUB_OUTPUT"
+          else
+            bash .github/scripts/ominax-release-version.sh
+          fi
 
       # Lists what changed since the release the updater last offered, so
       # changes in an unpromoted pre-release still reach users.
       - name: Write release notes
-        if: steps.version.outputs.skip != 'true'
+        if: steps.version.outputs.skip != 'true' && github.event_name != 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_COMMIT: ${{ steps.version.outputs.commit }}
@@ -100,7 +115,7 @@ jobs:
           echo "matrix=$(jq -c . <<<"$rows")" >> "$GITHUB_OUTPUT"
 
       - name: Upload release notes
-        if: steps.version.outputs.skip != 'true'
+        if: steps.version.outputs.skip != 'true' && github.event_name != 'workflow_dispatch'
         uses: actions/upload-artifact@v7
         with:
           name: release-notes
@@ -159,7 +174,7 @@ jobs:
           retention-days: 1
 
   desktop_mac_arm64:
-    if: needs.preflight.outputs.skip != 'true' && github.event_name == 'workflow_run' && vars.T3_LEARN_MAC_RUNNER != ''
+    if: needs.preflight.outputs.skip != 'true' && github.event_name != 'push' && vars.T3_LEARN_MAC_RUNNER != ''
     name: Desktop macOS arm64
     needs: [preflight, build_bundle]
     uses: ./.github/workflows/release-desktop.yml
@@ -184,7 +199,7 @@ jobs:
       launch_check: ${{ vars.T3_LEARN_MAC_RUNNER != 't3-learn-macbook' }}
 
   desktop_mac_x64:
-    if: needs.preflight.outputs.skip != 'true' && github.event_name == 'workflow_run' && vars.T3_LEARN_MAC_RUNNER != ''
+    if: needs.preflight.outputs.skip != 'true' && github.event_name != 'push' && vars.T3_LEARN_MAC_RUNNER != ''
     name: Desktop macOS x64
     needs: [preflight, build_bundle]
     uses: ./.github/workflows/release-desktop.yml
@@ -207,7 +222,7 @@ jobs:
 
   # The Linux CLI archives become the Windows builds' WSL runtime.
   desktop_linux_x64:
-    if: needs.preflight.outputs.skip != 'true'
+    if: needs.preflight.outputs.skip != 'true' && github.event_name != 'workflow_dispatch'
     name: Desktop Linux x64
     needs: [preflight, build_bundle]
     uses: ./.github/workflows/release-desktop.yml
@@ -257,7 +272,7 @@ jobs:
 
   # Windows builds on Linux and runs its native checks on Windows.
   desktop_win_x64:
-    if: needs.preflight.outputs.skip != 'true'
+    if: needs.preflight.outputs.skip != 'true' && github.event_name != 'workflow_dispatch'
     name: Desktop Windows x64
     needs: [preflight, build_bundle]
     uses: ./.github/workflows/release-desktop.yml
@@ -559,3 +574,78 @@ jobs:
         run: gh release edit "v$VERSION" --prerelease=false --latest
       - name: Summarize promotion
         run: echo "OminaX v$VERSION passed install tests and is now latest." >> "$GITHUB_STEP_SUMMARY"
+
+  # A dispatch adds both Mac builds to a release that shipped without them, as the release job would
+  # have. It never changes pre-release or latest: ominax-autoupdate would downgrade to the previous Latest.
+  backfill_mac:
+    if: github.event_name == 'workflow_dispatch' && needs.desktop_mac_arm64.result == 'success' && needs.desktop_mac_x64.result == 'success'
+    name: Add macOS build to release
+    needs: [preflight, desktop_mac_arm64, desktop_mac_x64]
+    runs-on: ominax-linux-x64
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.preflight.outputs.tag }}
+      VERSION: ${{ needs.preflight.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.commit }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/scripts...
+
+      - name: Download macOS desktop artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-mac-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Download macOS CLI archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: cli-mac-*
+          merge-multiple: true
+          path: release-assets
+
+      # Same manifest merge, releaseNotes line and checksums as the release job; the body
+      # loses its "No macOS build" line.
+      - name: Upload macOS files
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          cd release-assets
+          node ../scripts/merge-update-manifests.ts --platform mac latest-mac.yml latest-mac-x64.yml
+          rm -f latest-mac-x64.yml builder-debug.yml
+          gh release view "$TAG" --json body -q .body > ../body.md
+          grep -vF -- '- No macOS build in this release:' ../body.md > ../release-notes.md
+          notes="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" |
+            jq -c --arg v "$VERSION" --rawfile body ../release-notes.md '
+              def whats_new: split("<details>")[0] | sub("\\s+$"; "");
+              [{version: $v, note: ($body | whats_new)}] +
+              ([.[] | select((.draft or .prerelease or .tag_name == "v" + $v) | not)
+                    | select(.body // "" | startswith("### What'"'"'s new"))
+                    | {version: (.tag_name | ltrimstr("v")), note: (.body | whats_new)}][:5])')"
+          echo "$notes" | jq .
+          echo "releaseNotes: $notes" >> latest-mac.yml
+          gh release download "$TAG" -p SHA256SUMS -D ../prev
+          { grep -vE ' \*?((OminaX|T3-Learn)-.*\.(dmg|zip)|t3-.*-darwin-.*\.tar\.gz)$' ../prev/SHA256SUMS || true
+            sha256sum *.dmg *.zip t3-*.tar.gz; } > SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "$TAG" --clobber *.dmg *.zip *.blockmap t3-*.tar.gz latest-mac.yml SHA256SUMS
+          gh release edit "$TAG" --notes-file ../release-notes.md
