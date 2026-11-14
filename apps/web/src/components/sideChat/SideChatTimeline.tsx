@@ -152,6 +152,7 @@ export function SideChatTimeline(props: {
       <WorkspaceMutationIdContext value={workspaceMutationId}>
         <ThreadTimeline
           holdTimeline={false}
+          workspaceFocusDefault={false}
           lesson
           pendingApprovals={props.pendingApprovals}
           respondingRequestIds={props.respondingRequestIds}

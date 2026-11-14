@@ -253,6 +253,8 @@ interface MessagesTimelineProps {
   runlessWorkActive?: boolean;
   /** Keep settled assistant messages visible in lesson turns. */
   lesson?: boolean;
+  /** Off where an input in the same F6 area should take focus first, as in a side chat. */
+  workspaceFocusDefault?: boolean;
   activeTurnStartedAt?: string | null;
   /** Replaces "Thinking" while the active run's provider has not started a turn. */
   providerStartingLabel?: string | null;
@@ -385,6 +387,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   isWorking,
   runlessWorkActive = false,
   lesson = false,
+  workspaceFocusDefault = true,
   activeTurnStartedAt = null,
   providerStartingLabel = null,
   worktreeSetup = null,
@@ -1546,7 +1549,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
               onMetricsChange={scheduleMinimapRefresh}
               // Keyboard scrolling only moves the focused element; F6 and clicks land here.
               tabIndex={-1}
-              data-workspace-focus-default
+              data-workspace-focus-default={workspaceFocusDefault ? "" : undefined}
               className={cn(
                 "messages-timeline-scroll scrollbar-gutter-both h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]",
                 topFadeEnabled && "topbar-scroll-fade",
