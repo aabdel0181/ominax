@@ -79,6 +79,7 @@ import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environme
 import { HtmlToolkit } from "../../apps/server/src/mcp/toolkits/html/tools.ts";
 import { KnowledgeToolkit } from "../../apps/server/src/mcp/toolkits/knowledge/tools.ts";
 import { CourseToolkit } from "../../apps/server/src/mcp/toolkits/course/tools.ts";
+import { MessageToolkit } from "../../apps/server/src/mcp/toolkits/message/tools.ts";
 import { OrchestratorToolkit } from "../../apps/server/src/mcp/toolkits/orchestrator/tools.ts";
 import { PreviewToolkit } from "../../apps/server/src/mcp/toolkits/preview/tools.ts";
 import { PreviewControlsToolkit } from "../../apps/server/src/mcp/toolkits/previewControls/tools.ts";
@@ -92,6 +93,7 @@ import {
   QUIZ_CARD_SHOWN,
 } from "../../apps/server/src/mcp/toolkits/quiz/handlers.ts";
 import { QuizToolkit } from "../../apps/server/src/mcp/toolkits/quiz/tools.ts";
+import { ThemeToolkit } from "../../apps/server/src/mcp/toolkits/theme/tools.ts";
 import { ThreadToolkit } from "../../apps/server/src/mcp/toolkits/thread/tools.ts";
 import { WorktreeToolkit } from "../../apps/server/src/mcp/toolkits/worktree/tools.ts";
 import {
@@ -490,6 +492,7 @@ const t3SourceTools: ReadonlyArray<Tool.Any> = [
   AttachmentToolkit,
   ProjectToolkit,
   EnvironmentToolkit,
+  ThemeToolkit,
   PreviewControlsToolkit,
   WorktreeToolkit,
   PullRequestsToolkit,
@@ -500,6 +503,7 @@ const t3SourceTools: ReadonlyArray<Tool.Any> = [
   KnowledgeToolkit,
   CourseToolkit,
   QuizToolkit,
+  MessageToolkit,
 ].flatMap((toolkit): ReadonlyArray<Tool.Any> => Object.values(toolkit.tools));
 // McpHttpServer decodes arguments with each tool's JSON codec, which drops undeclared keys.
 const t3InputDecoders = new Map(
@@ -1663,7 +1667,7 @@ export const shellRequest = (sample: Sample, call: Omit<ShellEntry, "output">, m
     ...(devices?.describe(shell, typeof command === "string" ? command : undefined) ?? []),
     ...(world?.deviceInvalidCapture
       ? [
-          "T3's device_screenshot gets each capture with adb screencap's multi-display warning ahead of the PNG, so it reports 0×0. agent-device's own screenshot finds the PNG and is unaffected.",
+          "T3's device_screenshot gets each capture as a PNG whose header says 0×0, so it reports 0×0. agent-device's own screenshot is unaffected.",
         ]
       : []),
     ...(sample.secretFiles.length > 0

@@ -24,6 +24,7 @@ import { environmentThreadDetails } from "~/state/threads";
 import { answeredCardAnswers } from "@t3tools/shared/quizCard";
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { deriveActiveWorkStartedAt, derivePhase, type PendingApproval } from "../../session-logic";
+import { deriveTimelineWorking } from "../ChatView.logic";
 import type { ChatMessage } from "../../types";
 import type { AssistantCitationRequest } from "../chat/AssistantCitationSource";
 import { WorkspaceMutationIdContext } from "../chat/ChatMarkdownMedia";
@@ -97,7 +98,12 @@ export function SideChatTimeline(props: {
   const activityRun = projection === null ? null : deriveThreadActivityRun(projection);
   const runtime = projection === null ? null : deriveThreadStructureRuntime(projection);
   const runlessWorkStartedAt = projection === null ? null : deriveRunlessWorkStartedAt(projection);
-  const isWorking = derivePhase(runtime) === "running" || runlessWorkStartedAt !== null;
+  const isWorking = deriveTimelineWorking({
+    phase: derivePhase(runtime),
+    isSendBusy: false,
+    isCompacting: false,
+    runlessWorkStartedAt,
+  });
   const follow = useTimelineFollow({
     legendListRef: props.listRef,
     composerTimelineInset: 0,

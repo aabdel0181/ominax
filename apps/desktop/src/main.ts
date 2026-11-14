@@ -14,6 +14,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- The migration runs synchronously before Effect services are assembled.
 import * as NodePath from "node:path";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -154,6 +155,15 @@ const layerDesktopSshEnvironment = Layer.unwrap(
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
     return DesktopSshEnvironment.layer({
       resolveCliRunner: Effect.succeed(resolveDesktopSshCliRunner(environment)),
+      resolveLauncherId: yield* Effect.cached(
+        DesktopSshEnvironment.readOrCreateLauncherId(
+          environment.path.join(environment.stateDir, "ssh-launcher-id"),
+        ).pipe(
+          Effect.provide(
+            yield* Effect.context<FileSystem.FileSystem | SecureRandom.SecureRandom>(),
+          ),
+        ),
+      ),
     });
   }),
 );

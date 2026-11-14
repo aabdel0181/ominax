@@ -128,6 +128,7 @@ import {
   AssistantMetaTimelineRow,
   ProposedPlanTimelineRow,
   HtmlRenderTimelineRow,
+  SentMessageTimelineRow,
   McpAppTimelineRow,
   QuizCardTimelineRow,
 } from "./TimelineAssistantRows";
@@ -1706,6 +1707,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                   row.kind === "attempt-fold" ||
                   row.kind === "html-render" ||
                   row.kind === "quiz-card" ||
+                  row.kind === "sent-message" ||
                   row.kind === "mcp-app" ||
                   row.kind === "viewed-images"
                 ? "pb-2"
@@ -1757,6 +1759,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "proposed-plan" ? <ProposedPlanTimelineRow row={row} /> : null}
       {row.kind === "html-render" ? <HtmlRenderTimelineRow row={row} /> : null}
       {row.kind === "quiz-card" ? <QuizCardTimelineRow row={row} /> : null}
+      {row.kind === "sent-message" ? <SentMessageTimelineRow row={row} /> : null}
       {row.kind === "viewed-images" ? <ViewedImagesTimelineRow row={row} /> : null}
       {row.kind === "mcp-app" ? <McpAppTimelineRow row={row} /> : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}

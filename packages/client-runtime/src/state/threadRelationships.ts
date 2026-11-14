@@ -1,13 +1,12 @@
 import {
   isOrchestrationV2WorkActive,
   isSideChatThread,
-  type OrchestrationV2ThreadProjection,
   type OrchestrationV2ThreadShell,
   type ThreadId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-import type { EnvironmentThreadShell } from "./models.ts";
+import type { EnvironmentThreadShell, ThreadStructure } from "./models.ts";
 
 export type ThreadRelationshipKind = "parent" | "fork" | "subagent" | "transfer";
 
@@ -37,7 +36,7 @@ export interface ThreadRelationshipWalkRow {
 }
 
 export function resolveMergeBackTargetThreadId(
-  projection: Pick<OrchestrationV2ThreadProjection, "thread"> | null,
+  projection: Pick<ThreadStructure, "thread"> | null,
 ): ThreadId | null {
   // A T3 Learn side chat is a fork of its parent, but it hands back through Done, not Merge back.
   if (
@@ -57,7 +56,7 @@ function edgeKey(edge: ThreadRelationshipEdge): string {
 
 export function deriveThreadRelationshipGraph(input: {
   readonly threads: ReadonlyArray<OrchestrationV2ThreadShell>;
-  readonly projection: OrchestrationV2ThreadProjection | null;
+  readonly projection: ThreadStructure | null;
 }): ThreadRelationshipGraph {
   const threadsById = new Map<ThreadId, OrchestrationV2ThreadShell>();
   for (const thread of input.threads) {

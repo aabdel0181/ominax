@@ -64,6 +64,7 @@ import {
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProjectionStore from "./ProjectionStore.ts";
+import { unsentManualContinuationSource } from "./manualContinuation.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import {
   ContextHandoffBackgroundWorkError,
@@ -304,6 +305,12 @@ export const layer: Layer.Layer<
       return {
         ...session,
         startTurn: (input: Parameters<typeof session.startTurn>[0]) => start(input),
+        ...(session.resumeTurn === undefined
+          ? {}
+          : {
+              resumeTurn: (input: ProviderAdapter.ProviderAdapterV2ResumeTurnInput) =>
+                start(ProviderAdapter.resumeTurnInput(input)),
+            }),
         ...(session.compactThread === undefined
           ? {}
           : {
@@ -414,6 +421,16 @@ export const layer: Layer.Layer<
           cause: `Run ${runId} is missing its execution projection state.`,
         });
       }
+      const manualResume =
+        run.manualContinuationOfRunId !== undefined && attempt.reason !== "steering_restart";
+      const resumeSource = manualResume
+        ? unsentManualContinuationSource(run, projection)
+        : undefined;
+      const unsentResumeMessage =
+        resumeSource !== undefined
+          ? projection.messages.find((source) => source.id === resumeSource.userMessageId)
+          : undefined;
+      const providerMessage = unsentResumeMessage ?? message;
       const settleRunBeforeStart = Effect.fn("orchestrationV2.providerTurnStart.settleBeforeStart")(
         function* (input: {
           readonly signal: string;
@@ -533,9 +550,12 @@ export const layer: Layer.Layer<
           });
         },
       );
-      if (message.attachments.length === 0 && message.text.trimStart().startsWith("/")) {
+      if (
+        providerMessage.attachments.length === 0 &&
+        providerMessage.text.trimStart().startsWith("/")
+      ) {
         const isEmptyCompaction =
-          message.text.trim().toLowerCase() === "/compact" && !projection.hasConversation;
+          providerMessage.text.trim().toLowerCase() === "/compact" && !projection.hasConversation;
         // Preparation may select a new provider; account commands still target the last native session.
         const nativeThreads = new Map(
           projection.providerThreads
@@ -566,8 +586,8 @@ export const layer: Layer.Layer<
               providerAuth.tryHandlePromptCommand({
                 instanceId: authInstanceId,
                 text: projectComposerContextForProvider({
-                  text: message.text,
-                  records: message.context?.records ?? [],
+                  text: providerMessage.text,
+                  records: providerMessage.context?.records ?? [],
                 }),
                 hasAttachments: false,
               }),
@@ -605,7 +625,7 @@ export const layer: Layer.Layer<
                 : {
                     type: "command_execution",
                     title: "Provider signed out",
-                    input: message.text.trim(),
+                    input: providerMessage.text.trim(),
                     output: "Provider signed out",
                     exitCode: 0,
                   },
@@ -751,6 +771,12 @@ export const layer: Layer.Layer<
         });
         if (!repaired.committed) return;
       }
+      // Opening a session does not prompt the provider, so the workspace is still unchanged.
+      const baseline = yield* runExecution.forkBaseline({
+        appThread: projection.thread,
+        run,
+        checkpointScope,
+      });
       const sessionResult = yield* Effect.result(
         providerSessions.open({
           threadId: projection.thread.id,
@@ -803,15 +829,15 @@ export const layer: Layer.Layer<
       let effectiveHandoffs = handoffs;
       let resumeFellBack = false;
       const userText = projectComposerContextForProvider({
-        text: message.text,
-        records: message.context?.records ?? [],
+        text: providerMessage.text,
+        records: providerMessage.context?.records ?? [],
       });
       // Native goal commands go verbatim; handoff history waits a turn.
       const goalDriver =
         session.driver === "codex" ||
         session.driver === "claudeAgent" ||
         session.providerSession.capabilities.turns.supportsNativeGoals === true;
-      const goalCommand = goalDriver && parseGoalCommand(message) !== null;
+      const goalCommand = goalDriver && parseGoalCommand(providerMessage) !== null;
       let providerUserText = userText;
       // The provider turn marks cancellation work delivered; restart continuations use their own text or resume natively.
       const noteContinuation = isRestartNoteContinuation(
@@ -986,7 +1012,7 @@ export const layer: Layer.Layer<
                 projection.thread.sideChat === undefined ? tokenCap : Math.max(32_000, tokenCap),
               modelContextWindow,
               userText: restartNote === "" ? userText : `${restartNote}\n\n${userText}`,
-              attachments: message.attachments,
+              attachments: providerMessage.attachments,
               providerThread: budgetProviderThread,
               nativeContextEstimate:
                 budgetProviderThread.contextUsage?.usedTokens === undefined
@@ -1316,7 +1342,7 @@ export const layer: Layer.Layer<
             historyThreadId: projection.thread.sideChat?.lessonThreadId,
             providerThread: { ...resumed.success, id: providerThread.id },
             budget: context.budget,
-            deferInline: isCompactionCommandMessage(message) || goalCommand,
+            deferInline: isCompactionCommandMessage(providerMessage) || goalCommand,
             optional: isOptionalSideChatHandoff,
             quiet: true,
             alreadyDeliveredItemIds: context.deliveredItemIds,
@@ -1504,6 +1530,17 @@ export const layer: Layer.Layer<
         legacyInputRunIds,
         budget,
       } = handoffContext;
+      if (manualResume && unsentResumeMessage === undefined && session.resumeTurn === undefined) {
+        yield* settleStartFailure({
+          signal: "resume-unsupported",
+          title: "Native resume is unavailable",
+          error: new ProviderAdapter.ProviderResumeUnsupportedError({
+            driver: session.driver,
+            providerThreadId: providerThread.id,
+          }),
+        });
+        return;
+      }
       const retryHandoff = resumedRetryHandoff ?? (yield* prepareRetryHandoff(handoffContext));
       // A fresh native thread knows nothing of the lesson, so the opening context rides with its
       // first prompt: the first turn, or the first after a failed resume bound a replacement. A
@@ -1687,7 +1724,7 @@ export const layer: Layer.Layer<
           text: userText,
           configuredNames: lessonSideChatSettings.sideChatSkills,
           skills: providerWorkspaceSkills,
-          openingTurn: !goalCommand && !isCompactionCommandMessage(message),
+          openingTurn: !goalCommand && !isCompactionCommandMessage(providerMessage),
           onDropped: (name) => dropped.push(name),
         });
         if (dropped.length > 0) {
@@ -1820,8 +1857,11 @@ export const layer: Layer.Layer<
       if (!runningWrite.committed) {
         return;
       }
-      const routableSubagents = projection.subagents.filter((subagent) =>
-        RunExecutionService.canRouteRelatedSubagent(subagent.status),
+      // Delegated (app_owned) children run their own runs; routing them here ingests their items twice.
+      const routableSubagents = projection.subagents.filter(
+        (subagent) =>
+          subagent.origin === "provider_native" &&
+          RunExecutionService.canRouteRelatedSubagent(subagent.status),
       );
       const persistHandoff = Effect.fn("ProviderTurnStartService.persist")(
         function* (handoff: OrchestrationV2ContextHandoff) {
@@ -1908,13 +1948,26 @@ export const layer: Layer.Layer<
             .filter((part) => part !== "")
             .join("\n\n");
           const { restartContinuationOfRunId: _resumedRunId, ...promptedInput } = turnInput;
-          yield* start({
-            ...(noteContinuation ? promptedInput : turnInput),
-            message: {
-              ...turnInput.message,
-              text: goalCommand ? providerUserText : withInlineContext(context, providerUserText),
-            },
-          }).pipe(
+          const text = goalCommand
+            ? providerUserText
+            : withInlineContext(context, providerUserText);
+          const startInput = noteContinuation ? promptedInput : turnInput;
+          const { resume: _resume, ...contextInput } = startInput;
+          const { message: resumeMessage, resume: _resumeIntent, ...resumeInput } = startInput;
+          const operation =
+            turnInput.resume && context === "" && session.resumeTurn !== undefined
+              ? session.resumeTurn({ ...resumeInput, messageId: resumeMessage.messageId })
+              : start({
+                  ...(context === "" ? startInput : contextInput),
+                  message: {
+                    ...turnInput.message,
+                    text,
+                  },
+                  ...(text === providerUserText
+                    ? {}
+                    : { inlineContextLength: text.length - providerUserText.length }),
+                });
+          yield* operation.pipe(
             // Clear pending handoff markers for refused prompts so the next turn retains the native session.
             Effect.tapError((error) =>
               refusedBeforePrompt(error)
@@ -1986,6 +2039,7 @@ export const layer: Layer.Layer<
         providerThread: runningProviderThread,
         attempt: runningAttempt,
         attemptId: attempt.id,
+        baseline,
         loadInheritedBackgroundTurnItems: runControls.loadInheritedBackgroundTurnItems,
         relatedThreadIds: routableSubagents.flatMap((subagent) =>
           subagent.childThreadId === null ? [] : [subagent.childThreadId],
@@ -2000,6 +2054,7 @@ export const layer: Layer.Layer<
               .filter((turn) => turn.providerThreadId === providerThread.id)
               .map((turn) => turn.ordinal),
           ) + 1,
+        resume: manualResume && unsentResumeMessage === undefined,
         nativeThreadHasTurns:
           nativeInputRunIds.size > 0 ||
           (legacyInputRunIds.size > 0 &&
@@ -2013,7 +2068,7 @@ export const layer: Layer.Layer<
         message: {
           messageId: message.id,
           text: userText,
-          attachments: message.attachments,
+          attachments: providerMessage.attachments,
           createdBy: message.createdBy,
           creationSource: message.creationSource,
           ...(message.scheduledTaskId === undefined

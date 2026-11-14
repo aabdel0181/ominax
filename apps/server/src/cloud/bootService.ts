@@ -326,6 +326,13 @@ function systemdManager(input: {
 }): BootServiceManager {
   const unitFile = input.unitFile ?? BOOT_SERVICE_UNIT_FILE;
   const unitPath = input.path.join(input.unitDir, unitFile);
+  // Once StartLimitBurst trips, systemd refuses every start until the failed state is cleared.
+  const resetFailed = {
+    step: "clearing the service's failed state",
+    optional: true,
+    command: "systemctl",
+    args: ["--user", "reset-failed", unitFile],
+  };
   const prepareActivation = [
     {
       step: "reloading systemd user units",
@@ -337,6 +344,7 @@ function systemdManager(input: {
       command: "systemctl",
       args: ["--user", "enable", unitFile],
     },
+    resetFailed,
   ];
   return {
     kind: "systemd",
@@ -359,6 +367,7 @@ function systemdManager(input: {
       },
     ],
     restart: [
+      resetFailed,
       {
         step: "restarting the service after a failed update",
         command: "systemctl",

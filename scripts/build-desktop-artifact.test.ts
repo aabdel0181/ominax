@@ -19,6 +19,7 @@ import * as Sink from "effect/Sink";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { fromYaml } from "@t3tools/shared/schemaYaml";
 
 import {
   buildDesktopBundles,
@@ -671,6 +672,30 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         "io.github.aabdel0181.OminaX",
       );
     }),
+  );
+
+  it.effect("names release AppImages the way the OminaX installer finds them", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "linux",
+        "AppImage",
+        "0.1.9-learn.14",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+
+      assert.isNotNull(config.publish);
+      assert.isUndefined(config.appImage);
+      assert.equal(config.artifactName, "OminaX-${version}-${arch}.${ext}");
+    }).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({ env: { GITHUB_REPOSITORY: "aabdel0181/ominax" } }),
+        ),
+      ),
+    ),
   );
 
   it.effect("declares Calendar access for hosted commands in macOS builds", () =>
@@ -1510,6 +1535,57 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         yield* validateMacPackagedPayload({ stageDistDir: fixture.stageDistDir });
       }),
     ),
+  );
+
+  it.effect("never runs an untrusted macOS bundle", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const marker = path.join(yield* fs.makeTempDirectoryScoped(), "ran");
+        const fixture = yield* makePackagedAppFixture({
+          serverEntrySource: `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(marker)}, "");\n`,
+        });
+        yield* validateMacPackagedPayload({ stageDistDir: fixture.stageDistDir });
+        assert.isFalse(yield* fs.exists(marker));
+      }),
+    ).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({ env: { T3CODE_DESKTOP_UNTRUSTED_BUNDLE: "true" } }),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("packages the macOS preview's PR bundle as untrusted", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const workflow = yield* fs.readFileString(
+        yield* path.fromFileUrl(
+          new URL("../.github/workflows/desktop-macos-preview-publish.yml", import.meta.url),
+        ),
+      );
+      const { jobs } = yield* Schema.decodeEffect(
+        fromYaml(
+          Schema.Struct({
+            jobs: Schema.Record(
+              Schema.String,
+              Schema.Struct({
+                uses: Schema.optional(Schema.String),
+                with: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+              }),
+            ),
+          }),
+        ),
+      )(workflow);
+      const packaging = Object.values(jobs).filter(
+        (job) => job.uses === "./.github/workflows/release-desktop.yml",
+      );
+      assert.isNotEmpty(packaging);
+      for (const job of packaging) assert.strictEqual(job.with?.untrusted_bundle, true);
+    }),
   );
 
   it.effect("rejects a macOS stage without a packaged app", () =>

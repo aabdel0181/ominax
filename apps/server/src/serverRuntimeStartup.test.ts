@@ -53,6 +53,7 @@ it.effect.each([
   "disabled-default",
   "launch-failure",
   "project-failure",
+  "project-refused",
   "side-chat-only",
 ] as const)("keeps bootstrap launch failures separate from project failures: %s", (scenario) =>
   Effect.gen(function* () {
@@ -157,22 +158,28 @@ it.effect.each([
         bootstrap: () =>
           scenario === "project-failure"
             ? Effect.die("project bootstrap failed")
-            : Effect.succeed({
-                created: true,
-                project: {
-                  id: projectId,
-                  title: "Project",
-                  workspaceRoot: "/bootstrap-project",
-                  repositoryIdentity: null,
-                  faviconPath: null,
-                  scripts: [],
-                  createdAt: "2026-01-01T00:00:00Z",
-                  updatedAt: "2026-01-01T00:00:00Z",
-                  deletedAt: null,
-                  defaultModelSelection:
-                    scenario === "disabled-default" ? { instanceId, model: "custom-model" } : null,
-                },
-              }),
+            : scenario === "project-refused"
+              ? Effect.fail(
+                  new ProjectService.ProjectInvalidError({ projectId, detail: "refused folder" }),
+                )
+              : Effect.succeed({
+                  created: true,
+                  project: {
+                    id: projectId,
+                    title: "Project",
+                    workspaceRoot: "/bootstrap-project",
+                    repositoryIdentity: null,
+                    faviconPath: null,
+                    scripts: [],
+                    createdAt: "2026-01-01T00:00:00Z",
+                    updatedAt: "2026-01-01T00:00:00Z",
+                    deletedAt: null,
+                    defaultModelSelection:
+                      scenario === "disabled-default"
+                        ? { instanceId, model: "custom-model" }
+                        : null,
+                  },
+                }),
       }),
       Layer.mock(ThreadManagement.ThreadManagementService)({
         countThreads: () => Effect.succeed(0),
@@ -247,7 +254,10 @@ it.effect.each([
       } else {
         assert.isDefined(welcome);
         if (welcome?.type === "welcome") {
-          assert.equal(welcome.payload.bootstrapProjectId, projectId);
+          assert.equal(
+            welcome.payload.bootstrapProjectId,
+            scenario === "project-refused" ? undefined : projectId,
+          );
           assert.isUndefined(welcome.payload.bootstrapThreadId);
         }
       }
