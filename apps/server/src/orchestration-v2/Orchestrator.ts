@@ -1065,9 +1065,11 @@ function queuedRunModelSelection(
   run: OrchestrationV2Run,
 ): ModelSelection {
   const message = projection.messages.find((candidate) => candidate.id === run.userMessageId);
-  return followsCurrentConversation(message)
+  if (!followsCurrentConversation(message)) return run.modelSelection;
+  // The stored pick can be Ultracode; lessons and side chats never run at it.
+  return projection.thread.lesson === undefined && projection.thread.sideChat === undefined
     ? projection.thread.modelSelection
-    : run.modelSelection;
+    : withoutUltracode(projection.thread.modelSelection);
 }
 
 /** The selection the thread will be on once every queued run has started. */

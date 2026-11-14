@@ -5,6 +5,7 @@ import {
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  ScheduledTaskId,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -109,6 +110,81 @@ it.layer(layerTest)("lesson Ultracode cap", (it) => {
       const queued = (yield* projections.getThreadProjection(threadId)).runs.at(-1);
       assert.equal(queued?.status, "queued");
       assert.deepEqual(queued?.modelSelection.options, capped);
+    }),
+  );
+
+  it.effect("a queued scheduled delivery starts on the lesson's pick, capped", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const threadId = ThreadId.make("thread:lesson-ultracode-scheduled");
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("create:lesson-ultracode-scheduled"),
+        threadId,
+        projectId: ProjectId.make("project:lesson-ultracode"),
+        title: "Lesson",
+        lesson: { topic: "CW2", depth: "deep", purpose: "outcome" },
+        modelSelection: ultracode,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("send:lesson-ultracode-scheduled"),
+        threadId,
+        messageId: MessageId.make("message:lesson-ultracode-scheduled-first"),
+        text: "teach me",
+        attachments: [],
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+      // Scheduled tasks send with no model, so the run follows the thread's pick when it starts.
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("scheduled:lesson-ultracode"),
+        threadId,
+        messageId: MessageId.make("message:lesson-ultracode-scheduled"),
+        scheduledTaskId: ScheduledTaskId.make("task:lesson-ultracode"),
+        text: "daily review",
+        attachments: [],
+        dispatchMode: { type: "queue_after_active" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const { runs } = yield* projections.getThreadProjection(threadId);
+      const [first, scheduled] = runs;
+      assert.equal(scheduled?.status, "queued");
+      yield* orchestrator.dispatch({
+        type: "run.interrupt",
+        commandId: CommandId.make("stop:lesson-ultracode-scheduled"),
+        threadId,
+        runId: first!.id,
+        holdQueue: true,
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.model-selection.set",
+        commandId: CommandId.make("set:lesson-ultracode-scheduled"),
+        threadId,
+        modelSelection: ultracode,
+      });
+      yield* orchestrator.dispatch({
+        type: "queue.resume",
+        commandId: CommandId.make("resume:lesson-ultracode-scheduled"),
+        threadId,
+      });
+      yield* orchestrator.resumeQueuedRuns;
+
+      const started = (yield* projections.getThreadProjection(threadId)).runs.find(
+        (run) => run.id === scheduled!.id,
+      );
+      assert.notEqual(started?.status, "queued");
+      assert.deepEqual(started?.modelSelection.options, capped);
     }),
   );
 });
