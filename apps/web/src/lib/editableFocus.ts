@@ -14,3 +14,13 @@ export function isEditableFocused(target: EventTarget | null = document.activeEl
   while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
   return element !== null && element.closest(EDITABLE_SELECTOR) !== null;
 }
+
+// Chromium on Linux pastes PRIMARY into the focused editable unless the middle mouseup is cancelled.
+export function preventMiddleClickPasteOutsideEditable(event: {
+  readonly button: number;
+  readonly target: EventTarget | null;
+  preventDefault(): void;
+}) {
+  if (event.button !== 1 || isEditableFocused(event.target)) return;
+  event.preventDefault();
+}

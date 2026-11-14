@@ -1119,6 +1119,20 @@ it("types into the side chat when focus is elsewhere in the panel", async () => 
   await expect.element(composer(screen)).toHaveFocus();
 });
 
+it("cancels a middle-click outside an editable so Linux doesn't paste into the draft", async () => {
+  setup();
+  state.shells = [LESSON_SHELL, SIDE_1];
+  showSideChat("side-1", "side-1");
+  await using screen = await renderPanel();
+  const panel = screen.getByRole("region", { name: "Side chat" });
+  await expect.element(panel).toBeInTheDocument();
+
+  const middleUp = new MouseEvent("mouseup", { button: 1, bubbles: true, cancelable: true });
+  panel.element().dispatchEvent(middleUp);
+
+  expect(middleUp.defaultPrevented).toBe(true);
+});
+
 it("leaves PageUp to a draft that can scroll and pages the timeline otherwise", async () => {
   setup();
   state.shells = [LESSON_SHELL, SIDE_1];

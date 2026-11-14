@@ -38,6 +38,7 @@ import {
   AssistantCitationRevealContext,
   assistantCitationNavigation,
 } from "../../lib/assistantCitationNavigation";
+import { preventMiddleClickPasteOutsideEditable } from "../../lib/editableFocus";
 import { observeResize } from "../../lib/observeResize";
 import { cn, randomUUID } from "../../lib/utils";
 import { releaseComposerDraftUploads } from "../../lib/composerDraftUploads";
@@ -500,6 +501,7 @@ export function SideChatPanel(props: {
         tabIndex={-1}
         aria-label="Side chat"
         className="flex h-full min-h-0 flex-col outline-none"
+        onMouseUp={preventMiddleClickPasteOutsideEditable}
         onKeyDown={(event) => {
           // Portaled popups bubble their keys here through React; only the panel's own count.
           if (event.defaultPrevented || !event.currentTarget.contains(event.target as Node)) {
