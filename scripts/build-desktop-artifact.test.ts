@@ -674,23 +674,25 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }),
   );
 
-  it.effect("names updatable AppImages without a version and apart per channel", () =>
+  it.effect("names release AppImages the way the OminaX installer finds them", () =>
     Effect.gen(function* () {
-      const appImageName = (version: string) =>
-        createBuildConfig("linux", "AppImage", version, false, false, undefined, undefined).pipe(
-          Effect.map((config) => (config.appImage as { artifactName: string }).artifactName),
-        );
+      const config = yield* createBuildConfig(
+        "linux",
+        "AppImage",
+        "0.1.9-learn.14",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
 
-      const stable = yield* appImageName("0.0.37");
-      const nightly = yield* appImageName("0.0.38-nightly.20261026.3740");
-
-      assert.notInclude(stable, "${version}");
-      assert.notInclude(nightly, "${version}");
-      assert.notEqual(stable, nightly);
+      assert.isNotNull(config.publish);
+      assert.isUndefined(config.appImage);
+      assert.equal(config.artifactName, "OminaX-${version}-${arch}.${ext}");
     }).pipe(
       Effect.provide(
         ConfigProvider.layer(
-          ConfigProvider.fromEnv({ env: { GITHUB_REPOSITORY: "pingdotgg/t3code" } }),
+          ConfigProvider.fromEnv({ env: { GITHUB_REPOSITORY: "aabdel0181/ominax" } }),
         ),
       ),
     ),
