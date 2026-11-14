@@ -24,8 +24,12 @@ output_file="$root/.github/workflows/ominax-ci.yml"
 # miss their 15s test and waitFor windows, so the fork splits Test Web across
 # four runners. Upstream's PDF reload test still takes 13-15s there, so tests
 # get 30s. vp run passes a `--` through, so the flags follow the script.
+# One CI VM runs at a time, so a newer run on the same ref (a PR, or main by
+# push or the sync's dispatch) cancels the older one; Release follows the newest.
 transform='
 s/^name: CI$/name: OminaX CI/
+s/^  group: ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.sha \}\}$/  group: ominax-ci-${{ github.ref }}/
+s/^  cancel-in-progress: \$\{\{ github\.event_name == '\''pull_request'\'' \}\}$/  cancel-in-progress: true/
 s/^( *)runs-on: blacksmith-[0-9]+vcpu-ubuntu-2404$/\1runs-on: ominax-linux-x64/
 s/^( *)runs-on: ubuntu-24.04$/\1runs-on: ominax-linux-x64/
 s/^( *)runs-on: blacksmith-[0-9]+vcpu-macos-26$/\1runs-on: macos-26/
@@ -88,6 +92,8 @@ fail() {
 }
 count() { grep -c "$1" <<<"$generated" || true; }
 [[ $(count '^name: OminaX CI$') -eq 1 ]] || fail "workflow name not rewritten"
+[[ $(count '^  group: ominax-ci-\${{ github.ref }}$') -eq 1 && $(count '^  cancel-in-progress: true$') -eq 1 ]] ||
+  fail "concurrency not rewritten"
 [[ $(count '^  workflow_dispatch:') -eq 1 ]] || fail "expected exactly one workflow_dispatch trigger"
 [[ $(count '^    name: Check$') -eq 1 ]] || fail "aggregate Check job missing"
 [[ $(count '^      - name: Require ominax-ci.yml to match ci.yml$') -eq 1 ]] ||
