@@ -173,6 +173,14 @@ const assertShellIndexCoversShells = Effect.fnUntraced(function* () {
     sideChatLessonThreadId: row.sideChat?.lessonThreadId ?? null,
   });
   assert.deepEqual(index.map(trimmed), shells.map(trimmed));
+  // Agent thread listing drops side chats of both kinds by these fields.
+  const listingFields = (
+    row: Pick<ProjectionStore.ActiveThreadListEntry, "id" | "lineage" | "sideChat">,
+  ) => [row.id, row.lineage.sideChat === true, row.sideChat?.lessonThreadId ?? null].join(" ");
+  assert.deepEqual(
+    (yield* store.listActiveThreads()).map(listingFields).toSorted(),
+    shells.map(listingFields).toSorted(),
+  );
   shells.forEach((shell, position) => {
     if (isLiveSubagentShell(shell)) assert.isTrue(index[position]?.mayBeLive, shell.id);
   });

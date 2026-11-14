@@ -484,7 +484,9 @@ export type ActiveThreadListEntry = Pick<
   | "settledAt"
   | "snoozedUntil"
   | "updatedAt"
->;
+> & {
+  readonly sideChat?: Pick<OrchestrationV2ThreadShellSideChat, "lessonThreadId"> | undefined;
+};
 
 export interface OlderSettledThreadsQuery {
   readonly before: OrchestrationV2OlderSettledCursor;
@@ -8949,6 +8951,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         readonly parent_thread_id: string | null;
         readonly root_thread_id: string;
         readonly side_chat: number | null;
+        readonly side_chat_lesson_thread_id: string | null;
         readonly settled_override: string | null;
         readonly settled_at: string | null;
         readonly snoozed_until: string | null;
@@ -8962,6 +8965,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           json_extract(t.payload_json, '$.lineage.parentThreadId') AS parent_thread_id,
           json_extract(t.payload_json, '$.lineage.rootThreadId') AS root_thread_id,
           json_extract(t.payload_json, '$.lineage.sideChat') AS side_chat,
+          json_extract(t.payload_json, '$.sideChat.lessonThreadId') AS side_chat_lesson_thread_id,
           json_extract(t.payload_json, '$.settledOverride') AS settled_override,
           json_extract(t.payload_json, '$.settledAt') AS settled_at,
           json_extract(t.payload_json, '$.snoozedUntil') AS snoozed_until
@@ -8981,6 +8985,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         settledAt: row.settled_at === null ? null : DateTime.makeUnsafe(row.settled_at),
         snoozedUntil: row.snoozed_until === null ? null : DateTime.makeUnsafe(row.snoozed_until),
         updatedAt: DateTime.makeUnsafe(row.updated_at),
+        ...(row.side_chat_lesson_thread_id === null
+          ? {}
+          : { sideChat: { lessonThreadId: ThreadId.make(row.side_chat_lesson_thread_id) } }),
       }));
     }, Effect.mapError(shellSnapshotReadError));
 

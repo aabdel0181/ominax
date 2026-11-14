@@ -918,8 +918,7 @@ it.effect("agent thread listings never include side chats", () => {
     Layer.provide(Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({})),
     Layer.provide(
       Layer.mock(Orchestrator.OrchestratorV2)({
-        getShellSnapshot: () =>
-          Effect.succeed({ threads: [lesson, helper, sideChat, upstreamSideChat] } as never),
+        listActiveThreads: () => Effect.succeed([lesson, helper, sideChat, upstreamSideChat]),
       }),
     ),
     Layer.provide(ServerSettings.layerTest()),
