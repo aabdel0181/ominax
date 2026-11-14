@@ -147,7 +147,7 @@ export function SentMessageTimelineRow({
 
   return (
     <div className="min-w-0 px-1 py-0.5">
-      <MessageAuthorHeading>T3 Code</MessageAuthorHeading>
+      <MessageAuthorHeading>{APP_BASE_NAME}</MessageAuthorHeading>
       <ChatMarkdown
         text={row.text}
         cwd={ctx.markdownCwd}
