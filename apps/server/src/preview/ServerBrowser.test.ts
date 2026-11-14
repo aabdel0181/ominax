@@ -4076,6 +4076,7 @@ it.live("a page's title change without navigation reaches its session", () =>
       yield* Effect.promise(() => page.goto("https://fixture.test/drawing.svg"));
       yield* navigatedTo("Drawing");
       yield* Effect.promise(() => watched.promise);
+      watched = Promise.withResolvers<void>();
       yield* Effect.promise(() =>
         page.evaluate("document.querySelector('title').textContent = 'Renamed drawing'"),
       );
@@ -4084,6 +4085,8 @@ it.live("a page's title change without navigation reaches its session", () =>
         url: "https://fixture.test/drawing.svg",
         title: "Renamed drawing",
       });
+      // The rename starts another watch; its probe must settle before the browser closes.
+      yield* Effect.promise(() => watched.promise);
     }).pipe(Effect.provide(layer));
   }).pipe(Effect.scoped),
 );
