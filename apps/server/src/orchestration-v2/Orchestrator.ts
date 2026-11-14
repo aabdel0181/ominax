@@ -14860,7 +14860,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           command.type === "runtime-request.respond" ||
           (message?.type === "message.dispatch" && mayStartSubagentFollowup(message))
         ) {
-          const subagentParentThreadId = yield* appOwnedSubagentParentThreadId(command.threadId);
+          const subagentParentThreadId = yield* appOwnedSubagentParentThreadId(
+            commandThreadId(command),
+          );
           if (subagentParentThreadId !== undefined) return subagentParentThreadId;
         }
         if (command.type !== "thread.side_chat.open") {
