@@ -17,7 +17,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source_file="$root/.github/workflows/ci.yml"
 output_file="$root/.github/workflows/ominax-ci.yml"
 
-# blacksmith-6vcpu-macos-26 is Apple silicon; GitHub's macos-26 is arm64 too.
+# Blacksmith macOS runners are Apple silicon; GitHub's macos-26 is arm64 too (the job is off here).
 # Lint always runs and Check already needs it, so the drift guard lives there.
 # Test Web runs on two 8 vCPU runners upstream. Browser test files share one
 # Chromium page, and on a slower 4 vCPU runner the heaviest file previews then
@@ -32,7 +32,7 @@ s/^  group: ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.sha \}\}$
 s/^  cancel-in-progress: \$\{\{ github\.event_name == '\''pull_request'\'' \}\}$/  cancel-in-progress: true/
 s/^( *)runs-on: blacksmith-[0-9]+vcpu-ubuntu-2404$/\1runs-on: ominax-linux-x64/
 s/^( *)runs-on: ubuntu-24.04$/\1runs-on: ominax-linux-x64/
-s/^( *)runs-on: blacksmith-[0-9]+vcpu-macos-26$/\1runs-on: macos-26/
+s/^( *)runs-on: blacksmith-[0-9]+vcpu-macos-[0-9]+$/\1runs-on: macos-26/
 /^  mobile_native_static_analysis:$/,/^  [a-z_]+:$/s/^    if: .*$/    if: false/
 s/mobile_native_static_analysis: \["mobile_native"\]/mobile_native_static_analysis: []/
 /^  test_web:$/,/^  [a-z_]+:$/{
