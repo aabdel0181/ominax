@@ -28,6 +28,10 @@ import {
 } from "./mcpApp.ts";
 import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
 
+export const SEND_TO_USER_TOOL_NAME = "send_to_user";
+// 4,000 UTF-16 units stay inside MAX_PARSED_BYTES even as 3-byte characters.
+export const SEND_TO_USER_MAX_LENGTH = 4_000;
+
 const MAX_PARSED_BYTES = 16_384;
 // Server-side read of our own course_add result; large OCW courses run to hundreds of units.
 const MAX_COURSE_PARSED_BYTES = 512 * 1024;
@@ -71,6 +75,7 @@ interface CompactToolOutput {
   threads?: Array<{ threadId?: string; status?: "rolled_back" }>;
   linkedCount?: number;
   unlinkedCount?: number;
+  sentMessage?: string;
 }
 
 function readResult(value: unknown, budget: ResultReadBudget, depth = 0): ResultEnvelope {
@@ -181,6 +186,13 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
     for (const key of ["linkedCount", "unlinkedCount"] as const) {
       const count = data[key];
       if (typeof count === "number" && Number.isSafeInteger(count)) output[key] = count;
+    }
+    if (
+      typeof data.sentMessage === "string" &&
+      data.sentMessage.trim() !== "" &&
+      data.sentMessage.length <= SEND_TO_USER_MAX_LENGTH
+    ) {
+      output.sentMessage = data.sentMessage;
     }
     const htmlRender = readHtmlRenderReference(data.htmlRender);
     if (htmlRender !== undefined) output.htmlRender = htmlRender;
@@ -319,6 +331,21 @@ export function htmlRenderFromToolItem(item: {
   }
   const output = compactDynamicToolOutput(item.output);
   return output?.isError ? undefined : output?.htmlRender;
+}
+
+/** The text `send_to_user` showed the user, which clients render as the agent's own words. */
+export function sentMessageFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): string | undefined {
+  if (
+    item.toolName !== OPENCODE_CODE_MODE_TOOL_NAME &&
+    resolveT3McpToolId(item.toolName) !== SEND_TO_USER_TOOL_NAME
+  ) {
+    return undefined;
+  }
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? undefined : output?.sentMessage;
 }
 
 /** The thread-owned file `preview_recording_stop` stored for the agent. */
