@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ominax-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Skips jobs a pull request cannot affect: a web change does not run the
