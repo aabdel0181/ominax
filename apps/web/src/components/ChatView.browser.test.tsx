@@ -86,6 +86,7 @@ vi.mock(import("~/rpc/requestLatencyState"), async (original) => ({
 }));
 
 it("a machine chip stashed in one thread restores with its machine in another", async () => {
+  using _welcomeGuide = skipLessonGuides();
   const other = threadWithHistory("thread-stash-restore", 1);
   const asking = threadWithQuestion("thread-stash-question", "Which file should change?");
   using _environment = installFakeEnvironment([other, asking]);
@@ -143,6 +144,7 @@ it("a machine chip stashed in one thread restores with its machine in another", 
 });
 
 it("a question that opens while a stashed file is checked keeps a machine stash", async () => {
+  using _welcomeGuide = skipLessonGuides();
   const thread = threadWithHistory("thread-stash-late-question", 1);
   const asking = threadWithQuestion("thread-stash-late-question", "Which file should change?");
   const [request] = asking.runtimeRequests ?? [];
@@ -517,6 +519,7 @@ it("opening a thread or returning to the window on a touch tablet does not focus
 });
 
 it("a mounted thread view lets go of the thread structures it has replaced", async () => {
+  using _welcomeGuide = skipLessonGuides();
   // Items are shared with the fixture, so a reopen's snapshot also carries the earlier updates.
   const history = threadWithHistory("updated", 3);
   const items = [...history.items];
