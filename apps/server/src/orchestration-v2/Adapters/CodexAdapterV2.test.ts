@@ -297,6 +297,23 @@ describe("CodexAdapterV2 runtime policy", () => {
       assert.isDefined(withT3.additionalContext?.["t3_code_runtime"]);
     }),
   );
+
+  it.effect("turns off network and limits writes for lesson turns", () =>
+    Effect.gen(function* () {
+      const params = yield* CodexAdapterV2.buildCodexTurnStartParams({
+        nativeThreadId: "native-lesson-policy",
+        codexInput: [{ type: "text", text: "teach" }],
+        runtimePolicy: { runtimeMode: "full-access", interactionMode: "default", cwd: "/lesson" },
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+        lessonTurn: true,
+      });
+      assert.deepEqual(params.sandboxPolicy, {
+        type: "workspaceWrite",
+        networkAccess: false,
+        writableRoots: ["/lesson"],
+      });
+    }),
+  );
 });
 
 describe("CodexAdapterV2 native protocol logging", () => {

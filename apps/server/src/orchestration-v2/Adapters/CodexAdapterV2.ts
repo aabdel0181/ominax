@@ -812,16 +812,25 @@ export const buildCodexTurnStartParams = Effect.fn("CodexAdapterV2.buildCodexTur
     readonly cyberAccess?: { readonly defaultProgram: string | undefined } | undefined;
     /** The user's `model_reasoning_summary` from the Codex config, when set. */
     readonly configuredReasoningSummary?: CodexSchema.V2TurnStartParams__ReasoningSummary;
+    /** Lesson turns must not reach the network or write outside the lesson project. */
+    readonly lessonTurn?: boolean;
   }) {
     const runtimeModeDefaults = codexRuntimeModeTurnDefaults(input.runtimePolicy.runtimeMode);
     const approvalPolicy =
       input.runtimePolicy.approvalPolicy === undefined
         ? runtimeModeDefaults.approvalPolicy
         : yield* decodeTurnApprovalPolicy(input.runtimePolicy.approvalPolicy);
-    const sandboxPolicy =
+    const configuredSandboxPolicy =
       input.runtimePolicy.sandboxPolicy === undefined
         ? runtimeModeDefaults.sandboxPolicy
         : yield* decodeTurnSandboxPolicy(input.runtimePolicy.sandboxPolicy);
+    const sandboxPolicy = input.lessonTurn
+      ? {
+          type: "workspaceWrite" as const,
+          networkAccess: false,
+          ...(input.runtimePolicy.cwd === null ? {} : { writableRoots: [input.runtimePolicy.cwd] }),
+        }
+      : configuredSandboxPolicy;
     const selectedEffort =
       getModelSelectionStringOptionValue(input.modelSelection, "reasoningEffort") ??
       codexDefaultReasoningEffortOverride(input.modelSelection.model);
@@ -7550,6 +7559,9 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               deviceToolsAvailable: mcpSession?.capabilities?.has("device") ?? false,
               omitServiceTier: adapterOptions.resolveRuntime !== undefined,
               ...(turnInput.appContext === undefined ? {} : { appContext: turnInput.appContext }),
+              lessonTurn:
+                turnInput.appThread.lesson !== undefined ||
+                turnInput.appThread.sideChat !== undefined,
               ...(configuredReasoningSummary === undefined ? {} : { configuredReasoningSummary }),
             });
             yield* Ref.update(pendingRootTurns, (current) => {
