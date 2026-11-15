@@ -4560,6 +4560,23 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       expected: ["reasoning", "reasoning", "assistant_message"],
     },
     {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
+      heldText:
+        "I've confirmed the verdict, with one refinement… Next I'm working out how to teach… I'll write up the next card. I'm weighing whether…",
+      thinking: "I'll prepare the card.",
+      expected: ["reasoning", "reasoning", "reasoning"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
+      heldText: "Having confirmed the verdict, I'm moving on to acceleration.",
+      thinking: "I'll prepare the card.",
+      expected: ["reasoning", "reasoning", "reasoning"],
+    },
+    {
       tool: "Bash",
       reply: undefined,
       lesson: true,
@@ -4927,6 +4944,224 @@ describe("ClaudeAdapterV2 background wake turns", () => {
   );
 
   it.effect.each([
+    {
+      name: "render self-check after preview",
+      preview: true,
+      render: "mcp__t3-code__animation_render",
+      text: "Every label and arrow is correct now, so I'm rendering it.",
+      expected: ["reasoning"],
+    },
+    {
+      name: "render self-check after preview with console check",
+      preview: true,
+      text: "The preview shows every label, arrow and number correctly and has no console errors, so I'm rendering it.",
+      expected: ["reasoning"],
+    },
+    {
+      name: "render self-check after preview with readable labels",
+      preview: true,
+      text: "Every label is readable and the numbers match the example, so I'm rendering it.",
+      expected: ["reasoning"],
+    },
+    {
+      name: "render self-check after preview with scaled arrows",
+      preview: true,
+      text: "The labels no longer overlap, the arrows are to scale, and there are no console errors, so I'm rendering it.",
+      expected: ["reasoning"],
+    },
+    {
+      name: "render text without preview stays visible",
+      preview: false,
+      text: "Every label and arrow is correct now, so I'm rendering it.",
+      expected: ["assistant_message"],
+    },
+    {
+      name: "render state resets after first render",
+      preview: true,
+      text: "Every label and arrow is correct now, so I'm rendering it.",
+      afterResetText: "The next picture teaches acceleration.",
+      expected: ["reasoning", "assistant_message"],
+    },
+    {
+      name: "steer clears preview state",
+      preview: true,
+      steer: true,
+      text: "I agree with your answer.",
+      expected: ["assistant_message"],
+    },
+  ] as const)(
+    "lesson picture self-check before render ($name)",
+    ({
+      preview,
+      render = "mcp__t3-code__html_render",
+      steer = false,
+      text,
+      afterResetText,
+      expected,
+    }) =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        const input = makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make(`picture-self-check-${text.slice(0, 12)}`),
+          text: 'Quiz answer: "Yes", right.',
+          attachments: [],
+          lesson: true,
+        });
+        yield* harness.runtime.startTurn(input);
+        const snapshot = (uuid: string, content: ReadonlyArray<unknown>) =>
+          claudeSdkFrame({
+            type: "assistant",
+            uuid,
+            session_id: WAKE_NATIVE_SESSION,
+            parent_tool_use_id: null,
+            message: { id: uuid, model: "claude-sonnet-5-5", content },
+          });
+        const previewFrame = snapshot("picture-preview", [
+          {
+            type: "tool_use",
+            id: "picture-preview-tool",
+            name: "mcp__t3-code__html_preview",
+            input: {},
+          },
+        ]);
+        const renderFrame = (id: string) =>
+          snapshot(id, [{ type: "tool_use", id: `${id}-tool`, name: render, input: {} }]);
+        if (steer) {
+          yield* harness.offerAndWait(previewFrame);
+          const idAllocator = yield* IdAllocator.IdAllocatorV2;
+          yield* harness.runtime.steerTurn({
+            threadId: harness.threadId,
+            runId: input.runId,
+            providerThread: harness.providerThread,
+            providerTurnId: idAllocator.derive.providerTurn({
+              driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
+              nativeTurnId: `turn:${input.attemptId}`,
+            }),
+            message: {
+              createdBy: "user",
+              creationSource: "web",
+              messageId: MessageId.make("picture-steer-message"),
+              text: "Continue with the verdict.",
+              attachments: [],
+            },
+          });
+          yield* harness.offerAndWait(
+            makeResultFrame({
+              uuid: "picture-steer-abort",
+              result: "",
+              terminalReason: "aborted_streaming",
+            }),
+          );
+          yield* harness.offerAndWait(snapshot("picture-steer-verdict", [{ type: "text", text }]));
+          yield* harness.offerAndWait(renderFrame("picture-steer-render"));
+          yield* harness.offerAndWait(
+            makeResultFrame({ uuid: "picture-steer-result", result: "" }),
+          );
+        } else {
+          const frames = [
+            ...(preview ? [previewFrame] : []),
+            snapshot("picture-self-check", [{ type: "text", text }]),
+            renderFrame("picture-render"),
+            ...(afterResetText === undefined
+              ? []
+              : [
+                  snapshot("picture-after-reset-text", [{ type: "text", text: afterResetText }]),
+                  renderFrame("picture-second-render"),
+                ]),
+            makeResultFrame({ uuid: "picture-result", result: "" }),
+          ];
+          for (const frame of frames) yield* Queue.offer(harness.sdkMessages, frame);
+        }
+        yield* harness.awaitTerminal(1);
+        const items = harness.events.flatMap((event) =>
+          event.type === "turn_item.updated" &&
+          (event.turnItem.type === "reasoning" || event.turnItem.type === "assistant_message")
+            ? [event.turnItem.type]
+            : [],
+        );
+        assert.deepEqual(items, [...expected]);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            IdAllocator.layer,
+            McpProviderSessions.layer,
+            NodeServices.layer,
+            NodeCrypto.layer,
+          ),
+        ),
+      ),
+  );
+
+  it.effect.each([
+    {
+      lead: "I'd call that correct, since v and a share a sign.",
+      reply: "What happens when the signs differ?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I'm afraid that's not right.",
+      reply: "Try the sign rule again.",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I think that's correct.",
+      reply: "Can you explain why?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "That's right, though I'd add units.",
+      reply: "What units belong here?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "Exactly right, but I'd tweak the sign.",
+      reply: "Which sign should change?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I agree with your answer.",
+      reply: "What is the next step?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "Your answer is off by a factor of two, I'm afraid.",
+      reply: "Where did the factor enter?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "Close, but I'd check the units.",
+      reply: "Which units should we use?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I'm afraid you mixed up velocity and acceleration.",
+      reply: "How are they different?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I'd say you nailed it.",
+      reply: "Can you explain why?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I don't think that holds.",
+      reply: "What assumption failed?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I disagree with B.",
+      reply: "Which option is correct?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I'll accept that.",
+      reply: "Ready for the next card?",
+      expected: "assistant_message",
+    },
     {
       lead: "Right, and your reasoning separates all four cases correctly. You've now covered X.",
       reply:
