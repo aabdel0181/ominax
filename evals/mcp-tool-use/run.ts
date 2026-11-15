@@ -2410,6 +2410,11 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
           config.apiKey ? undefined : config.proxy,
         );
     addUsage(usage, response.usage);
+    if (response.stop_reason === "aborted_streaming") {
+      sample.lessonCardSeen = false;
+      sample.htmlPreviewSeen = false;
+      sample.lessonCardReplies.length = 0;
+    }
     if ("raw" in response) {
       input?.push(...response.raw);
       transcript.push(...response.raw);
