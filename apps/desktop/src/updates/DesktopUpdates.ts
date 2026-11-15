@@ -978,9 +978,7 @@ export const make = Effect.gen(function* () {
     // update-downloaded is handled asynchronously, so it can land after downloadUpdate resolves.
     let current = yield* Ref.get(updateStateRef);
     while (current.status === "downloading") {
-      const next = yield* PubSub.take(changes).pipe(
-        Effect.timeoutOption(PREPARED_INSTALL_CHECK_WAIT),
-      );
+      const next = yield* PubSub.take(changes).pipe(Effect.timeoutOption(UPDATE_CHECK_WAIT));
       if (Option.isNone(next)) return;
       current = next.value;
     }

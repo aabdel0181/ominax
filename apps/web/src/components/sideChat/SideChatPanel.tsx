@@ -88,7 +88,10 @@ import {
 } from "../chat/composerFocusRedirect";
 import { ComposerPendingUserInputPanel } from "../chat/ComposerPendingUserInputPanel";
 import { createPageScrollController } from "../chat/pageScrollController";
-import { usePendingThreadRequests } from "../chat/usePendingThreadRequests";
+import {
+  usePendingThreadRequests,
+  usePendingUserInputDraft,
+} from "../chat/usePendingThreadRequests";
 import { useProviderWorkspaceSnapshotRefresh } from "../chat/useProviderWorkspaceSnapshotRefresh";
 import { Button } from "../ui/button";
 import { Toggle } from "../ui/toggle";
@@ -230,9 +233,6 @@ export function SideChatPanel(props: {
     pendingApprovals,
     pendingUserInputs,
     activePendingUserInput,
-    activePendingDraftAnswers,
-    activePendingQuestionIndex,
-    activePendingProgress,
     activePendingIsResponding,
     respondingRequestIds,
     onRespondToApproval,
@@ -253,6 +253,13 @@ export function SideChatPanel(props: {
       if (error !== null) toastManager.add(stackedThreadToast({ type: "error", title: error }));
     },
   });
+  const { activePendingDraftAnswers, activePendingQuestionIndex, activePendingProgress } =
+    usePendingUserInputDraft({
+      environmentId,
+      activeThreadId: shell?.id ?? null,
+      activePendingUserInput,
+      supportsQuestionAttachments: false,
+    });
 
   const [blobPreviews] = useState(createOptimisticBlobPreviews);
   const [optimisticState, setOptimisticState] = useState(() =>
@@ -751,6 +758,12 @@ export function SideChatPanel(props: {
                       editShortcutLabel={null}
                       timestampFormat={timestampFormat}
                       onOpenThread={onOpenThread}
+                      onImageExpand={(preview) =>
+                        openExpandedImagePreview(scopedThreadKey(lessonRef), {
+                          ...preview,
+                          fill: true,
+                        })
+                      }
                     />
                   ) : null
                 }
