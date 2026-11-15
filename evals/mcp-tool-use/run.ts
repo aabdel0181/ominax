@@ -931,6 +931,7 @@ type Sample = {
   /** Root Claude text held until the next tool in lesson cases. */
   readonly heldLessonText: Array<string>;
   lessonCardSeen: boolean;
+  htmlPreviewSeen: boolean;
   readonly lessonCardReplies: Array<string>;
 };
 
@@ -987,6 +988,7 @@ export const makeSample = (testCase: McpToolUseCase, base: Base): Sample => {
     })(),
     heldLessonText: [],
     lessonCardSeen: false,
+    htmlPreviewSeen: false,
     lessonCardReplies: [],
   };
 };
@@ -2536,7 +2538,11 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
           normalizeToolName(block.name) === "question_card";
         const isT3Mcp = block.name.startsWith("mcp__t3-code__");
         const short = held.reduce((total, text) => total + text.length, 0) <= 300;
-        if (lesson && sample.verdictPending && texts.length === 0 && short && !isCard) {
+        const tool = normalizeToolName(block.name);
+        const isPictureRender = tool === "html_render" || tool === "animation_render";
+        if (lesson && sample.htmlPreviewSeen && isPictureRender) {
+          // Picture self-check text after html_preview is working talk, so it stays a Thought.
+        } else if (lesson && sample.verdictPending && texts.length === 0 && short && !isCard) {
           texts.push(...held.map(stripLessonNarration).filter((text) => text !== ""));
         } else if (
           // The adapter keeps short narration before a non-T3 tool as a Thought (APP-108).
@@ -2557,6 +2563,8 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
             texts.push(...held);
           }
         }
+        if (tool === "html_preview") sample.htmlPreviewSeen = true;
+        else if (isPictureRender) sample.htmlPreviewSeen = false;
         if (isCard) {
           sample.lessonCardSeen = true;
           sample.lessonCardReplies.push(

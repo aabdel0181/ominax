@@ -4956,6 +4956,7 @@ interface ActiveClaudeTurnContext {
     emittedNativeItemIds: Set<string>;
     cardSeen: boolean;
     cardReplies: Array<string>;
+    htmlPreviewSeen: boolean;
     heldText: Array<{ readonly nativeItemId: string; readonly text: string }>;
     // Text blocks stream as `${message.id}:text:${n}`; the block's snapshot has its own uuid.
     readonly streamBlocks: Map<number, string>;
@@ -8923,6 +8924,14 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           const held = context.assistant.heldText;
           context.assistant.heldText = [];
           const short = held.reduce((total, item) => total + item.text.length, 0) <= 300;
+          const tool = resolveT3McpToolId(block.name);
+          if (
+            context.assistant.htmlPreviewSeen &&
+            (tool === "html_render" || tool === "animation_render")
+          ) {
+            for (const item of held) yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            return;
+          }
           // A verdict on the learner's answer shows even when the tutor reads code next.
           if (
             short &&
@@ -11389,6 +11398,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 context.assistant.heldText.push(rootText);
               }
               yield* flushHeldAssistantTextForTool(context, toolUse);
+              const tool = resolveT3McpToolId(toolUse.name);
+              if (tool === "html_preview") context.assistant.htmlPreviewSeen = true;
+              else if (tool === "html_render" || tool === "animation_render")
+                context.assistant.htmlPreviewSeen = false;
               if (isLessonCardTool(toolUse.name)) {
                 context.assistant.cardSeen = true;
                 const reply = (toolUse.input as { readonly reply?: unknown } | null)?.reply;
@@ -13114,6 +13127,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 emittedNativeItemIds: new Set(),
                 cardSeen: false,
                 cardReplies: [],
+                htmlPreviewSeen: false,
                 heldText: [],
                 streamBlocks: new Map(),
                 nextBlockIndex: new Map(),

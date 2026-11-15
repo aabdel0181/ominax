@@ -4519,6 +4519,103 @@ describe("ClaudeAdapterV2 background wake turns", () => {
 
   it.effect.each([
     {
+      name: "render self-check after preview",
+      preview: true,
+      render: "mcp__t3-code__animation_render",
+      text: "Every label and arrow is correct now, so I'm rendering it.",
+      expected: ["reasoning"],
+    },
+    {
+      name: "render self-check after preview with console check",
+      preview: true,
+      text: "The preview shows every label, arrow and number correctly and has no console errors, so I'm rendering it.",
+      expected: ["reasoning"],
+    },
+    {
+      name: "render self-check after preview with readable labels",
+      preview: true,
+      text: "Every label is readable and the numbers match the example, so I'm rendering it.",
+      expected: ["reasoning"],
+    },
+    {
+      name: "render self-check after preview with scaled arrows",
+      preview: true,
+      text: "The labels no longer overlap, the arrows are to scale, and there are no console errors, so I'm rendering it.",
+      expected: ["reasoning"],
+    },
+    {
+      name: "render text without preview stays visible",
+      preview: false,
+      text: "Every label and arrow is correct now, so I'm rendering it.",
+      expected: ["assistant_message"],
+    },
+  ] as const)(
+    "lesson picture self-check before render ($name)",
+    ({ preview, render = "mcp__t3-code__html_render", text, expected }) =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now: yield* DateTime.now,
+            attemptId: RunAttemptId.make(`picture-self-check-${text.slice(0, 12)}`),
+            text: 'Quiz answer: "Yes", right.',
+            attachments: [],
+            lesson: true,
+          }),
+        );
+        const snapshot = (uuid: string, content: ReadonlyArray<unknown>) =>
+          claudeSdkFrame({
+            type: "assistant",
+            uuid,
+            session_id: WAKE_NATIVE_SESSION,
+            parent_tool_use_id: null,
+            message: { id: uuid, model: "claude-sonnet-5-5", content },
+          });
+        const frames = [
+          ...(preview
+            ? [
+                snapshot("picture-preview", [
+                  {
+                    type: "tool_use",
+                    id: "picture-preview-tool",
+                    name: "mcp__t3-code__html_preview",
+                    input: {},
+                  },
+                ]),
+              ]
+            : []),
+          snapshot("picture-self-check", [{ type: "text", text }]),
+          snapshot("picture-render", [
+            { type: "tool_use", id: "picture-render-tool", name: render, input: {} },
+          ]),
+          makeResultFrame({ uuid: "picture-result", result: "" }),
+        ];
+        for (const frame of frames) yield* Queue.offer(harness.sdkMessages, frame);
+        yield* harness.awaitTerminal(1);
+        const items = harness.events.flatMap((event) =>
+          event.type === "turn_item.updated" &&
+          (event.turnItem.type === "reasoning" || event.turnItem.type === "assistant_message")
+            ? [event.turnItem.type]
+            : [],
+        );
+        assert.deepEqual(items, [...expected]);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            IdAllocator.layer,
+            McpProviderSessions.layer,
+            NodeServices.layer,
+            NodeCrypto.layer,
+          ),
+        ),
+      ),
+  );
+
+  it.effect.each([
+    {
       lead: "Right, and your reasoning separates all four cases correctly. You've now covered X.",
       reply:
         "Right, and your reasoning separates all four cases correctly. Here is the explain-back.",
