@@ -150,7 +150,7 @@ export function SentMessageTimelineRow({
   const ctx = use(TimelineRowCtx);
 
   return (
-    <div className="min-w-0 px-1 py-0.5">
+    <div className="min-w-0 px-1 py-0.5" data-sent-message="">
       <MessageAuthorHeading>{APP_BASE_NAME}</MessageAuthorHeading>
       {/* Sent messages have no message id; citations name their turn item instead. */}
       <AssistantCitationSource

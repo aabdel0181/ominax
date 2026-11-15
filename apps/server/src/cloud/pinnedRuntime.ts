@@ -630,17 +630,18 @@ export const findPosixLauncher = Effect.fn("cloud.pinned_runtime.find_posix_laun
       .readFileString(path.join(path.dirname(input.versionsDir), "launchers"))
       .pipe(Effect.orElseSucceed(() => ""));
     const cwd = yield* HostProcess.WorkingDirectory;
+    // `ominax install` writes ominax; upstream's install scripts write t3.
+    const launcherNames = [T3_LEARN_COMMAND, "t3"];
+    const installBinDir =
+      environment["T3CODE_INSTALL_BIN_DIR"] ||
+      path.join(yield* HostProcess.HomeDirectory, ".local", "bin");
     const candidates = [
-      // PATH first, resolved like the shell does: it decides which t3 the user runs.
+      // PATH first, resolved like the shell does: it decides which launcher the user runs.
       ...(environment["PATH"] ?? "")
         .split(":")
         .filter((directory) => directory.length > 0)
-        .map((directory) => path.resolve(cwd, directory, "t3")),
-      path.join(
-        environment["T3CODE_INSTALL_BIN_DIR"] ||
-          path.join(yield* HostProcess.HomeDirectory, ".local", "bin"),
-        "t3",
-      ),
+        .flatMap((directory) => launcherNames.map((name) => path.resolve(cwd, directory, name))),
+      ...launcherNames.map((name) => path.join(installBinDir, name)),
       ...recorded.split(/\r?\n/),
     ].filter((candidate) => path.isAbsolute(candidate));
     for (const candidate of candidates) {

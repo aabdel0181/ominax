@@ -1418,7 +1418,12 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
             type: "dynamic_tool",
             toolName: `t3-code.${HTML_RENDER_TOOL_NAME}`,
             input: { title: page.title, height: page.height },
-            output: { htmlRender: page },
+            output: {
+              htmlRender: {
+                ...page,
+                ...(typeof input.forCard === "string" ? { forCard: input.forCard } : {}),
+              },
+            },
           },
         });
       }

@@ -322,6 +322,12 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
         yield* fs.writeFileString(launcher, edited);
         assert.isTrue(Option.isNone(yield* repoint({ PATH: path.dirname(launcher) })));
         assert.equal(yield* fs.readFileString(launcher), edited);
+
+        // `ominax install` names its launcher ominax.
+        const ominax = path.join(root, "ominax-bin/ominax");
+        yield* fs.makeDirectory(path.dirname(ominax), { recursive: true });
+        yield* fs.writeFileString(ominax, posixLauncherScript(entry("1.0.0")), { mode: 0o755 });
+        assert.equal(Option.getOrUndefined(yield* repoint({ PATH: path.dirname(ominax) })), ominax);
       }).pipe(Effect.scoped, Effect.provideService(HostProcess.Platform, "linux")),
   );
 

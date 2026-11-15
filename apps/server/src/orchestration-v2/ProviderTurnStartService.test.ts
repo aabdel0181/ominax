@@ -1453,7 +1453,9 @@ function layerStartEffectWorker(
         Layer.mock(RuntimeRequestService.RuntimeRequestServiceV2)({}),
         Layer.mock(ThreadTitleRegenerationService.ThreadTitleRegenerationService)({}),
         Layer.mock(SideChatOpeningService.SideChatOpeningService)({}),
-        Layer.mock(SideChatLifecycleService.SideChatLifecycleService)({}),
+        Layer.mock(SideChatLifecycleService.SideChatLifecycleService)({
+          awaitNotesForRunStart: () => Effect.void,
+        }),
         Layer.mock(ThreadManagementService.ThreadManagementService)({}),
         Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
         ServerSettings.layerTest(),

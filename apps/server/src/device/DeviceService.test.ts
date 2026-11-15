@@ -697,7 +697,7 @@ it.effect.each([
     exitCode: 255,
     stderr: "Host key verification failed.\r\n",
     reason:
-      "SSH encountered an untrusted host key while connecting to probe.test from the machine running this T3 Code server. Connect once with ssh from there to identify the host and verify its key before accepting it.",
+      "SSH encountered an untrusted host key while connecting to probe.test from the machine running this OminaX server. Connect once with ssh from there to identify the host and verify its key before accepting it.",
   },
   {
     name: "unrecognized SSH failure",

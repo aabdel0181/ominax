@@ -632,7 +632,12 @@ export function useComposerSend(input: ComposerSendInput) {
     }
     if (queuedRunEdit.isEditing) {
       // A queued message stays in its thread, so saving `/side` would send it to main.
-      if (!directAnnotation && parseSideChatCommand(promptAtSend)) {
+      // Where side chats are hidden, `/side` is plain text, as it is on a normal send.
+      if (
+        !directAnnotation &&
+        (onSideChat !== undefined || sideChatDisabledReason !== null) &&
+        parseSideChatCommand(promptAtSend)
+      ) {
         toastManager.add(
           stackedThreadToast({
             type: "warning",

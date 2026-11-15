@@ -9,6 +9,7 @@ import { runSshCommand, baseSshArgs, resolveSshCommand } from "@t3tools/ssh/comm
 import { SshCommandError } from "@t3tools/ssh/errors";
 import * as NetService from "@t3tools/shared/Net";
 import { waitForHttpReady } from "@t3tools/shared/httpReadiness";
+import { T3_LEARN_PRODUCT_NAME } from "@t3tools/shared/t3LearnIdentity";
 import * as Digest from "effect/crypto/Digest";
 import * as Exit from "effect/Exit";
 import * as Effect from "effect/Effect";
@@ -50,7 +51,7 @@ export class SshConnectError extends Schema.TaggedError<SshConnectError>()("SshC
   cause: Schema.Defect(),
 }) {
   override get message(): string {
-    const here = "the machine running this T3 Code server";
+    const here = `the machine running this ${T3_LEARN_PRODUCT_NAME} server`;
     const detail = this.detail.replace(/\.$/u, "");
     switch (this.reason) {
       case "host_key_unknown":

@@ -4941,7 +4941,12 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
                 },
                 { tool: `${server}.html_render`, status: "completed", input: pages[0] },
                 { tool: "t3-code-thread_other.html_render", status: "completed", input: pages[1] },
-                { tool: `${server}.html_render`, status: "completed", input: pages[1] },
+                // A lesson picture names the quiz card it answers.
+                {
+                  tool: `${server}.html_render`,
+                  status: "completed",
+                  input: { ...pages[1], forCard: "card-1" },
+                },
               ],
               truncated: false,
             },
@@ -4963,7 +4968,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
           ? [htmlRenderFromToolItem(event.turnItem)].filter((page) => page !== undefined)
           : [],
       );
-      assert.deepEqual(shown, references);
+      assert.deepEqual(shown, [references[0], { ...references[1], forCard: "card-1" }]);
     }).pipe(Effect.scoped),
   );
 
