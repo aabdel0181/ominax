@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { lessonToolPolicy } from "./lessonToolPolicy.ts";
+import { LESSON_TOOL_DENIAL_REASON, lessonToolPolicy } from "./lessonToolPolicy.ts";
 
 const projectRoot = "/home/quokka/cw2/cw2-clone";
 const input = (toolName: string, toolInput: unknown, allowedExtraRoots?: ReadonlyArray<string>) =>
@@ -19,7 +19,7 @@ describe("lessonToolPolicy", () => {
   ])("denies %s (%s)", (command) => {
     assert.deepEqual(input("Bash", { command }), {
       allow: false,
-      reason: "Lessons can only use files in this project and course material.",
+      reason: LESSON_TOOL_DENIAL_REASON,
     });
   });
 

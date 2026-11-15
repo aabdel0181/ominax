@@ -2264,11 +2264,13 @@ export function makeClaudeQueryOptions(input: {
       projectRoot: input.cwd ?? process.cwd(),
       homeDir: input.environment?.HOME ?? process.env.HOME,
     });
+    // No decision on allow, so approval-required lessons still ask.
+    if (result.allow) return Promise.resolve({});
     return Promise.resolve({
       hookSpecificOutput: {
         hookEventName: "PreToolUse" as const,
-        permissionDecision: result.allow ? ("allow" as const) : ("deny" as const),
-        ...(result.allow ? {} : { permissionDecisionReason: LESSON_TOOL_DENIAL_REASON }),
+        permissionDecision: "deny" as const,
+        permissionDecisionReason: LESSON_TOOL_DENIAL_REASON,
       },
     });
   };

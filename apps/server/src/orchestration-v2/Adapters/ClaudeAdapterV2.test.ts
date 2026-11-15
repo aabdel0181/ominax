@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off -- workflow fixtures use files and the fake Claude CLI uses Node streams
+import { LESSON_TOOL_DENIAL_REASON } from "./lessonToolPolicy.ts";
 import * as NodeEvents from "node:events";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
@@ -422,26 +423,41 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     const matcher = lesson.hooks?.PreToolUse?.[0];
     assert.isDefined(matcher);
     assert.equal(matcher.onFailure, "block");
-    const denied = await matcher.hooks[0](
-      {
-        hook_event_name: "PreToolUse",
-        tool_name: "Bash",
-        tool_input: { command: "cd ~/cw/circuit-world && git fetch -q origin" },
-        tool_use_id: "tool-1",
-        session_id: "session-1",
-        transcript_path: "/tmp/transcript.jsonl",
-        cwd: "/home/quokka/cw2",
-      },
-      "tool-1",
-      { signal: new AbortController().signal },
-    );
-    assert.deepEqual(denied, {
+    const hook = matcher.hooks[0];
+    assert.isDefined(hook);
+    const run = (tool_name: string, tool_input: unknown) =>
+      hook(
+        {
+          hook_event_name: "PreToolUse",
+          tool_name,
+          tool_input,
+          tool_use_id: "tool-1",
+          session_id: "session-1",
+          transcript_path: "/tmp/transcript.jsonl",
+          cwd: "/home/quokka/cw2",
+        },
+        "tool-1",
+        { signal: new AbortController().signal },
+      );
+    const denied = {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
-        permissionDecisionReason: "Lessons can only use files in this project and course material.",
+        permissionDecisionReason: LESSON_TOOL_DENIAL_REASON,
       },
-    });
+    } as const;
+    assert.deepEqual(
+      await run("Bash", { command: "cd ~/cw/circuit-world && git fetch -q origin" }),
+      denied,
+    );
+    assert.deepEqual(
+      await run("Write", { file_path: "/home/quokka/cw/circuit-world/x.py", content: "" }),
+      denied,
+    );
+    assert.deepEqual(
+      await run("Bash", { command: "sed -n 1,200p ~/cw/circuit-world/cw/verify/core.py" }),
+      {},
+    );
     assert.isUndefined(make(false).hooks);
   });
 

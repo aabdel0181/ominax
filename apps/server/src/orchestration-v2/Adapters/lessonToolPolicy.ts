@@ -2,7 +2,7 @@
 import * as NodePath from "node:path";
 
 export const LESSON_TOOL_DENIAL_REASON =
-  "Lessons can only use files in this project and course material.";
+  "Lessons can read anywhere but can only write inside this project, with no network or git fetch/pull/push/clone.";
 
 const PATH_READ_TOOLS = new Set(["Read", "Grep", "Glob"]);
 const PATH_WRITE_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
@@ -104,7 +104,7 @@ export interface LessonToolPolicyInput {
   readonly toolInput: unknown;
   readonly projectRoot: string;
   readonly allowedExtraRoots?: ReadonlyArray<string>;
-  readonly homeDir?: string;
+  readonly homeDir?: string | undefined;
 }
 
 export type LessonToolPolicyResult =
