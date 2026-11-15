@@ -2510,11 +2510,14 @@ function isLessonStatusLine(text: string) {
   );
 }
 
+const LESSON_NARRATION_PREFIX =
+  /^(?:I(?:['’](?:m|ll|ve|d)\b| (?!is\b)[a-z])|(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b)/u;
+const LESSON_FIRST_PERSON = /\bI['’](?:m|ll|ve|d)\b/u;
+const LESSON_VERDICT =
+  /(?:\b(?:right|wrong|correct|incorrect|exactly|yes|no)\b|\bnot quite\b|\byour call\b)/iu;
+
 // Thinking summaries narrate as "I'll…"/"They got it…"; drop those sentences, keep the teaching and its line breaks.
 function stripLessonNarration(text: string) {
-  const narration =
-    /^(?:I(?:['’](?:m|ll|ve|d)\b| (?!is\b)[a-z])|(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b)/u;
-  const firstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
   return text
     .split("\n")
     .map((line) =>
@@ -2529,7 +2532,7 @@ function stripLessonNarration(text: string) {
           const clauses = withoutTail.split(";");
           const kept = clauses.filter((clause) => {
             const trimmed = clause.trimStart();
-            return !narration.test(trimmed) && !firstPerson.test(trimmed);
+            return !LESSON_NARRATION_PREFIX.test(trimmed) && !LESSON_FIRST_PERSON.test(trimmed);
           });
           if (kept.length === 0) return [];
           if (kept.length === clauses.length && tail === null) return [sentence];
@@ -2551,17 +2554,15 @@ function stripLessonNarration(text: string) {
 
 function isLessonPlanningText(text: string) {
   if (stripLessonNarration(text) !== "") return false;
-  const lead =
-    /^(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b/u;
-  const firstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
+  if (LESSON_VERDICT.test(text)) return false;
   return text
     .split("\n")
     .flatMap((line) => line.split(/(?<=[.!?])\s+/u))
     .every((sentence) => {
-      const narration = lead.exec(sentence);
-      const planning = firstPerson.exec(sentence);
+      const narration = LESSON_NARRATION_PREFIX.exec(sentence);
+      const planning = LESSON_FIRST_PERSON.exec(sentence);
       const match = narration ?? planning;
-      if (match === null) return true;
+      if (match === null) return false;
       return !/:\s|,\s+(?:and|but)\b/u.test(sentence.slice(match.index + match[0].length));
     });
 }

@@ -2435,13 +2435,15 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
       );
     };
     // Mirrors the adapter's stripLessonNarration.
+    const lessonNarrationPrefix =
+      /^(?:I(?:['’](?:m|ll|ve|d)\b| (?!is\b)[a-z])|(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b)/u;
+    const lessonFirstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
+    const lessonVerdict =
+      /(?:\b(?:right|wrong|correct|incorrect|exactly|yes|no)\b|\bnot quite\b|\byour call\b)/iu;
     const stripLessonNarration = (value: string) =>
       value
         .split("\n")
         .map((line) => {
-          const narration =
-            /^(?:I(?:['’](?:m|ll|ve|d)\b| (?!is\b)[a-z])|(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b)/u;
-          const firstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
           return line
             .split(/(?<=[.!?])\s+/u)
             .flatMap((sentence) => {
@@ -2453,7 +2455,7 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
               const clauses = withoutTail.split(";");
               const kept = clauses.filter((clause) => {
                 const trimmed = clause.trimStart();
-                return !narration.test(trimmed) && !firstPerson.test(trimmed);
+                return !lessonNarrationPrefix.test(trimmed) && !lessonFirstPerson.test(trimmed);
               });
               if (kept.length === 0) return [];
               if (kept.length === clauses.length && tail === null) return [sentence];
@@ -2473,17 +2475,15 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
         .trim();
     const isLessonPlanningText = (value: string) => {
       if (stripLessonNarration(value) !== "") return false;
-      const lead =
-        /^(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b/u;
-      const firstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
+      if (lessonVerdict.test(value)) return false;
       return value
         .split("\n")
         .flatMap((line) => line.split(/(?<=[.!?])\s+/u))
         .every((sentence) => {
-          const narration = lead.exec(sentence);
-          const planning = firstPerson.exec(sentence);
+          const narration = lessonNarrationPrefix.exec(sentence);
+          const planning = lessonFirstPerson.exec(sentence);
           const match = narration ?? planning;
-          if (match === null) return true;
+          if (match === null) return false;
           return !/:\s|,\s+(?:and|but)\b/u.test(sentence.slice(match.index + match[0].length));
         });
     };
