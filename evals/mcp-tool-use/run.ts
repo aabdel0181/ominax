@@ -2437,13 +2437,13 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
       );
     };
     // Mirrors the adapter's stripLessonNarration.
+    const lessonNarrationPrefix =
+      /^(?:I(?:['’](?:m|ll|ve|d)\b| (?!is\b)[a-z])|(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b)/u;
+    const lessonFirstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
     const stripLessonNarration = (value: string) =>
       value
         .split("\n")
         .map((line) => {
-          const narration =
-            /^(?:I(?:['’](?:m|ll|ve|d)\b| (?!is\b)[a-z])|(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b)/u;
-          const firstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
           return line
             .split(/(?<=[.!?])\s+/u)
             .flatMap((sentence) => {
@@ -2455,7 +2455,7 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
               const clauses = withoutTail.split(";");
               const kept = clauses.filter((clause) => {
                 const trimmed = clause.trimStart();
-                return !narration.test(trimmed) && !firstPerson.test(trimmed);
+                return !lessonNarrationPrefix.test(trimmed) && !lessonFirstPerson.test(trimmed);
               });
               if (kept.length === 0) return [];
               if (kept.length === clauses.length && tail === null) return [sentence];
