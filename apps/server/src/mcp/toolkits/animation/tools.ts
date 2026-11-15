@@ -4,7 +4,7 @@ import {
   HTML_RENDER_MAX_TITLE_LENGTH,
 } from "@t3tools/shared/htmlRender";
 import * as Schema from "effect/Schema";
-import { Tool, Toolkit } from "effect/ai";
+import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import * as ManimRender from "../../../animation/ManimRender.ts";
@@ -68,6 +68,7 @@ const AnimationRenderTool = Tool.make(ANIMATION_RENDER_TOOL_NAME, {
   .annotate(Tool.Readonly, false)
   .annotate(Tool.Destructive, true)
   .annotate(Tool.Idempotent, false)
-  .annotate(Tool.OpenWorld, true);
+  .annotate(Tool.OpenWorld, true)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 export const AnimationToolkit = Toolkit.make(AnimationRenderTool);
