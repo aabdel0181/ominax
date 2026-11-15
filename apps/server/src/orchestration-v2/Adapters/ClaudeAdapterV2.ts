@@ -2499,25 +2499,24 @@ function isLessonStatusLine(text: string) {
   if (text.includes(":")) return false;
   const sentences = text
     .trim()
-    .match(/[^.!?]+(?:[.!?](?=\s|$)|$)/gu)
+    .match(/[^.!?…]+(?:[.!?…](?=\s|$)|$)/gu)
     ?.map((sentence) => sentence.trim());
   return (
     sentences !== undefined &&
     sentences.length > 0 &&
     sentences.every((sentence) =>
-      /^(?:I['’]ve been reading|now I['’]ll|next I['’]ll)\b/iu.test(sentence),
+      /^(?:I['’]ve been reading|now I['’]ll|next I['’]ll|I['’]ve confirmed the verdict|(?:now |next )?I['’]m (?:working out|weighing|settling|deciding)|I['’]ll write up the next card|having confirmed the verdict)\b/iu.test(
+        sentence,
+      ),
     )
   );
 }
 
-const LESSON_NARRATION_PREFIX =
-  /^(?:I(?:['’](?:m|ll|ve|d)\b| (?!is\b)[a-z])|(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b)/u;
-const LESSON_FIRST_PERSON = /\bI['’](?:m|ll|ve|d)\b/u;
-const LESSON_VERDICT =
-  /(?:\b(?:right|wrong|correct|incorrect|exactly|yes|no)\b|\bnot quite\b|\byour call\b)/iu;
-
 // Thinking summaries narrate as "I'll…"/"They got it…"; drop those sentences, keep the teaching and its line breaks.
 function stripLessonNarration(text: string) {
+  const narration =
+    /^(?:I(?:['’](?:m|ll|ve|d)\b| (?!is\b)[a-z])|(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b)/u;
+  const firstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
   return text
     .split("\n")
     .map((line) =>
@@ -2532,7 +2531,7 @@ function stripLessonNarration(text: string) {
           const clauses = withoutTail.split(";");
           const kept = clauses.filter((clause) => {
             const trimmed = clause.trimStart();
-            return !LESSON_NARRATION_PREFIX.test(trimmed) && !LESSON_FIRST_PERSON.test(trimmed);
+            return !narration.test(trimmed) && !firstPerson.test(trimmed);
           });
           if (kept.length === 0) return [];
           if (kept.length === clauses.length && tail === null) return [sentence];
@@ -2550,21 +2549,6 @@ function stripLessonNarration(text: string) {
     .join("\n")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();
-}
-
-function isLessonPlanningText(text: string) {
-  if (stripLessonNarration(text) !== "") return false;
-  if (LESSON_VERDICT.test(text)) return false;
-  return text
-    .split("\n")
-    .flatMap((line) => line.split(/(?<=[.!?])\s+/u))
-    .every((sentence) => {
-      const narration = LESSON_NARRATION_PREFIX.exec(sentence);
-      const planning = LESSON_FIRST_PERSON.exec(sentence);
-      const match = narration ?? planning;
-      if (match === null) return false;
-      return !/:\s|,\s+(?:and|but)\b/u.test(sentence.slice(match.index + match[0].length));
-    });
 }
 
 // In SDK mode, /goal appears only in transcripts: command output names it and Stop hooks report unmet checks.
@@ -8957,10 +8941,6 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           }
           if (isLessonCardTool(block.name)) {
             for (const item of held) {
-              if (isLessonPlanningText(item.text)) {
-                yield* emitHeldAssistantTextItemAsReasoning(context, item);
-                continue;
-              }
               const remainder = cardReplyCoversLead(block, item.text);
               if (cardReplyRepeats(block, item.text) || remainder === "") {
                 yield* emitHeldAssistantTextItemAsReasoning(context, item);
@@ -11764,6 +11744,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 yield* flushHeldAssistantText(context);
               }
               context.assistant.cardSeen = false;
+              context.assistant.htmlPreviewSeen = false;
               context.assistant.cardReplies = [];
               context.steeredSegmentUsage.push(message.usage);
               context.steeredLedgerUsage = addClaudeLedgerUsage(

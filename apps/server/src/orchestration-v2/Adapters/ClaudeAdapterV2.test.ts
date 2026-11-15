@@ -4522,22 +4522,42 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       text: "Every label and arrow is correct now, so I'm rendering it.",
       expected: ["assistant_message"],
     },
+    {
+      name: "render state resets after first render",
+      preview: true,
+      text: "Every label and arrow is correct now, so I'm rendering it.",
+      afterResetText: "The next picture teaches acceleration.",
+      expected: ["reasoning", "assistant_message"],
+    },
+    {
+      name: "steer clears preview state",
+      preview: true,
+      steer: true,
+      text: "I agree with your answer.",
+      expected: ["assistant_message"],
+    },
   ] as const)(
     "lesson picture self-check before render ($name)",
-    ({ preview, render = "mcp__t3-code__html_render", text, expected }) =>
+    ({
+      preview,
+      render = "mcp__t3-code__html_render",
+      steer = false,
+      text,
+      afterResetText,
+      expected,
+    }) =>
       Effect.gen(function* () {
         const harness = yield* makeWakeHarness;
-        yield* harness.runtime.startTurn(
-          makeClaudeTestTurnInput({
-            threadId: harness.threadId,
-            providerThread: harness.providerThread,
-            now: yield* DateTime.now,
-            attemptId: RunAttemptId.make(`picture-self-check-${text.slice(0, 12)}`),
-            text: 'Quiz answer: "Yes", right.',
-            attachments: [],
-            lesson: true,
-          }),
-        );
+        const input = makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make(`picture-self-check-${text.slice(0, 12)}`),
+          text: 'Quiz answer: "Yes", right.',
+          attachments: [],
+          lesson: true,
+        });
+        yield* harness.runtime.startTurn(input);
         const snapshot = (uuid: string, content: ReadonlyArray<unknown>) =>
           claudeSdkFrame({
             type: "assistant",
@@ -4546,26 +4566,62 @@ describe("ClaudeAdapterV2 background wake turns", () => {
             parent_tool_use_id: null,
             message: { id: uuid, model: "claude-sonnet-5-5", content },
           });
-        const frames = [
-          ...(preview
-            ? [
-                snapshot("picture-preview", [
-                  {
-                    type: "tool_use",
-                    id: "picture-preview-tool",
-                    name: "mcp__t3-code__html_preview",
-                    input: {},
-                  },
+        const previewFrame = snapshot("picture-preview", [
+          {
+            type: "tool_use",
+            id: "picture-preview-tool",
+            name: "mcp__t3-code__html_preview",
+            input: {},
+          },
+        ]);
+        const renderFrame = (id: string) =>
+          snapshot(id, [{ type: "tool_use", id: `${id}-tool`, name: render, input: {} }]);
+        if (steer) {
+          yield* harness.offerAndWait(previewFrame);
+          const idAllocator = yield* IdAllocator.IdAllocatorV2;
+          yield* harness.runtime.steerTurn({
+            threadId: harness.threadId,
+            runId: input.runId,
+            providerThread: harness.providerThread,
+            providerTurnId: idAllocator.derive.providerTurn({
+              driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
+              nativeTurnId: `turn:${input.attemptId}`,
+            }),
+            message: {
+              createdBy: "user",
+              creationSource: "web",
+              messageId: MessageId.make("picture-steer-message"),
+              text: "Continue with the verdict.",
+              attachments: [],
+            },
+          });
+          yield* harness.offerAndWait(
+            makeResultFrame({
+              uuid: "picture-steer-abort",
+              result: "",
+              terminalReason: "aborted_streaming",
+            }),
+          );
+          yield* harness.offerAndWait(snapshot("picture-steer-verdict", [{ type: "text", text }]));
+          yield* harness.offerAndWait(renderFrame("picture-steer-render"));
+          yield* harness.offerAndWait(
+            makeResultFrame({ uuid: "picture-steer-result", result: "" }),
+          );
+        } else {
+          const frames = [
+            ...(preview ? [previewFrame] : []),
+            snapshot("picture-self-check", [{ type: "text", text }]),
+            renderFrame("picture-render"),
+            ...(afterResetText === undefined
+              ? []
+              : [
+                  snapshot("picture-after-reset-text", [{ type: "text", text: afterResetText }]),
+                  renderFrame("picture-second-render"),
                 ]),
-              ]
-            : []),
-          snapshot("picture-self-check", [{ type: "text", text }]),
-          snapshot("picture-render", [
-            { type: "tool_use", id: "picture-render-tool", name: render, input: {} },
-          ]),
-          makeResultFrame({ uuid: "picture-result", result: "" }),
-        ];
-        for (const frame of frames) yield* Queue.offer(harness.sdkMessages, frame);
+            makeResultFrame({ uuid: "picture-result", result: "" }),
+          ];
+          for (const frame of frames) yield* Queue.offer(harness.sdkMessages, frame);
+        }
         yield* harness.awaitTerminal(1);
         const items = harness.events.flatMap((event) =>
           event.type === "turn_item.updated" &&
@@ -4611,6 +4667,46 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     {
       lead: "Exactly right, but I'd tweak the sign.",
       reply: "Which sign should change?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I agree with your answer.",
+      reply: "What is the next step?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "Your answer is off by a factor of two, I'm afraid.",
+      reply: "Where did the factor enter?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "Close, but I'd check the units.",
+      reply: "Which units should we use?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I'm afraid you mixed up velocity and acceleration.",
+      reply: "How are they different?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I'd say you nailed it.",
+      reply: "Can you explain why?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I don't think that holds.",
+      reply: "What assumption failed?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I disagree with B.",
+      reply: "Which option is correct?",
+      expected: "assistant_message",
+    },
+    {
+      lead: "I'll accept that.",
+      reply: "Ready for the next card?",
       expected: "assistant_message",
     },
     {
