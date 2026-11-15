@@ -2469,6 +2469,22 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
         .join("\n")
         .replace(/\n{3,}/gu, "\n\n")
         .trim();
+    const isLessonPlanningText = (value: string) => {
+      if (stripLessonNarration(value) !== "") return false;
+      const lead =
+        /^(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b/u;
+      const firstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
+      return value
+        .split("\n")
+        .flatMap((line) => line.split(/(?<=[.!?])\s+/u))
+        .every((sentence) => {
+          const narration = lead.exec(sentence);
+          const planning = firstPerson.exec(sentence);
+          const match = narration ?? planning;
+          if (match === null) return true;
+          return !/:\s|,\s+(?:and|but)\b/u.test(sentence.slice(match.index + match[0].length));
+        });
+    };
     const leadRemainder = (use: typeof ToolUse.Type, text: string) => {
       const reply = isRecord(use.input) ? use.input.reply : undefined;
       if (typeof reply !== "string") return undefined;
@@ -2532,6 +2548,7 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
           if (isCard) {
             texts.push(
               ...held.flatMap((text) => {
+                if (isLessonPlanningText(text)) return [];
                 const remainder = leadRemainder(block, text);
                 return remainder === undefined ? [text] : remainder === "" ? [] : [remainder];
               }),

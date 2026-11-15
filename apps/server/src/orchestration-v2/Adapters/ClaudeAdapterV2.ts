@@ -2549,6 +2549,23 @@ function stripLessonNarration(text: string) {
     .trim();
 }
 
+function isLessonPlanningText(text: string) {
+  if (stripLessonNarration(text) !== "") return false;
+  const lead =
+    /^(?:[Ll]et me|[Tt]he (?:learner|user|student)|[Tt]hey (?:got|answered|picked|said|chose))\b/u;
+  const firstPerson = /\bI['’](?:m|ll|ve|d)\b/u;
+  return text
+    .split("\n")
+    .flatMap((line) => line.split(/(?<=[.!?])\s+/u))
+    .every((sentence) => {
+      const narration = lead.exec(sentence);
+      const planning = firstPerson.exec(sentence);
+      const match = narration ?? planning;
+      if (match === null) return true;
+      return !/:\s|,\s+(?:and|but)\b/u.test(sentence.slice(match.index + match[0].length));
+    });
+}
+
 // In SDK mode, /goal appears only in transcripts: command output names it and Stop hooks report unmet checks.
 const CLAUDE_GOAL_SET_PREFIX = "Goal set: ";
 const CLAUDE_GOAL_ACTIVE = /^Goal active: ([\s\S]+?) \((?:not yet evaluated|(\d+) turns?)\)/u;
@@ -8930,6 +8947,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           }
           if (isLessonCardTool(block.name)) {
             for (const item of held) {
+              if (isLessonPlanningText(item.text)) {
+                yield* emitHeldAssistantTextItemAsReasoning(context, item);
+                continue;
+              }
               const remainder = cardReplyCoversLead(block, item.text);
               if (cardReplyRepeats(block, item.text) || remainder === "") {
                 yield* emitHeldAssistantTextItemAsReasoning(context, item);

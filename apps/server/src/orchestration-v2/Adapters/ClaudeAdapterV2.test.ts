@@ -4107,6 +4107,31 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       expected: ["reasoning", "reasoning", "assistant_message"],
     },
     {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
+      heldText:
+        "I've confirmed the verdict, with one refinement… Next I'm working out how to teach… I'll write up the next card. I'm weighing whether…",
+      thinking: "I'll prepare the card.",
+      expected: ["reasoning", "reasoning", "reasoning"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
+      heldText: "Having confirmed the verdict, I'm moving on to acceleration.",
+      thinking: "I'll prepare the card.",
+      expected: ["reasoning", "reasoning", "reasoning"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
+      heldText: "Next I'll apply that to the cart.",
+      thinking: "I'll prepare the card.",
+      expected: ["reasoning", "reasoning", "reasoning"],
+    },
+    {
       tool: "Bash",
       reply: undefined,
       lesson: true,
@@ -4287,6 +4312,22 @@ describe("ClaudeAdapterV2 background wake turns", () => {
 
   it.effect.each([
     {
+      name: "opening-check planning paragraph",
+      input:
+        "I've confirmed the verdict, with one refinement… Next I'm working out how to teach… I'll write up the next card. I'm weighing whether…",
+      expected: "",
+    },
+    {
+      name: "adverbial planning lead",
+      input: "Having confirmed the verdict, I'm moving on to acceleration.",
+      expected: "",
+    },
+    {
+      name: "next planning lead",
+      input: "Next I'll apply that to the cart.",
+      expected: "",
+    },
+    {
       name: "out-and-back planning tail",
       input:
         "Net displacement only compares endpoints, so the 4 m out-and-back trip is missed; I need to find where v = 0 and add each leg's distance separately. Next I'll apply that to the cart on the rail with v(t) = 6 − 2t over 0 to 5 s.",
@@ -4309,8 +4350,11 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     ...[
       "A Type I error rejects a true null hypothesis.",
       "Current I equals V divided by R, and I is in amperes.",
+      "In 1D, I is the identity here.",
       "Multiply both sides by i, and i squared becomes −1.",
       "The Me group donates electrons to my favourite ring.",
+      "Next, the cart speeds up because v and a share a sign.",
+      "You can tell the cart is speeding up because velocity and acceleration share a sign.",
     ].map((teaching) => ({ name: teaching, input: teaching, expected: teaching })),
     {
       name: "teaching stays",
@@ -4362,7 +4406,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           ? [event.turnItem.text]
           : [],
       );
-      assert.deepEqual(items, [expected]);
+      assert.deepEqual(items, expected === "" ? [] : [expected]);
     }).pipe(
       Effect.scoped,
       Effect.provide(
