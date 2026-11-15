@@ -35,6 +35,7 @@ import {
   liveAnswerPreview,
   deriveMessagesTimelineRowsWithState,
   streamingAssistantMessageId,
+  isTimelineMinimapTurnVisible,
   resolveAssistantMessageCopyState,
   type MessagesTimelineRow,
   workEntryDisplayLabel,
@@ -5529,4 +5530,15 @@ it("turns a question card into an unanswered quiz-card row", () => {
     supportsConversationRollback: false,
   });
   expect(withNoChanges.some((entry) => entry.kind === "message")).toBe(false);
+});
+
+describe("isTimelineMinimapTurnVisible", () => {
+  it("keeps a turn lit while only its reply is on screen", () => {
+    // Turn rows 10..499, viewport inside the reply.
+    expect(isTimelineMinimapTurnVisible(10, 500, 200, 210)).toBe(true);
+    expect(isTimelineMinimapTurnVisible(500, undefined, 600, 610)).toBe(true);
+    expect(isTimelineMinimapTurnVisible(500, undefined, 200, 210)).toBe(false);
+    expect(isTimelineMinimapTurnVisible(10, 500, 500, 510)).toBe(false);
+    expect(isTimelineMinimapTurnVisible(10, 500, null, null)).toBe(false);
+  });
 });

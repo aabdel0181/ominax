@@ -386,6 +386,7 @@ export function SideChatComposer(props: {
         environmentId: sideChatRef.environmentId,
         attachments: [...images, ...files],
         usesAttachmentUploads: uploadsSupported,
+        draftTarget: sideChatRef,
       });
     } catch (error) {
       props.onOptimisticMessageFailed(optimisticMessage);
@@ -616,6 +617,8 @@ export function SideChatComposer(props: {
             const intent = composerSubmissionIntentForKey({
               event,
               keybindings,
+              // The panel sits in the open right panel.
+              context: { rightPanelOpen: true },
               isSoftwareKeyboardOpen,
               isDraftThread: false,
               isRunning: turnRunning,

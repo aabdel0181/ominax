@@ -5,7 +5,7 @@ import {
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
-import { Tool, Toolkit } from "effect/ai";
+import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as KnowledgeMap from "../../../knowledgeMap.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
@@ -22,7 +22,8 @@ const KnowledgeMapReadTool = Tool.make("knowledge_map_read", {
   .annotate(Tool.Title, "Read What you know")
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false)
-  .annotate(Tool.Idempotent, true);
+  .annotate(Tool.Idempotent, true)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 const KnowledgeMapMarkDoneTool = Tool.make("knowledge_map_mark_done", {
   description:
@@ -39,6 +40,7 @@ const KnowledgeMapMarkDoneTool = Tool.make("knowledge_map_mark_done", {
   .annotate(Tool.Title, "Save to What you know")
   .annotate(Tool.Readonly, false)
   .annotate(Tool.Destructive, false)
-  .annotate(Tool.Idempotent, true);
+  .annotate(Tool.Idempotent, true)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 export const KnowledgeToolkit = Toolkit.make(KnowledgeMapReadTool, KnowledgeMapMarkDoneTool);

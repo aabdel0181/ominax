@@ -19,18 +19,25 @@ const accept = () => true;
 function Reply({
   text = REPLY,
   onCite = accept,
+  sentMessage = false,
   ...actions
-}: Partial<Omit<ToolbarProps, "viewport" | "threadRef">> & { text?: string }) {
+}: Partial<Omit<ToolbarProps, "viewport" | "threadRef">> & {
+  text?: string;
+  sentMessage?: boolean;
+}) {
   const [viewport, setViewport] = useState<HTMLElement | null>(null);
+  const source = (
+    <div
+      data-assistant-citation-source="assistant-1"
+      data-assistant-citation-environment={environmentId}
+      data-assistant-citation-thread="lesson-1"
+    >
+      <p>{text}</p>
+    </div>
+  );
   return (
     <div ref={setViewport} data-assistant-citation-viewport="">
-      <div
-        data-assistant-citation-source="assistant-1"
-        data-assistant-citation-environment={environmentId}
-        data-assistant-citation-thread="lesson-1"
-      >
-        <p>{text}</p>
-      </div>
+      {sentMessage ? <div data-sent-message="">{source}</div> : source}
       <AssistantSelectionToolbar
         viewport={viewport}
         threadRef={threadRef}
@@ -173,6 +180,17 @@ describe("AssistantSelectionToolbar", () => {
 
     await expect.element(citeButton()).toBeVisible();
     await expect.element(askButton()).not.toBeInTheDocument();
+  });
+
+  it("offers only Cite on text an agent sent with send_to_user, from the toolbar or the shortcut", async () => {
+    const onAskInSideChat = vi.fn(() => true);
+    await using screen = await render(<Reply sentMessage onAskInSideChat={onAskInSideChat} />);
+    select(screen.container, 20, 37);
+
+    await expect.element(citeButton()).toBeVisible();
+    await expect.element(askButton()).not.toBeInTheDocument();
+    expect(askSelectionInSideChat(window.getSelection())).toBe(false);
+    expect(onAskInSideChat).not.toHaveBeenCalled();
   });
 
   it("stays inside the right-panel sheet so the sheet's focus trap keeps it usable", async () => {

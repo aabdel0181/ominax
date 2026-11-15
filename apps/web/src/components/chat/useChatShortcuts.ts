@@ -33,6 +33,13 @@ type ChatShortcutHandler = (context: {
 
 export type ChatShortcutCommands = Partial<Record<KeybindingCommand, ChatShortcutHandler>>;
 
+/** Window-level commands the main chat still runs while focus is in its side chat pane. */
+const SIDE_CHAT_PANE_COMMANDS: ReadonlySet<KeybindingCommand> = new Set([
+  "rightPanel.toggle",
+  "rightPanel.close",
+  "rightPanel.toggleMaximized",
+]);
+
 interface ChatShortcutsInput {
   readonly enabled: boolean;
   /**
@@ -75,20 +82,16 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
       event.stopPropagation();
       return;
     }
+    if (!input.enabled || isCommandPaletteOpen()) return;
     // T3 Learn's side-chat panel still takes the lesson's chords, all but those skipped below.
     const inLessonSideChatPanel = eventPathContainsSelector(event, SIDE_CHAT_PANEL_SELECTOR);
-    if (
-      !input.enabled ||
-      isCommandPaletteOpen() ||
-      (isInSideChatPane(event.target) && !inLessonSideChatPanel)
-    ) {
-      return;
-    }
+    const inSideChatPane = isInSideChatPane(event.target) && !inLessonSideChatPanel;
     const terminalFocusOwner = getTerminalFocusOwner();
     if (event.defaultPrevented && terminalFocusOwner === null) return;
     const shortcutContext = input.getShortcutContext(event.target);
 
     if (
+      !inSideChatPane &&
       !shortcutContext.terminalFocus &&
       !shortcutContext.modelPickerOpen &&
       shouldTypeToFocusComposer(event) &&
@@ -102,7 +105,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     const command = resolveChatShortcutCommand(event, keybindings, input.scriptKeybindings, {
       context: shortcutContext,
     });
-    if (!command) return;
+    if (!command || (inSideChatPane && !SIDE_CHAT_PANE_COMMANDS.has(command))) return;
     // The side chat has its own composer, model picker, queue and Stop, so the lesson's chords
     // for them stay out of its panel. The lesson's find bar can't search the panel, so the
     // browser's find gets the key.

@@ -9,6 +9,29 @@ import { ATTACHMENT_ONLY_BOOTSTRAP_PROMPT } from "@t3tools/shared/composerContex
 import { getAntigravitySendBlockReason } from "../ChatView.logic";
 import { formatOutgoingPrompt, withMessageContext } from "../ChatView.logic";
 import { getComposerPromptLengthValidationMessage } from "./composerSubmission";
+import type { ComposerThreadDraftState } from "../../composerDraftStore";
+
+/** Compare immutable user content without copying image bytes or upload metadata. */
+export function composerDraftContentChanged(
+  before: ComposerThreadDraftState | null,
+  after: ComposerThreadDraftState | null,
+): boolean {
+  if (before === after) return false;
+  if (!before || !after) return true;
+  const sameIds = (left: ReadonlyArray<{ id: string }>, right: ReadonlyArray<{ id: string }>) =>
+    left.length === right.length && left.every((item, index) => item.id === right[index]?.id);
+  return (
+    before.prompt !== after.prompt ||
+    !sameIds(before.images, after.images) ||
+    !sameIds(before.files, after.files) ||
+    before.terminalContexts !== after.terminalContexts ||
+    before.previewAnnotations !== after.previewAnnotations ||
+    before.reviewComments !== after.reviewComments ||
+    before.threadContexts !== after.threadContexts ||
+    before.environmentContexts !== after.environmentContexts ||
+    before.replyTo !== after.replyTo
+  );
+}
 
 /** Attached threads the prompt still links to; replacing linked text leaves stale records. */
 export function referencedThreadContexts(draft: {

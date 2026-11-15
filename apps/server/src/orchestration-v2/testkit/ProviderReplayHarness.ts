@@ -587,6 +587,7 @@ export function layerWithRegistry<Error>(
         layerSideChatLifecycleProvided,
         layerServerSettings,
         layerThreadManagementProvided,
+        layerStores,
       ),
     ),
   );

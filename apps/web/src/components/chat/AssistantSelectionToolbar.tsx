@@ -23,6 +23,10 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { BackgroundThreadContext } from "./backgroundThread";
 
+// send_to_user text is citable, but side chats anchor only on assistant replies.
+const isSentMessage = (anchor: AssistantCitationSourceAnchor) =>
+  anchor.source.closest("[data-sent-message]") !== null;
+
 /** The selection as a citation, when it is text in one of `viewport`'s replies. */
 function captureCitation(viewport: HTMLElement, threadRef: ScopedThreadRef) {
   const captured = captureAssistantTextSelection(viewport, window.getSelection());
@@ -234,6 +238,7 @@ export function AssistantSelectionToolbar({
   const askAbout = (target: ReturnType<typeof captureCitation>) => {
     if (
       !target ||
+      isSentMessage(target.sourceAnchor) ||
       askBlockedReasonOf(target.citation) !== null ||
       !onAskInSideChat?.(target.citation, target.sourceAnchor)
     ) {
@@ -276,13 +281,14 @@ export function AssistantSelectionToolbar({
   if (!selection) return null;
   const askTooLong = selection.citation.text.length > SIDE_CHAT_EXCERPT_MAX_CHARS;
   const askBlockedReason = askBlockedReasonOf(selection.citation);
+  const offersAskHere = onAskInSideChat !== undefined && !isSentMessage(selection.sourceAnchor);
   const ask = () => askAbout(selection);
   const citeTooLong = selection.citation.text.length > ASSISTANT_CITATION_MAX_TEXT_LENGTH;
   // One action is in the tab order; the arrow keys move between them.
   const rovingAction =
     onCreateLesson && focusedAction === "lesson" && !askTooLong
       ? "lesson"
-      : onAskInSideChat && (focusedAction === "ask" || citeTooLong)
+      : offersAskHere && (focusedAction === "ask" || citeTooLong)
         ? "ask"
         : "cite";
   const cite = () => {
@@ -331,7 +337,7 @@ export function AssistantSelectionToolbar({
         <QuoteIcon aria-hidden="true" className="size-3.5" />
         {citeTooLong ? "Shorten selection" : "Cite"}
       </Button>
-      {onAskInSideChat ? (
+      {offersAskHere ? (
         <AskInSideChatButton
           tooLong={askTooLong}
           blockedReason={askBlockedReason}
