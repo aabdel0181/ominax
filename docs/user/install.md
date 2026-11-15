@@ -36,9 +36,10 @@ Run `ominax help` or `ominax --help` for the full reference. To start in a new w
 directory, use an explicit path such as `ominax ./my-project`. A bare directory name
 is accepted only if it already exists.
 
-If `ominax` or `ominax start` reports an already running server, connect to that server
-instead. Stop it before starting a replacement, or use a different `--base-dir`
-for an independent server.
+If `ominax` or `ominax start` reports an already running server, run the `ominax pair`
+command it names and open the pairing URL to connect to that server. Stop it
+before starting a replacement, or use a different `--base-dir` for an
+independent server.
 
 ### Intel Macs
 

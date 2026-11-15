@@ -6,7 +6,7 @@ import {
   type ThreadId,
   VcsProcessSpawnError,
 } from "@t3tools/contracts";
-import { newProjectFolderName } from "@t3tools/shared/path";
+import { foldLatinDiacritics, newProjectFolderName } from "@t3tools/shared/path";
 import {
   T3_LEARN_COMMAND,
   T3_LEARN_HOME_ENV,
@@ -142,7 +142,7 @@ export class ManagedProjectFolders extends Context.Service<
 >()("t3/project/ManagedProjectFolders") {}
 
 const folderWords = (text: string) =>
-  text
+  foldLatinDiacritics(text)
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter(Boolean)

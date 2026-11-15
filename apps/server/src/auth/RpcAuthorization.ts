@@ -97,6 +97,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.coursesRemove]: AuthSettingsWriteScope,
   [WS_METHODS.visualsClear]: AuthSettingsWriteScope,
   [WS_METHODS.serverGetDatabaseStorage]: AuthOrchestrationReadScope,
+  [WS_METHODS.serverGetSettings]: AuthOrchestrationReadScope,
   [WS_METHODS.peerLinksList]: AuthAccessReadScope,
   [WS_METHODS.serverUpdateSettings]: AuthSettingsWriteScope,
   [WS_METHODS.serverSearchAcpRegistry]: AuthOrchestrationReadScope,
