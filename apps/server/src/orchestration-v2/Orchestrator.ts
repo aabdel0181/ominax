@@ -16719,6 +16719,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           ),
         ),
       );
+    // Discard, or Done on an empty side chat, deletes threads like thread.delete.
+    if (command.type === "thread.side_chat.done")
+      return yield* threadDispatch.withDeletionLock(withParentLock(dispatch));
     // Taken before the lineage read, so a message whose read yields keeps its
     // place ahead of later messages to the same thread.
     const message =
