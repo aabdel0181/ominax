@@ -1665,6 +1665,7 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     });
     const result = yield* callAs("course_prepare", { units: [2, 1] });
     expect(result.isError).not.toBe(true);
+    expect(JSON.stringify(result.content)).toContain("Read the current unit with course_read");
     // A plain create_threads request: no subagent relationship, so the lesson is never woken.
     expect(requests).toEqual([
       {

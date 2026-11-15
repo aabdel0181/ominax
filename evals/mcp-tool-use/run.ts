@@ -1866,12 +1866,13 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
       const shownReply = foldCardReply(reply, input.source);
       const shown = { ...input, reply: shownReply };
       const quiz = name === "quiz_card" ? readQuizCard(shown) : undefined;
+      const question = name === "question_card" ? readQuestionCard(shown) : undefined;
       const problem =
         name === "quiz_card"
           ? quiz === undefined
             ? "Invalid quiz card."
             : quizCardProblem(quiz)
-          : readQuestionCard(shown) === undefined
+          : question === undefined
             ? "Invalid question card."
             : undefined;
       if (problem !== undefined) return failed(problem);
@@ -1879,6 +1880,9 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
         reply,
         purpose: CARD_PURPOSES.find((purpose) => isRecord(input) && input.purpose === purpose),
         shownBefore: sample.shownSinceLastUser,
+        shownText: sample.said.join("\n"),
+        ...(quiz === undefined ? {} : { answer: quiz.answer }),
+        ...(question?.number === undefined ? {} : { numberAnswer: question.number.answer }),
       });
       if (replyProblem !== undefined) return failed(replyProblem);
       // The app shows a card's reply as the tutor's message text.

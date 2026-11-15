@@ -10,13 +10,32 @@ export function cardReplyProblem(input: {
   readonly reply: string;
   readonly purpose?: CardPurpose | undefined;
   readonly shownBefore: number;
+  readonly shownText?: string;
+  readonly answer?: string;
+  readonly numberAnswer?: number;
 }): string | undefined {
-  if (
-    input.purpose !== undefined ||
-    input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS
-  ) {
-    return undefined;
-  }
+  if (input.purpose !== undefined) return undefined;
+  const visible = `${input.reply}\n${input.shownText ?? ""}`;
+  const normalized = (value: string) => value.trim().replace(/\s+/gu, " ");
+  const meaningful = (answer: string) => answer.length >= 3 && answer !== "0" && answer !== "1";
+  const answer = input.answer === undefined ? undefined : normalized(input.answer);
+  const answerAppears =
+    answer !== undefined &&
+    meaningful(answer) &&
+    new RegExp(
+      `(?<![\\p{L}\\p{N}_])${answer.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?![\\p{L}\\p{N}_])`,
+      "iu",
+    ).test(normalized(visible));
+  const numberAppears =
+    input.numberAnswer !== undefined &&
+    input.numberAnswer !== 0 &&
+    input.numberAnswer !== 1 &&
+    [...visible.matchAll(/(?<![\p{L}\p{N}_])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?![\p{L}\p{N}_])/gu)].some(
+      ([match]) => Number(match) === input.numberAnswer,
+    );
+  if (answerAppears || numberAppears)
+    return "The answer is stated just above; pose a new case that needs one more step.";
+  if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
 }
 

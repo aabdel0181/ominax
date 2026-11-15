@@ -109,6 +109,33 @@ describe("quiz cards", () => {
       cardReplyProblem({ reply: "Short.", purpose: "opening-check", shownBefore: 0 }),
     ).toBeUndefined();
   });
+  it("refuses answers repeated in the visible teaching", () => {
+    expect(
+      cardReplyProblem({
+        reply: "The clearance is 3.0 mm between different mains conductors.",
+        answer: "3.0 mm",
+        shownBefore: 0,
+      }),
+    ).toBe("The answer is stated just above; pose a new case that needs one more step.");
+    expect(
+      cardReplyProblem({
+        reply: "The score uses bands.",
+        shownText: "The score is 0.5 when half the checks pass.",
+        numberAnswer: 0.5,
+        shownBefore: 0,
+      }),
+    ).toBe("The answer is stated just above; pose a new case that needs one more step.");
+    expect(
+      cardReplyProblem({ reply: "The answer is A.", answer: "A", shownBefore: 0 }),
+    ).toBeDefined();
+    expect(
+      cardReplyProblem({
+        reply: "Friction matches the push it opposes, so a 20 N push means 20 N of friction.",
+        answer: "20 N",
+        shownBefore: 0,
+      }),
+    ).toBe("The answer is stated just above; pose a new case that needs one more step.");
+  });
   it.each([
     [
       "number",
