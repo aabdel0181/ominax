@@ -407,6 +407,44 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     assert.isUndefined(options.extraArgs?.["add-dir"]);
   });
 
+  it("guards lesson tools even when Claude uses bypass permissions", async () => {
+    const make = (lessonTurn: boolean) =>
+      ClaudeAdapterV2.makeClaudeQueryOptions({
+        modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+        nativeThreadId: "native-lesson-tool-policy",
+        resume: false,
+        cwd: "/home/quokka/cw2",
+        environment: { HOME: "/home/quokka" },
+        permissionMode: "bypassPermissions",
+        lessonTurn,
+      });
+    const lesson = make(true);
+    const matcher = lesson.hooks?.PreToolUse?.[0];
+    assert.isDefined(matcher);
+    assert.equal(matcher.onFailure, "block");
+    const denied = await matcher.hooks[0](
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "cd ~/cw/circuit-world && git fetch -q origin" },
+        tool_use_id: "tool-1",
+        session_id: "session-1",
+        transcript_path: "/tmp/transcript.jsonl",
+        cwd: "/home/quokka/cw2",
+      },
+      "tool-1",
+      { signal: new AbortController().signal },
+    );
+    assert.deepEqual(denied, {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: "Lessons can only use files in this project and course material.",
+      },
+    });
+    assert.isUndefined(make(false).hooks);
+  });
+
   it("gives delegated children Claude's subagent prompt cache TTL", () => {
     const lineage = (relationshipToParent: "fork" | "subagent" | null) => ({
       lineage: {

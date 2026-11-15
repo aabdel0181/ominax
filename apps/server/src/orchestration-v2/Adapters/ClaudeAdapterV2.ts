@@ -5,6 +5,7 @@ import {
   toolOutputImages,
 } from "@t3tools/shared/toolOutput";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
+import { LESSON_TOOL_DENIAL_REASON, lessonToolPolicy } from "./lessonToolPolicy.ts";
 import { claudeTaskOutputRoot, tailClaudeTaskOutput } from "./ClaudeTaskOutputTail.ts";
 import {
   dynamicToolTitle,
@@ -2170,6 +2171,7 @@ export function makeClaudeQueryOptions(input: {
   readonly appendSystemPromptFileText?: string;
   // Flag settings, because a user's settings.json env beats the process env in Claude Code.
   readonly toolSearchOverride?: "true";
+  readonly lessonTurn?: boolean;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection, input.modelCatalog);
   const {
@@ -2254,6 +2256,22 @@ export function makeClaudeQueryOptions(input: {
           },
         } as ClaudeSdkSettings);
   const deviceInstructions = input.mcpServers !== undefined && input.deviceToolsAvailable === true;
+  const lessonToolGuard: HookCallback = (hookInput) => {
+    if (hookInput.hook_event_name !== "PreToolUse") return Promise.resolve({});
+    const result = lessonToolPolicy({
+      toolName: hookInput.tool_name,
+      toolInput: hookInput.tool_input,
+      projectRoot: input.cwd ?? process.cwd(),
+      homeDir: input.environment?.HOME ?? process.env.HOME,
+    });
+    return Promise.resolve({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse" as const,
+        permissionDecision: result.allow ? ("allow" as const) : ("deny" as const),
+        ...(result.allow ? {} : { permissionDecisionReason: LESSON_TOOL_DENIAL_REASON }),
+      },
+    });
+  };
   const options: ClaudeAgentSdkQueryOptions = {
     model: compiledSelection.apiModelId,
     // T3 names threads; a supplied title skips Claude's redundant naming request.
@@ -2319,13 +2337,24 @@ export function makeClaudeQueryOptions(input: {
         ...launchAppendSystemPrompt,
       ].join("\n\n"),
     },
-    ...(deviceInstructions || input.onStop !== undefined
+    ...(deviceInstructions || input.onStop !== undefined || input.lessonTurn === true
       ? {
           hooks: {
             ...(deviceInstructions
               ? { SubagentStart: [{ hooks: [subagentDeviceInstructions] }] }
               : {}),
             ...(input.onStop === undefined ? {} : { Stop: [{ hooks: [input.onStop] }] }),
+            ...(input.lessonTurn === true
+              ? {
+                  PreToolUse: [
+                    {
+                      matcher: "Bash|Edit|Write|NotebookEdit",
+                      hooks: [lessonToolGuard],
+                      onFailure: "block" as const,
+                    },
+                  ],
+                }
+              : {}),
           },
         }
       : {}),
@@ -13065,6 +13094,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               shouldResume,
             ),
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,
+            lessonTurn: isLessonTurn(turnInput),
             ...(mcpOverrides.allowedTools === undefined
               ? {}
               : { allowedTools: mcpOverrides.allowedTools }),
