@@ -2735,7 +2735,10 @@ function stripCardReplyCoveredSentences(
         .split(/(?<=[^\s\d][.!?])\s+/u)
         .filter(
           (sentence) =>
-            coverageTokens(sentence).length < 5 || replyCoverage(sentence, covered) < 0.8,
+            // Numbers and worked steps stay: losing a line of working is worse than a repeat (APP-130).
+            /[\d$=×÷^]/u.test(sentence) ||
+            coverageTokens(sentence).length < 5 ||
+            replyCoverage(sentence, covered) < 0.8,
         )
         .join(" ");
     })
@@ -11105,12 +11108,6 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 }
               }
               if (block.type !== "thinking") {
-                const heldBefore =
-                  block.type === "tool_use" &&
-                  isLessonTurn(context.input) &&
-                  isLessonCardTool(block.name)
-                    ? context.assistant.heldText.map((item) => item.text).join("\n")
-                    : "";
                 if (block.type === "tool_use" && message.parent_tool_use_id === null) {
                   yield* flushHeldAssistantTextForTool(context, block);
                 }
@@ -11123,25 +11120,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   update.followsThinking &&
                   claudeWritesUpdatesAsThinking(message.message.model)
                 ) {
-                  const lessonTurn = isLessonTurn(context.input);
-                  if (lessonTurn && !isLessonCardTool(block.name)) continue;
+                  // A lesson's teaching rides the card's reply; promoted thinking only repeated it (APP-130).
+                  if (isLessonTurn(context.input)) continue;
                   if (cardReplyRepeats(block, update.text)) continue;
-                  let text = update.text;
-                  if (lessonTurn) {
-                    // Text held before the card was just shown; don't show it again from thinking.
-                    const words = (value: string) => value.replace(/\s+/gu, " ").trim();
-                    if (heldBefore && replyCoverage(text, heldBefore) >= 0.6) continue;
-                    if (heldBefore && words(text).includes(words(heldBefore)))
-                      text = text.includes(heldBefore.trim())
-                        ? text.replace(heldBefore.trim(), "").trim()
-                        : words(text).replace(words(heldBefore), "").trim();
-                    text = stripLessonNarration(cardReplyCoversLead(block, text) ?? text);
-                    if (text === "") continue;
-                  }
                   yield* emitAssistantTextArtifacts({
                     context,
                     nativeItemId: update.itemId,
-                    text,
+                    text: update.text,
                   });
                 }
                 continue;

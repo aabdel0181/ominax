@@ -12,6 +12,7 @@ import {
   readQuestionCard,
   readQuizCard,
   withoutCardAnswerTag,
+  withoutShownParagraphs,
 } from "@t3tools/shared/quizCard";
 import { lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
 
@@ -26,6 +27,10 @@ const QUIZ_CARD_SHOWN = `Shown to the learner as a card. Don't repeat the questi
 
 const QUESTION_CARD_SHOWN =
   "Shown to the learner as a card. Don't repeat the question. Draw nothing now. When they answer, your verdict comes first and must be visible: as text, or in the next card's `verdict`. If this turn's teaching owes a picture, give the verdict as text, then draw it (tag it with that answered card's id using forCard) before any new teaching; then end your turn. Their answer arrives as their next message. For blanks and numbers, the app already marked each answer right or wrong; confirm and explain. Grade open text strictly against the answer you wrote before asking: say plainly what holds and what is missing or wrong, never soften a wrong idea.";
+
+// "Checking one thing in the code: …" says what the tutor is doing, not what the learner got right (APP-130).
+const STATUS_LINE =
+  /^(?:checking|reading|looking (?:at|into|up)|searching|opening|loading|fetching|running|let me (?:check|look|read|see))\b[^\n]*$/iu;
 
 // Card replies are appended after other messages and queued sends sit in delivery order, so sort by time.
 export const shownTutorText = (
@@ -56,7 +61,12 @@ export const shownTutorText = (
   let count = 0;
   for (const message of ordered.slice(lastUser + 1)) {
     if (!isShown(message)) continue;
-    if (answeredCard && !/:reply$/u.test(message.id) && message.text.trim() !== "")
+    if (
+      answeredCard &&
+      !/:reply$/u.test(message.id) &&
+      message.text.trim() !== "" &&
+      !STATUS_LINE.test(message.text.trim())
+    )
       visibleSinceAnswer = true;
     // The verdict doesn't count as teaching, but its text is still on screen.
     let verdictLength = 0;
@@ -140,9 +150,13 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
 // A verdict already shown as text isn't repeated on the card.
 const shownReply = (
   input: { readonly reply: string; readonly source: string; readonly verdict?: string | undefined },
-  shown: { readonly visibleSinceAnswer: boolean } | undefined,
+  shown: { readonly visibleSinceAnswer: boolean; readonly text: string } | undefined,
 ) =>
-  foldCardReply(input.reply, input.source, shown?.visibleSinceAnswer ? undefined : input.verdict);
+  foldCardReply(
+    withoutShownParagraphs(input.reply, shown?.text ?? ""),
+    input.source,
+    shown?.visibleSinceAnswer ? undefined : input.verdict,
+  );
 
 const handlers = {
   quiz_card: McpToolAccess.readsAsCaller((input) =>

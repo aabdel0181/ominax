@@ -146,6 +146,15 @@ export function foldCardReply(reply: string, source: string, verdict?: string) {
   return trimmedSource === "" ? shownReply : `${shownReply}\n\nSource: ${trimmedSource}`;
 }
 
+/** The reply without paragraphs the learner already sees word for word above the card. */
+export function withoutShownParagraphs(reply: string, shownText: string): string {
+  const shown = collapse(shownText);
+  const kept = reply
+    .split(/\n{2,}/u)
+    .filter((paragraph) => collapse(paragraph).length < 40 || !shown.includes(collapse(paragraph)));
+  return kept.length === 0 ? reply : kept.join("\n\n");
+}
+
 /** Words of 4+ letters and tokens with a digit: what replyCoverage counts. */
 export const coverageTokens = (value: string) =>
   [...value.toLocaleLowerCase().matchAll(/[\p{L}\p{N}]+(?:['.][\p{L}\p{N}]+)*/gu)]
