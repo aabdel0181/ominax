@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { render } from "../../../test/render";
+
+vi.mock(import("../../hooks/useSettings"), async (original) => {
+  const actual = await original();
+  type Settings = ReturnType<typeof actual.getClientSettings>;
+  function useClientSettings<T = Settings>(select?: (settings: Settings) => T): T {
+    const settings = { ...actual.getClientSettings(), mathRenderingEnabled: true };
+    return select ? select(settings) : (settings as T);
+  }
+  return { ...actual, useClientSettings };
+});
+
 import { QuizCardTimelineCard } from "./QuizCard";
 
 const quiz = {
@@ -123,5 +134,23 @@ describe("QuizCardTimelineCard", () => {
     expect(onSendMessage).toHaveBeenCalledWith(
       'Number answer: "9.8 m/s", right.\n\n(card number-1)',
     );
+  });
+
+  it("renders math in card text and keeps the option accessible name", async () => {
+    await using screen = await render(
+      <QuizCardTimelineCard
+        quizCard={{
+          answer: "$x$",
+          explanation: "The explanation uses $y$.",
+          level: "apply",
+          question: "Choose $$x^2$$.",
+          wrongOptions: [{ option: "$y$", wrongIdea: "A different symbol." }],
+        }}
+        seed="math-1"
+        answered={false}
+      />,
+    );
+    expect(screen.container.querySelector("[data-markdown-math]")).not.toBeNull();
+    expect(screen.getByRole("radio", { name: "$x$" })).toHaveAttribute("aria-label", "$x$");
   });
 });

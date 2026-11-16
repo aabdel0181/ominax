@@ -175,6 +175,7 @@ import {
   type NativeMarkdownTextStyle,
   type SelectableMarkdownSkill,
 } from "../../native/SelectableMarkdownText";
+import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { VideoPreviewModal, type VideoPreviewSource } from "../../components/ui/VideoPreviewModal";
@@ -1724,6 +1725,7 @@ function AnsweredQuestionCard(props: {
   readonly answered: boolean;
   readonly answer?: string;
 }) {
+  const markdownStyles = useMarkdownPreviewStyles();
   const parsed = props.answer === undefined ? undefined : parseCardAnswer(props.answer);
   const answer =
     parsed?.kind === "blanks" && props.card.blanks?.length !== parsed.answers.length
@@ -1731,27 +1733,33 @@ function AnsweredQuestionCard(props: {
       : parsed;
   return (
     <View className="mb-3 rounded-2xl border border-border bg-card p-4">
-      <Text className="font-t3-medium text-base">{props.card.question}</Text>
+      <SelectableMarkdownText
+        markdown={props.card.question}
+        textStyle={{ ...markdownStyles.nativeTextStyle, fontSize: 16 }}
+      />
       {answer?.kind === "skipped" ? (
-        <Text className="mt-2 text-sm text-foreground-muted">{answer.label}</Text>
+        <SelectableMarkdownText
+          markdown={answer.label}
+          textStyle={markdownStyles.nativeTextStyle}
+        />
       ) : answer?.kind === "number" ? (
-        <Text
-          className={cn("mt-2 text-sm", answer.grade === "right" ? "text-success" : "text-danger")}
-        >
-          Your answer: {answer.answer}. {answer.grade === "right" ? "Right." : "Wrong."} Expected{" "}
-          {props.card.number ? numberAnswerExpected(props.card.number) : ""}
-        </Text>
+        <SelectableMarkdownText
+          markdown={`Your answer: ${answer.answer}. ${answer.grade === "right" ? "Right." : "Wrong."} Expected ${props.card.number ? numberAnswerExpected(props.card.number) : ""}`}
+          textStyle={markdownStyles.nativeTextStyle}
+        />
       ) : answer?.kind === "blanks" ? (
         answer.answers.map((entry, index) => (
-          // oxlint-disable-next-line react/no-array-index-key -- blanks are ordered answers
-          <Text key={index} className={entry.grade === "right" ? "text-success" : "text-danger"}>
-            Blank {index + 1}: {entry.answer}. {entry.grade === "right" ? "Right." : "Wrong."}
-          </Text>
+          <SelectableMarkdownText
+            key={`${entry.answer}-${entry.grade}`}
+            markdown={`Blank ${index + 1}: ${entry.answer}. ${entry.grade === "right" ? "Right." : "Wrong."}`}
+            textStyle={markdownStyles.nativeTextStyle}
+          />
         ))
       ) : (
-        <Text className="mt-2 text-sm text-foreground-muted">
-          {props.answered ? "Answered." : "Answer in the chat"}
-        </Text>
+        <SelectableMarkdownText
+          markdown={props.answered ? "Answered." : "Answer in the chat"}
+          textStyle={markdownStyles.nativeTextStyle}
+        />
       )}
     </View>
   );

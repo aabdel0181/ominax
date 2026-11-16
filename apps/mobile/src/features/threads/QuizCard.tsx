@@ -15,6 +15,8 @@ import { Button } from "../../components/ui/Button";
 import { cn } from "../../lib/cn";
 import { uuidv4 } from "../../lib/uuid";
 import { enqueueThreadOutboxMessage } from "../../state/thread-outbox";
+import { SelectableMarkdownText } from "../../native/SelectableMarkdownText";
+import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 
 const nowIso = () => new Date().toISOString();
 
@@ -26,6 +28,7 @@ export function QuizCard(props: {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
 }) {
+  const markdownStyles = useMarkdownPreviewStyles();
   const options = shuffledQuizOptions(props.quizCard, props.seed);
   const [selected, setSelected] = useState<string | null>(null);
   const [confidence, setConfidence] = useState<number | undefined>(undefined);
@@ -84,12 +87,16 @@ export function QuizCard(props: {
 
   return (
     <View className="mb-3 rounded-2xl border border-border bg-card p-4">
-      <Text className="font-t3-medium text-base">{props.quizCard.question}</Text>
+      <SelectableMarkdownText
+        markdown={props.quizCard.question}
+        textStyle={{ ...markdownStyles.nativeTextStyle, fontSize: 16 }}
+      />
       <View accessibilityRole="radiogroup" accessibilityLabel="Answer" className="mt-3 gap-2">
         {options.map((option) => (
           <Pressable
             key={option.option}
             accessibilityRole="radio"
+            accessibilityLabel={option.option}
             accessibilityState={{
               checked: (selected ?? savedAnswer?.answer) === option.option,
               disabled: revealed,
@@ -101,10 +108,10 @@ export function QuizCard(props: {
               selected === option.option ? "border-primary bg-primary/10" : "border-border",
             )}
           >
-            <Text>
-              {option.option}
-              {revealed && option.correct ? " (right)" : ""}
-            </Text>
+            <SelectableMarkdownText
+              markdown={`${option.option}${revealed && option.correct ? " (right)" : ""}`}
+              textStyle={markdownStyles.nativeTextStyle}
+            />
           </Pressable>
         ))}
         <Pressable
@@ -180,30 +187,28 @@ export function QuizCard(props: {
         </>
       ) : (
         <View className="mt-4 gap-2">
-          <Text
-            className={
-              sentPick === undefined
-                ? "text-foreground"
-                : sentPickCorrect
-                  ? "text-success"
-                  : "text-danger"
+          <SelectableMarkdownText
+            markdown={
+              parsedAnswer?.kind === "skipped"
+                ? parsedAnswer.label
+                : sentAnswer === undefined
+                  ? "Answered."
+                  : sentAnswer === null
+                    ? "Your answer: I don't know."
+                    : `Your answer: ${sentAnswer}. ${sentPickCorrect ? "Right." : "Wrong."}`
             }
-          >
-            {parsedAnswer?.kind === "skipped"
-              ? parsedAnswer.label
-              : sentAnswer === undefined
-                ? "Answered."
-                : sentAnswer === null
-                  ? "Your answer: I don't know."
-                  : sentPickCorrect
-                    ? `Your answer: ${sentAnswer}. Right.`
-                    : `Your answer: ${sentAnswer}. Wrong.`}
-          </Text>
-          <Text>{props.quizCard.explanation}</Text>
+            textStyle={markdownStyles.nativeTextStyle}
+          />
+          <SelectableMarkdownText
+            markdown={props.quizCard.explanation}
+            textStyle={markdownStyles.nativeTextStyle}
+          />
           {wrongOptions.map((option) => (
-            <Text key={option.option}>
-              <Text className="font-t3-medium">{option.label}</Text> {option.wrongIdea}
-            </Text>
+            <SelectableMarkdownText
+              key={option.option}
+              markdown={`**${option.label}** ${option.wrongIdea}`}
+              textStyle={markdownStyles.nativeTextStyle}
+            />
           ))}
         </View>
       )}

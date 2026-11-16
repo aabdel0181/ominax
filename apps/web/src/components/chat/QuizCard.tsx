@@ -27,6 +27,7 @@ import { Button } from "../ui/button";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { Textarea } from "../ui/textarea";
 import { Input } from "../ui/input";
+import ChatMarkdown from "../ChatMarkdown";
 
 const focusedCardSeeds = new Set<string>();
 // The virtualized timeline unmounts a card scrolled out of view; keep the learner's draft.
@@ -215,14 +216,16 @@ function OpenQuestionCard(props: {
   };
   const renderQuestion = () => {
     if (props.card.blanks === undefined)
-      return <p className="font-medium">{props.card.question}</p>;
+      return (
+        <ChatMarkdown text={props.card.question} cwd={undefined} inline className="font-medium" />
+      );
     const parts = props.card.question.split(/_{3,}/g);
     return (
       <p className="font-medium leading-9">
         {parts.map((part, index) => (
           // oxlint-disable-next-line react/no-array-index-key -- fixed segments of an immutable card
           <span key={index}>
-            {part}
+            <ChatMarkdown text={part} cwd={undefined} inline className="font-medium" />
             {index < props.card.blanks!.length ? (
               revealed ? (
                 (savedBlanks?.[index]?.answer ?? answers[index])
@@ -326,16 +329,20 @@ function OpenQuestionCard(props: {
       {revealed ? (
         <div className="mt-4 space-y-2 text-sm">
           {skipped || savedAnswer?.kind === "skipped" ? (
-            <p>{savedAnswer?.kind === "skipped" ? savedAnswer.label : "I don't know."}</p>
+            <ChatMarkdown
+              text={savedAnswer?.kind === "skipped" ? savedAnswer.label : "I don't know."}
+              cwd={undefined}
+            />
           ) : props.card.blanks ? (
             props.answered && !submitted && savedBlanks === undefined ? (
               <>
-                <p>Answered.</p>
+                <ChatMarkdown text="Answered." cwd={undefined} />
                 {props.card.blanks.map((blank, index) => (
-                  // oxlint-disable-next-line react/no-array-index-key -- blanks of an immutable card
-                  <p key={index}>
-                    Blank {index + 1}: {blank.answers.join(" / ")}
-                  </p>
+                  <ChatMarkdown
+                    key={blank.answers.join("/")}
+                    text={`Blank ${index + 1}: ${blank.answers.join(" / ")}`}
+                    cwd={undefined}
+                  />
                 ))}
               </>
             ) : (
@@ -345,43 +352,37 @@ function OpenQuestionCard(props: {
                   savedBlanks?.[index]?.grade === "right" ||
                   (savedBlanks === undefined && blankAnswerRight(blank, answer));
                 return (
-                  <p
-                    // oxlint-disable-next-line react/no-array-index-key -- blanks of an immutable card
-                    key={index}
+                  <ChatMarkdown
+                    key={`${blank.answers.join("/")}-${answer}`}
                     className={right ? "text-success" : "text-destructive"}
-                  >
-                    Blank {index + 1}: {savedBlanks ? `${answer}. ` : ""}
-                    {right ? "Right." : "Wrong."} Accepted: {blank.answers.join(" / ")}
-                  </p>
+                    text={`Blank ${index + 1}: ${savedBlanks ? `${answer}. ` : ""}${right ? "Right." : "Wrong."} Accepted: ${blank.answers.join(" / ")}`}
+                    cwd={undefined}
+                  />
                 );
               })
             )
           ) : props.card.number ? (
             props.answered && !submitted && savedNumber === undefined ? (
               <>
-                <p>Answered.</p>
-                <p>Expected {numberAnswerExpected(props.card.number)}</p>
+                <ChatMarkdown text="Answered." cwd={undefined} />
+                <ChatMarkdown
+                  text={`Expected ${numberAnswerExpected(props.card.number)}`}
+                  cwd={undefined}
+                />
               </>
             ) : (
-              <p
+              <ChatMarkdown
                 className={
                   savedNumber?.grade === "right" || (savedNumber === undefined && numberRight)
                     ? "text-success"
                     : "text-destructive"
                 }
-              >
-                Your answer:{" "}
-                {savedNumber?.answer ??
-                  `${numberAnswer.trim()}${props.card.number.unit ? ` ${props.card.number.unit}` : ""}`}
-                .{" "}
-                {savedNumber?.grade === "right" || (savedNumber === undefined && numberRight)
-                  ? "Right."
-                  : "Wrong."}{" "}
-                Expected {numberAnswerExpected(props.card.number)}
-              </p>
+                text={`Your answer: ${savedNumber?.answer ?? `${numberAnswer.trim()}${props.card.number.unit ? ` ${props.card.number.unit}` : ""}`}. ${savedNumber?.grade === "right" || (savedNumber === undefined && numberRight) ? "Right." : "Wrong."} Expected ${numberAnswerExpected(props.card.number)}`}
+                cwd={undefined}
+              />
             )
           ) : (
-            <p>Answered.</p>
+            <ChatMarkdown text="Answered." cwd={undefined} />
           )}
         </div>
       ) : null}
@@ -455,7 +456,7 @@ function MultipleChoiceCard(props: {
       data-quiz-card-seed={props.seed}
       className="min-w-0 rounded-lg border border-border bg-card p-4 text-card-foreground"
     >
-      <p className="font-medium">{props.card.question}</p>
+      <ChatMarkdown text={props.card.question} cwd={undefined} inline className="font-medium" />
       <RadioGroup
         value={
           selected ?? (savedAnswer?.answer === null ? "__unknown__" : (savedAnswer?.answer ?? ""))
@@ -468,7 +469,7 @@ function MultipleChoiceCard(props: {
           <label key={option.option} className="flex items-center gap-2">
             <RadioGroupItem value={option.option} aria-label={option.option} />
             <span>
-              {option.option}
+              <ChatMarkdown text={option.option} cwd={undefined} inline />
               {revealed && option.correct ? " (right)" : ""}
             </span>
           </label>
@@ -539,29 +540,30 @@ function MultipleChoiceCard(props: {
       ) : null}
       {revealed ? (
         <div className="mt-4 space-y-2 text-sm">
-          <p
-            className={
-              sentPick === undefined
-                ? undefined
-                : sentPickCorrect
-                  ? "text-success"
-                  : "text-destructive"
+          <ChatMarkdown
+            {...(sentPick === undefined
+              ? {}
+              : { className: sentPickCorrect ? "text-success" : "text-destructive" })}
+            text={
+              parsedAnswer?.kind === "skipped"
+                ? parsedAnswer.label
+                : sentAnswer === undefined
+                  ? "Answered."
+                  : sentAnswer === null
+                    ? "Your answer: I don't know."
+                    : sentPickCorrect
+                      ? `Your answer: ${sentAnswer}. Right.`
+                      : `Your answer: ${sentAnswer}. Wrong.`
             }
-          >
-            {parsedAnswer?.kind === "skipped"
-              ? parsedAnswer.label
-              : sentAnswer === undefined
-                ? "Answered."
-                : sentAnswer === null
-                  ? "Your answer: I don't know."
-                  : sentPickCorrect
-                    ? `Your answer: ${sentAnswer}. Right.`
-                    : `Your answer: ${sentAnswer}. Wrong.`}
-          </p>
-          <p>{props.card.explanation}</p>
+            cwd={undefined}
+          />
+          <ChatMarkdown text={props.card.explanation} cwd={undefined} />
           {wrongOptions.map((option) => (
             <p key={option.option}>
-              <strong>{option.label}</strong> {option.wrongIdea}
+              <strong>
+                <ChatMarkdown text={option.label} cwd={undefined} inline />
+              </strong>{" "}
+              <ChatMarkdown text={option.wrongIdea} cwd={undefined} inline />
             </p>
           ))}
         </div>
