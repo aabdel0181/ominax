@@ -1454,7 +1454,8 @@ function hideLessonReasoningDetails(
     if (entry.kind !== "work" || entry.entry.itemType !== "reasoning") return entry;
     let hidden = lessonReasoningEntries.get(entry);
     if (hidden === undefined) {
-      const hiddenEntry = { ...entry.entry };
+      // A streaming thought's title is its first line, so the label goes too.
+      const hiddenEntry = { ...entry.entry, label: "Thinking" };
       delete hiddenEntry.detail;
       hidden = { ...entry, entry: hiddenEntry };
       lessonReasoningEntries.set(entry, hidden);

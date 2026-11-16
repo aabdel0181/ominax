@@ -72,7 +72,7 @@ describe("deriveMessagesTimelineRows", () => {
         runId: RunId.make("run"),
         createdAt: "2026-01-01T00:00:00Z",
         itemType: "reasoning",
-        label: "Thinking",
+        label: "Friction at 30 N",
         tone: "thinking",
         detail: "The private answer is 30 N.",
         toolLifecycleStatus: "inProgress",
@@ -129,15 +129,15 @@ describe("deriveMessagesTimelineRows", () => {
         row.kind === "work"
           ? row.groupedEntries
               .filter((entry) => entry.itemType === "reasoning")
-              .map((entry) => entry.detail ?? null)
+              .flatMap((entry) => [entry.detail ?? null, entry.label])
           : row.kind === "work-live"
             ? row.groupedEntries
                 .filter((entry) => entry.itemType === "reasoning")
-                .map((entry) => entry.detail ?? null)
+                .flatMap((entry) => [entry.detail ?? null, entry.label])
             : [],
       );
-    expect(detail(false)).toEqual(["The private answer is 30 N."]);
-    expect(detail(true)).toEqual([null]);
+    expect(detail(false)).toEqual(["The private answer is 30 N.", "Friction at 30 N"]);
+    expect(detail(true)).toEqual([null, "Thinking"]);
   });
 
   it.each([

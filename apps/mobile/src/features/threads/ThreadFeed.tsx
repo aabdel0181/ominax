@@ -2024,7 +2024,7 @@ function renderFeedEntry(
         summaryToolIcon={entry.summaryToolIcon}
         hasFailure={entry.hasFailure}
         shimmer={entry.shimmer}
-        thought={entry.thought}
+        thought={props.lesson ? undefined : entry.thought}
         trailing={
           entry.checkpointSummary ? (
             <TurnDiffStat
