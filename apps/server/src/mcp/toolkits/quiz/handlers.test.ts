@@ -260,10 +260,28 @@ it.effect("refuses an answer stated since the learner's last message or just bef
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(verdictAlreadyShown.at(-1)?.result).toMatchObject({ quizCard: { reply: card.reply } });
 
+    // The verdict "Correct, 20 N." is on screen, so a new card answered 20 N copies it.
     const verdictNumber = yield* toolkit
       .handle("quiz_card", { ...card, reply: "x".repeat(250), answer: "20 N" })
-      .pipe(Stream.unwrap, Stream.runCollect);
-    expect(verdictNumber.at(-1)?.result).toMatchObject({ quizCard: { answer: "20 N" } });
+      .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+    yield* TestClock.adjust("1 second");
+    expect((yield* Fiber.join(verdictNumber)).at(-1)?.result).toMatchObject({
+      code: "invalid_request",
+    });
+
+    // A number card is checked with its unit too.
+    const numberCard = yield* toolkit
+      .handle("question_card", {
+        reply: "x".repeat(250),
+        source: "",
+        question: "Distance?",
+        number: { answer: 12, tolerance: 0, unit: "m" },
+      })
+      .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+    yield* TestClock.adjust("1 second");
+    expect((yield* Fiber.join(numberCard)).at(-1)?.result).toMatchObject({
+      code: "invalid_request",
+    });
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
@@ -349,6 +367,7 @@ it.effect(
     const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
     const projection = McpToolAccessTestkit.idleThreadProjection(shell);
     const unknown = at(26, "user", "I don't know.\n\n(card card-n)");
+    let shownWorked = false;
     const numberCard = {
       type: "dynamic_tool",
       toolName: "question_card",
@@ -374,6 +393,11 @@ it.effect(
       expect((yield* Fiber.join(worked)).at(-1)?.result).toMatchObject({
         questionCard: { question: "Mass?" },
       });
+      shownWorked = true;
+      const inText = yield* ask();
+      expect((yield* Fiber.join(inText)).at(-1)?.result).toMatchObject({
+        questionCard: { question: "Mass?" },
+      });
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -395,7 +419,10 @@ it.effect(
             getProjectThreadRecords: () =>
               Effect.succeed({
                 ...projection,
-                messages: [unknown],
+                // One paragraph: also what the verdict check reads as the verdict.
+                messages: shownWorked
+                  ? [unknown, at(30, "assistant", "No problem: W = 25 / 0.5 = 50 N.")]
+                  : [unknown],
               } as unknown as OrchestrationV2ThreadProjection),
             getTurnItem: ({ itemId }) =>
               Effect.succeed({

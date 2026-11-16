@@ -20,8 +20,8 @@ export function cardReplyProblem(input: {
   readonly verdict?: string | undefined;
   readonly previousText?: string | undefined;
   readonly unknownNumber?: { readonly answer: number; readonly tolerance: number };
-  /** A quiz answer, or a number card's bare answer. */
-  readonly answer?: string;
+  /** A quiz answer, or a number card's bare answer and "<answer> <unit>". */
+  readonly answers?: ReadonlyArray<string>;
 }): string | undefined {
   if (input.answeredCard && !input.visibleSinceAnswer && !input.verdict?.trim()) {
     return "The learner's last message answered a card, and no verdict on it is visible; they never see your thinking. Put your verdict on that answer (right or wrong, and why, in a line or two) in verdict, then call the card again.";
@@ -30,21 +30,23 @@ export function cardReplyProblem(input: {
     const numbers =
       `${input.reply}\n${input.verdict ?? ""}\n${input.shownText ?? ""}`
         .replace(/[−–]/gu, "-")
+        .replace(/(?<=\d)(?:,|\{,\})(?=\d{3}\b)/gu, "")
         .match(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu)
         ?.map(Number) ?? [];
     const tolerance = Math.max(input.unknownNumber.tolerance, 1e-9);
     if (!numbers.some((number) => Math.abs(number - input.unknownNumber!.answer) <= tolerance)) {
-      return "After \"I don't know\", work that card's own answer out step by step in visible text or verdict first, including its numbers, before showing a new card.";
+      return "After \"I don't know\", work that card's own answer out step by step in visible text or verdict first, ending with its result as a plain decimal (like 1500 or 0.94), before showing a new card.";
     }
   }
   if (input.purpose === undefined && input.shownBefore === 0 && POINTS_BACK.test(input.reply))
     return "Your reply points back to something, but nothing has been taught visibly since the learner's last message, and they never see your thinking or tool output. Write those facts out in reply, defining each term, then call the card again.";
-  const visible = `${input.reply}\n${input.shownText ?? ""}\n${input.previousText ?? ""}`;
-  const answer = input.answer?.replace(/[−–]/gu, "-");
-  const answerAppears =
-    answer !== undefined &&
-    (/\d/u.test(answer) || answer.trim().split(/\s+/u).length >= 3) &&
-    statesAnswer(visible.replace(/[−–]/gu, "-"), answer);
+  const shown = `${input.reply}\n${input.shownText ?? ""}`;
+  // A number may come from the message before the learner's answer; a named idea only from this turn.
+  const answerAppears = (input.answers ?? []).some((answer) =>
+    /\d/u.test(answer)
+      ? statesAnswer(`${shown}\n${input.previousText ?? ""}`, answer)
+      : answer.trim().split(/\s+/u).length >= 3 && statesAnswer(shown, answer),
+  );
   if (answerAppears)
     return "The answer is stated just above; pose a new case that needs one more step.";
   if (input.purpose !== undefined) return undefined;

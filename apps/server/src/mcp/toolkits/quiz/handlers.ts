@@ -47,32 +47,25 @@ export const shownTutorText = (
   const answeredCardId = lastUser === -1 ? undefined : cardAnswerId(ordered[lastUser]!.text);
   const answeredCardText =
     lastUser === -1 ? undefined : withoutCardAnswerTag(ordered[lastUser]!.text);
-  const previousText = ordered
-    .slice(0, Math.max(lastUser, 0))
-    .findLast(
-      (message) =>
-        message.role === "assistant" &&
-        !/(?::|%3A)thinking(?::|%3A)/iu.test(message.id) &&
-        !message.id.endsWith(":outline"),
-    )?.text;
+  const isShown = (message: (typeof ordered)[number]) =>
+    message.role === "assistant" &&
+    !/(?::|%3A)thinking(?::|%3A)/iu.test(message.id) &&
+    !message.id.endsWith(":outline");
+  const previousText = ordered.slice(0, Math.max(lastUser, 0)).findLast(isShown)?.text;
   let visibleSinceAnswer = false;
   let count = 0;
   for (const message of ordered.slice(lastUser + 1)) {
-    if (
-      message.role !== "assistant" ||
-      /(?::|%3A)thinking(?::|%3A)/iu.test(message.id) ||
-      message.id.endsWith(":outline")
-    )
-      continue;
+    if (!isShown(message)) continue;
     if (answeredCard && !/:reply$/u.test(message.id) && message.text.trim() !== "")
       visibleSinceAnswer = true;
-    let text = message.text;
+    // The verdict doesn't count as teaching, but its text is still on screen.
+    let verdictLength = 0;
     if (verdictPending && !/:reply$/u.test(message.id)) {
-      text = text.slice(cardAnswerVerdictLength(text));
+      verdictLength = cardAnswerVerdictLength(message.text);
       verdictPending = false;
     }
-    texts.push(text);
-    count += text.length;
+    texts.push(message.text);
+    count += message.text.length - verdictLength;
   }
   return {
     text: texts.join("\n"),
@@ -95,7 +88,7 @@ const readShownTutor = readThread(undefined, ["messages"]).pipe(
 const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: {
   readonly reply: string;
   readonly purpose: CardPurpose | undefined;
-  readonly answer?: string;
+  readonly answers?: ReadonlyArray<string>;
   readonly verdict: string | undefined;
 }) {
   const check = Effect.gen(function* () {
@@ -170,7 +163,7 @@ const handlers = {
         reply: input.reply,
         purpose: input.purpose,
         verdict: input.verdict,
-        answer: input.answer,
+        answers: [input.answer],
       });
       return {
         quizCard: { ...card, reply: shownReply(input, shown) },
@@ -193,7 +186,16 @@ const handlers = {
         reply: input.reply,
         purpose: input.purpose,
         verdict: input.verdict,
-        ...(input.number === undefined ? {} : { answer: String(input.number.answer) }),
+        ...(input.number === undefined
+          ? {}
+          : {
+              answers: [
+                String(input.number.answer),
+                ...(input.number.unit === undefined
+                  ? []
+                  : [`${input.number.answer} ${input.number.unit}`]),
+              ],
+            }),
       });
       return {
         questionCard: { ...card, reply: shownReply(input, shown) },
