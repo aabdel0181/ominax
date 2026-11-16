@@ -106,6 +106,26 @@ describe("client settings hydration", () => {
     expect(getClientSettings().mathRenderingEnabled).toBe(false);
   });
 
+  it("retries the math default switch after a failed save", async () => {
+    const savedMathOff = { ...savedSettings, mathRenderingEnabled: false };
+    persistenceMocks.getClientSettings.mockResolvedValue(savedMathOff);
+    persistenceMocks.setClientSettings.mockRejectedValueOnce(new Error("save failed"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await ensureClientSettingsHydrated();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(getClientSettings().mathRenderingEnabled).toBe(false);
+    expect(persistenceMocks.setClientSettings).toHaveBeenCalledOnce();
+
+    __resetClientSettingsPersistenceForTests();
+    persistenceMocks.setClientSettings.mockResolvedValue(undefined);
+    await ensureClientSettingsHydrated();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(getClientSettings().mathRenderingEnabled).toBe(true);
+    expect(persistenceMocks.setClientSettings).toHaveBeenCalledTimes(2);
+  });
+
   // regression: #16816 a failed read could overwrite synced model favorites with defaults
   it("does not prepare a model preference write after a failed legacy read", async () => {
     const failure = new Error("storage unavailable");

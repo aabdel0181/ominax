@@ -103,6 +103,11 @@ describe("QuizCardTimelineCard", () => {
       />,
     );
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Blank 1" }).element());
+    const blankInput = screen.getByRole("textbox", { name: "Blank 1" }).element();
+    const questionText = screen.getByText("The unit is", { exact: false }).element();
+    expect(
+      Math.abs(blankInput.getBoundingClientRect().top - questionText.getBoundingClientRect().top),
+    ).toBeLessThan(3);
     await userEvent.type(screen.getByRole("textbox", { name: "Blank 1" }), "meter");
     await userEvent.type(screen.getByRole("textbox", { name: "Blank 2" }), "x");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));

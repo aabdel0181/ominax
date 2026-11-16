@@ -29,6 +29,34 @@ import { Textarea } from "../ui/textarea";
 import { Input } from "../ui/input";
 import ChatMarkdown from "../ChatMarkdown";
 
+function stripCardLinks(text: string) {
+  return text.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+}
+
+function CardText(props: {
+  readonly text: string;
+  readonly inline?: boolean;
+  readonly className?: string;
+  readonly option?: boolean;
+}) {
+  if (!props.text.includes("$")) {
+    return props.inline ? (
+      <span className={props.className}>{props.text}</span>
+    ) : (
+      <p className={props.className}>{props.text}</p>
+    );
+  }
+  const text = props.option ? stripCardLinks(props.text) : props.text;
+  return (
+    <ChatMarkdown
+      text={text}
+      cwd={undefined}
+      {...(props.inline ? { inline: true } : {})}
+      {...(props.className ? { className: props.className } : {})}
+    />
+  );
+}
+
 const focusedCardSeeds = new Set<string>();
 // The virtualized timeline unmounts a card scrolled out of view; keep the learner's draft.
 const thinkingDrafts = new Map<string, string>();
@@ -216,16 +244,14 @@ function OpenQuestionCard(props: {
   };
   const renderQuestion = () => {
     if (props.card.blanks === undefined)
-      return (
-        <ChatMarkdown text={props.card.question} cwd={undefined} inline className="font-medium" />
-      );
+      return <CardText text={props.card.question} className="font-medium" />;
     const parts = props.card.question.split(/_{3,}/g);
     return (
       <p className="font-medium leading-9">
         {parts.map((part, index) => (
           // oxlint-disable-next-line react/no-array-index-key -- fixed segments of an immutable card
           <span key={index}>
-            <ChatMarkdown text={part} cwd={undefined} inline className="font-medium" />
+            <CardText text={part} inline className="font-medium" />
             {index < props.card.blanks!.length ? (
               revealed ? (
                 (savedBlanks?.[index]?.answer ?? answers[index])
@@ -329,20 +355,18 @@ function OpenQuestionCard(props: {
       {revealed ? (
         <div className="mt-4 space-y-2 text-sm">
           {skipped || savedAnswer?.kind === "skipped" ? (
-            <ChatMarkdown
+            <CardText
               text={savedAnswer?.kind === "skipped" ? savedAnswer.label : "I don't know."}
-              cwd={undefined}
             />
           ) : props.card.blanks ? (
             props.answered && !submitted && savedBlanks === undefined ? (
               <>
-                <ChatMarkdown text="Answered." cwd={undefined} />
+                <p>Answered.</p>
                 {props.card.blanks.map((blank, index) => (
-                  <ChatMarkdown
-                    key={blank.answers.join("/")}
-                    text={`Blank ${index + 1}: ${blank.answers.join(" / ")}`}
-                    cwd={undefined}
-                  />
+                  // oxlint-disable-next-line react/no-array-index-key -- blanks of an immutable card
+                  <p key={index}>
+                    Blank {index + 1}: {blank.answers.join(" / ")}
+                  </p>
                 ))}
               </>
             ) : (
@@ -352,11 +376,11 @@ function OpenQuestionCard(props: {
                   savedBlanks?.[index]?.grade === "right" ||
                   (savedBlanks === undefined && blankAnswerRight(blank, answer));
                 return (
-                  <ChatMarkdown
-                    key={`${blank.answers.join("/")}-${answer}`}
+                  <CardText
+                    // oxlint-disable-next-line react/no-array-index-key -- blanks of an immutable card
+                    key={index}
                     className={right ? "text-success" : "text-destructive"}
                     text={`Blank ${index + 1}: ${savedBlanks ? `${answer}. ` : ""}${right ? "Right." : "Wrong."} Accepted: ${blank.answers.join(" / ")}`}
-                    cwd={undefined}
                   />
                 );
               })
@@ -364,25 +388,21 @@ function OpenQuestionCard(props: {
           ) : props.card.number ? (
             props.answered && !submitted && savedNumber === undefined ? (
               <>
-                <ChatMarkdown text="Answered." cwd={undefined} />
-                <ChatMarkdown
-                  text={`Expected ${numberAnswerExpected(props.card.number)}`}
-                  cwd={undefined}
-                />
+                <p>Answered.</p>
+                <p>Expected {numberAnswerExpected(props.card.number)}</p>
               </>
             ) : (
-              <ChatMarkdown
+              <CardText
                 className={
                   savedNumber?.grade === "right" || (savedNumber === undefined && numberRight)
                     ? "text-success"
                     : "text-destructive"
                 }
                 text={`Your answer: ${savedNumber?.answer ?? `${numberAnswer.trim()}${props.card.number.unit ? ` ${props.card.number.unit}` : ""}`}. ${savedNumber?.grade === "right" || (savedNumber === undefined && numberRight) ? "Right." : "Wrong."} Expected ${numberAnswerExpected(props.card.number)}`}
-                cwd={undefined}
               />
             )
           ) : (
-            <ChatMarkdown text="Answered." cwd={undefined} />
+            <p>Answered.</p>
           )}
         </div>
       ) : null}
@@ -456,7 +476,7 @@ function MultipleChoiceCard(props: {
       data-quiz-card-seed={props.seed}
       className="min-w-0 rounded-lg border border-border bg-card p-4 text-card-foreground"
     >
-      <ChatMarkdown text={props.card.question} cwd={undefined} inline className="font-medium" />
+      <CardText text={props.card.question} className="font-medium" />
       <RadioGroup
         value={
           selected ?? (savedAnswer?.answer === null ? "__unknown__" : (savedAnswer?.answer ?? ""))
@@ -469,7 +489,7 @@ function MultipleChoiceCard(props: {
           <label key={option.option} className="flex items-center gap-2">
             <RadioGroupItem value={option.option} aria-label={option.option} />
             <span>
-              <ChatMarkdown text={option.option} cwd={undefined} inline />
+              <CardText text={option.option} inline option />
               {revealed && option.correct ? " (right)" : ""}
             </span>
           </label>
@@ -540,7 +560,7 @@ function MultipleChoiceCard(props: {
       ) : null}
       {revealed ? (
         <div className="mt-4 space-y-2 text-sm">
-          <ChatMarkdown
+          <CardText
             {...(sentPick === undefined
               ? {}
               : { className: sentPickCorrect ? "text-success" : "text-destructive" })}
@@ -555,15 +575,14 @@ function MultipleChoiceCard(props: {
                       ? `Your answer: ${sentAnswer}. Right.`
                       : `Your answer: ${sentAnswer}. Wrong.`
             }
-            cwd={undefined}
           />
-          <ChatMarkdown text={props.card.explanation} cwd={undefined} />
+          <CardText text={props.card.explanation} />
           {wrongOptions.map((option) => (
             <p key={option.option}>
               <strong>
-                <ChatMarkdown text={option.label} cwd={undefined} inline />
+                <CardText text={option.label} inline option />
               </strong>{" "}
-              <ChatMarkdown text={option.wrongIdea} cwd={undefined} inline />
+              <CardText text={option.wrongIdea} inline />
             </p>
           ))}
         </div>

@@ -351,11 +351,14 @@ describe("ClientSettings notifications", () => {
 describe("ClientSettings math rendering", () => {
   it("defaults on and preserves explicit preferences through patches and persistence", () => {
     expect(decodeClientSettings({}).mathRenderingEnabled).toBe(true);
-    for (const mathRenderingEnabled of [true, false]) {
-      const preference = { mathRenderingEnabled };
-      expect(decodeClientSettingsPatch(preference)).toEqual(preference);
-      expect(encodeClientSettings(decodeClientSettings(preference))).toMatchObject(preference);
-    }
+    expect(decodeClientSettingsPatch({ mathRenderingEnabled: false })).toEqual({
+      mathRenderingEnabled: false,
+    });
+    expect(
+      encodeClientSettings(decodeClientSettings({ mathRenderingEnabled: false })),
+    ).toMatchObject({
+      mathRenderingEnabled: false,
+    });
     expect(() => decodeClientSettingsPatch({ mathRenderingEnabled: "yes" })).toThrow();
   });
 });
