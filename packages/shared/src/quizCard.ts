@@ -18,20 +18,36 @@ export function cardReplyProblem(input: {
   readonly answeredCard?: boolean;
   readonly visibleSinceAnswer?: boolean;
   readonly verdict?: string | undefined;
-  /** A quiz answer, or a number card's "<answer> <unit>"; checked only when it holds a digit. */
+  readonly previousText?: string | undefined;
+  readonly unknownNumber?: { readonly answer: number; readonly tolerance: number };
+  /** A quiz answer, or a number card's bare answer. */
   readonly answer?: string;
 }): string | undefined {
   if (input.answeredCard && !input.visibleSinceAnswer && !input.verdict?.trim()) {
     return "The learner's last message answered a card, and no verdict on it is visible; they never see your thinking. Put your verdict on that answer (right or wrong, and why, in a line or two) in verdict, then call the card again.";
   }
-  if (input.purpose !== undefined) return undefined;
-  if (input.shownBefore === 0 && POINTS_BACK.test(input.reply))
+  if (input.unknownNumber !== undefined) {
+    const numbers =
+      `${input.reply}\n${input.verdict ?? ""}\n${input.shownText ?? ""}`
+        .replace(/[−–]/gu, "-")
+        .match(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu)
+        ?.map(Number) ?? [];
+    const tolerance = Math.max(input.unknownNumber.tolerance, 1e-9);
+    if (!numbers.some((number) => Math.abs(number - input.unknownNumber!.answer) <= tolerance)) {
+      return "After \"I don't know\", work that card's own answer out step by step in visible text or verdict first, including its numbers, before showing a new card.";
+    }
+  }
+  if (input.purpose === undefined && input.shownBefore === 0 && POINTS_BACK.test(input.reply))
     return "Your reply points back to something, but nothing has been taught visibly since the learner's last message, and they never see your thinking or tool output. Write those facts out in reply, defining each term, then call the card again.";
-  const visible = `${input.reply}\n${input.shownText ?? ""}`;
+  const visible = `${input.reply}\n${input.shownText ?? ""}\n${input.previousText ?? ""}`;
+  const answer = input.answer?.replace(/[−–]/gu, "-");
   const answerAppears =
-    input.answer !== undefined && /\d/u.test(input.answer) && statesAnswer(visible, input.answer);
+    answer !== undefined &&
+    (/\d/u.test(answer) || answer.trim().split(/\s+/u).length >= 3) &&
+    statesAnswer(visible.replace(/[−–]/gu, "-"), answer);
   if (answerAppears)
     return "The answer is stated just above; pose a new case that needs one more step.";
+  if (input.purpose !== undefined) return undefined;
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
 }
@@ -40,9 +56,10 @@ const collapse = (value: string) => value.trim().replace(/\s+/gu, " ");
 
 /** Whether `text` (HTML markup, scripts and styles ignored) states `answer` as a whole word or number. */
 export function statesAnswer(text: string, answer: string): boolean {
-  const wanted = collapse(answer);
+  const wanted = collapse(answer).replace(/[−–]/gu, "-");
   if (wanted.length < 3) return false;
   const plain = text
+    .replace(/[−–]/gu, "-")
     .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/giu, " ")
     .replace(/<[^>]*>/gu, " ")
     .replace(/&nbsp;|&#160;/giu, " ");
@@ -59,6 +76,20 @@ export function explainBackClaimsProblem(
   return wrong.length === 0
     ? undefined
     : `Not saved: these claims don't hold: ${wrong.join("; ")}. Tell the learner plainly what is wrong, fix it briefly, and ask once more through question_card.`;
+}
+
+export function explainBackRetestProblem(input: {
+  readonly lastAnsweredExplainBack: boolean;
+  readonly previousExplainBackAnswered: boolean;
+  readonly previousExplainBackSaved: boolean;
+  readonly nonExplainBackCardAnsweredBetween: boolean;
+}): string | undefined {
+  return input.lastAnsweredExplainBack &&
+    input.previousExplainBackAnswered &&
+    !input.previousExplainBackSaved &&
+    !input.nonExplainBackCardAnsweredBetween
+    ? "Not saved: their restatement follows your correction, so check the corrected idea with a new case (a question_card applying it to a situation you haven't described) before saving."
+    : undefined;
 }
 
 export interface QuestionCard {
@@ -441,6 +472,10 @@ export function cardAnswerVerdictLength(text: string) {
 
 // The card's item id rides in the answer text so every client, after reloads, knows which card it answered.
 const CARD_ANSWER_TAG = /\n\n\(card (\S+)\)$/;
+
+export function cardAnswerId(text: string): string | undefined {
+  return CARD_ANSWER_TAG.exec(text)?.[1];
+}
 
 export function cardAnswerMessage(text: string, cardId: string) {
   return `${text}\n\n(card ${cardId})`;

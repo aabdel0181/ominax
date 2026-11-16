@@ -213,7 +213,7 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     const card = {
       reply: "x".repeat(250),
       source: "",
-      answer: "12 m",
+      answer: "13 m",
       explanation: "Because",
       level: "apply" as const,
       question: "Which?",
@@ -239,7 +239,7 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     const accepted = yield* toolkit
       .handle("quiz_card", card)
       .pipe(Stream.unwrap, Stream.runCollect);
-    expect(accepted.at(-1)?.result).toMatchObject({ quizCard: { answer: "12 m" } });
+    expect(accepted.at(-1)?.result).toMatchObject({ quizCard: { answer: "13 m" } });
 
     const commonWord = yield* toolkit
       .handle("quiz_card", { ...card, answer: "Right" })

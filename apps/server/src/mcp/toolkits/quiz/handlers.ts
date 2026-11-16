@@ -1,19 +1,22 @@
-import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import { OrchestratorMcpFailure, TurnItemId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import {
   type CardPurpose,
   cardAnswerVerdictLength,
+  cardAnswerId,
   cardReplyProblem,
   foldCardReply,
+  parseCardAnswer,
   quizCardProblem,
   readQuestionCard,
   readQuizCard,
   withoutCardAnswerTag,
 } from "@t3tools/shared/quizCard";
+import { lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
 
 import * as McpToolAccess from "../../McpToolAccess.ts";
-import { readThread } from "../../threadAccess.ts";
+import { loadCaller, readThread } from "../../threadAccess.ts";
 import { QuizToolkit } from "./tools.ts";
 
 const QUIZ_CARD_SHOWN = `Shown to the learner as a card. Don't repeat the question or options. Draw nothing now. When they answer, your verdict comes first and must be visible: as text, or in the next card's \`verdict\`. If this turn's teaching owes a picture, give the verdict as text, then draw it (tag it with that answered card's id using forCard) before any new teaching; then end your turn. Their pick, confidence and thinking arrive as their next message. Then:
@@ -41,6 +44,17 @@ export const shownTutorText = (
   let verdictPending =
     lastUser !== -1 && withoutCardAnswerTag(ordered[lastUser]!.text) !== ordered[lastUser]!.text;
   const answeredCard = verdictPending;
+  const answeredCardId = lastUser === -1 ? undefined : cardAnswerId(ordered[lastUser]!.text);
+  const answeredCardText =
+    lastUser === -1 ? undefined : withoutCardAnswerTag(ordered[lastUser]!.text);
+  const previousText = ordered
+    .slice(0, Math.max(lastUser, 0))
+    .findLast(
+      (message) =>
+        message.role === "assistant" &&
+        !/(?::|%3A)thinking(?::|%3A)/iu.test(message.id) &&
+        !message.id.endsWith(":outline"),
+    )?.text;
   let visibleSinceAnswer = false;
   let count = 0;
   for (const message of ordered.slice(lastUser + 1)) {
@@ -60,7 +74,15 @@ export const shownTutorText = (
     texts.push(text);
     count += text.length;
   }
-  return { text: texts.join("\n"), count, answeredCard, visibleSinceAnswer };
+  return {
+    text: texts.join("\n"),
+    count,
+    answeredCard,
+    visibleSinceAnswer,
+    answeredCardId,
+    answeredCardText,
+    previousText,
+  };
 };
 
 const readShownTutor = readThread(undefined, ["messages"]).pipe(
@@ -76,21 +98,41 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
   readonly answer?: string;
   readonly verdict: string | undefined;
 }) {
-  const check = readShownTutor.pipe(
-    Effect.map((shown) => ({
+  const check = Effect.gen(function* () {
+    const shown = yield* readShownTutor;
+    if (shown === undefined) return { shown, problem: undefined };
+    let unknownNumber: { answer: number; tolerance: number } | undefined;
+    if (
+      shown.answeredCardText !== undefined &&
+      parseCardAnswer(shown.answeredCardText)?.kind === "skipped" &&
+      shown.answeredCardId !== undefined
+    ) {
+      const { caller, threads } = yield* loadCaller();
+      if (caller !== undefined) {
+        const result = yield* threads.getTurnItem({
+          threadId: caller.id,
+          itemId: TurnItemId.make(shown.answeredCardId),
+        });
+        const card =
+          result.item?.type === "dynamic_tool" ? lessonCardFromToolItem(result.item) : undefined;
+        if (card !== undefined && "number" in card && card.number !== undefined)
+          unknownNumber = { answer: card.number.answer, tolerance: card.number.tolerance };
+      }
+    }
+    const problemInput = {
+      ...input,
+      shownBefore: shown.count,
+      shownText: shown.text,
+      previousText: shown.previousText,
+      answeredCard: shown.answeredCard,
+      visibleSinceAnswer: shown.visibleSinceAnswer,
+      ...(unknownNumber === undefined ? {} : { unknownNumber }),
+    };
+    return {
       shown,
-      problem:
-        shown === undefined
-          ? undefined
-          : cardReplyProblem({
-              ...input,
-              shownBefore: shown.count,
-              shownText: shown.text,
-              answeredCard: shown.answeredCard,
-              visibleSinceAnswer: shown.visibleSinceAnswer,
-            }),
-    })),
-  );
+      problem: cardReplyProblem(problemInput),
+    };
+  }).pipe(Effect.orElseSucceed(() => ({ shown: undefined, problem: undefined })));
   // Claude's text before a card is committed when the card's tool_use frame arrives, racing this
   // call, so look once more before refusing.
   const first = yield* check;
@@ -151,9 +193,7 @@ const handlers = {
         reply: input.reply,
         purpose: input.purpose,
         verdict: input.verdict,
-        ...(input.number?.unit === undefined
-          ? {}
-          : { answer: `${input.number.answer} ${input.number.unit}` }),
+        ...(input.number === undefined ? {} : { answer: String(input.number.answer) }),
       });
       return {
         questionCard: { ...card, reply: shownReply(input, shown) },

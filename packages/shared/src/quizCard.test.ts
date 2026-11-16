@@ -7,6 +7,7 @@ import {
   statesAnswer,
   cardReplyProblem,
   explainBackClaimsProblem,
+  explainBackRetestProblem,
   foldCardReply,
   MIN_CARD_REPLY_CHARS,
   blankAnswerRight,
@@ -237,6 +238,63 @@ describe("quiz cards", () => {
         answer: "3 m/s^2",
         shownBefore: 250,
       }),
+    ).toBeUndefined();
+  });
+  it("checks units, unicode minus, prior text, and only substantial quiz answers", () => {
+    expect(
+      cardReplyProblem({
+        reply: "Here is the worked result.",
+        shownText: "The ratio is 20.09 times.",
+        answer: "20.09",
+        shownBefore: 0,
+      }),
+    ).toMatch(/stated/u);
+    expect(
+      cardReplyProblem({
+        reply: "The result is −3.5.",
+        answer: "-3.5",
+        shownBefore: 0,
+      }),
+    ).toMatch(/stated/u);
+    expect(
+      cardReplyProblem({
+        reply: "Apply the rule in this new setting.",
+        previousText: "The rule is use conservation of momentum.",
+        answer: "use conservation of momentum",
+        shownBefore: 250,
+      }),
+    ).toMatch(/stated/u);
+    expect(
+      cardReplyProblem({ reply: "Slowing down", answer: "Slowing down", shownBefore: 250 }),
+    ).toBeUndefined();
+  });
+  it("requires and accepts a worked number answer after I don't know", () => {
+    const unknownNumber = { answer: 20.09, tolerance: 0 };
+    expect(
+      cardReplyProblem({
+        reply: "The ratio is about 20.",
+        shownBefore: 0,
+        unknownNumber,
+      }),
+    ).toMatch(/own answer/u);
+    expect(
+      cardReplyProblem({
+        reply: "20.09 times: divide 60.27 by 3.",
+        shownBefore: 250,
+        unknownNumber,
+      }),
+    ).toBeUndefined();
+  });
+  it("blocks an explain-back retest until an ordinary card intervenes", () => {
+    const input = {
+      lastAnsweredExplainBack: true,
+      previousExplainBackAnswered: true,
+      previousExplainBackSaved: false,
+      nonExplainBackCardAnsweredBetween: false,
+    };
+    expect(explainBackRetestProblem(input)).toMatch(/new case/u);
+    expect(
+      explainBackRetestProblem({ ...input, nonExplainBackCardAnsweredBetween: true }),
     ).toBeUndefined();
   });
   it.each([
