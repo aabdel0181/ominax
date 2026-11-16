@@ -9,11 +9,8 @@ import {
   type EnvironmentThreadSearchMatch,
   type ShownOrder,
 } from "@t3tools/client-runtime/state/thread-search";
-import {
-  isListedThreadLineage,
-  isSideChatThread,
-  THREAD_JUMP_KEYBINDING_COMMANDS,
-} from "@t3tools/contracts";
+import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
+import { isSideChatThread, THREAD_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import {
   foldSearchQuery,
   PALETTE_MESSAGE_LIMIT,
@@ -47,6 +44,7 @@ import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
 import { useNativeLayoutMetrics } from "../../native/native-layout-metrics";
 import { T3KeyboardCommands } from "../../native/T3KeyboardCommands";
 import {
+  useDelegatedUnderParent,
   useProjects,
   useServerConfigs,
   useThreadShell,
@@ -231,6 +229,7 @@ export function CommandPalette(props: {
   const runCommand = props.onCommand;
   const projects = useProjects();
   const threads = useVisibleThreadShells();
+  const delegatedUnderParent = useDelegatedUnderParent();
   const activeThreadRef = parseActiveThreadPath(props.pathname);
   const activeThread = useThreadShell(activeThreadRef);
   const visitThread = useAtomCommand(threadEnvironment.visit, { reportFailure: false });
@@ -435,8 +434,12 @@ export function CommandPalette(props: {
       .filter(
         (thread) =>
           thread.archivedAt === null &&
-          isListedThreadLineage(thread.lineage) &&
-          !isSideChatThread(thread),
+          !isSideChatThread(thread) &&
+          !isShownUnderParent(
+            { environmentId: thread.environmentId, threadId: thread.id },
+            thread.lineage,
+            delegatedUnderParent,
+          ),
       )
       .map((thread) => {
         const project = projectByKey.get(scopedProjectKey(thread.environmentId, thread.projectId));
@@ -484,6 +487,7 @@ export function CommandPalette(props: {
     selectDetail,
     startTriage,
     threads,
+    delegatedUnderParent,
     triageEnvironmentId,
   ]);
   const rankedMessageKeys = useMemo(() => {
