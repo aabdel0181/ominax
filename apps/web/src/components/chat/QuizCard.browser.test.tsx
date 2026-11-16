@@ -94,7 +94,7 @@ describe("QuizCardTimelineCard", () => {
     await using screen = await render(
       <QuizCardTimelineCard
         quizCard={{
-          question: "The unit is ___ and the symbol is ___.",
+          question: "For $x$ metres, the unit is ___ and the symbol is ___.",
           blanks: [{ answers: ["meter"] }, { answers: ["m"] }],
         }}
         seed="blanks-1"
@@ -104,7 +104,7 @@ describe("QuizCardTimelineCard", () => {
     );
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Blank 1" }).element());
     const blankInput = screen.getByRole("textbox", { name: "Blank 1" }).element();
-    const questionText = screen.getByText("The unit is", { exact: false }).element();
+    const questionText = screen.getByText("the unit is", { exact: false }).element();
     expect(
       Math.abs(blankInput.getBoundingClientRect().top - questionText.getBoundingClientRect().top),
     ).toBeLessThan(3);

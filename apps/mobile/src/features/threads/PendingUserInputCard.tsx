@@ -285,7 +285,6 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
                     <View key={optionValue} className="gap-1.5">
                       <Pressable
                         accessibilityRole={question.multiSelect ? "checkbox" : "radio"}
-                        accessibilityLabel={option.label}
                         accessibilityState={{ checked: selected, disabled: responseDisabled }}
                         disabled={responseDisabled}
                         className={cn(
@@ -301,21 +300,22 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
                         }
                       >
                         <View className="min-w-0 flex-1 gap-0.5">
-                          <QuestionText
-                            markdown={option.label}
-                            environmentId={props.environmentId}
-                            threadId={props.threadId}
-                            workspaceRoot={props.workspaceRoot}
-                            setDirection={setDirection}
-                          />
+                          <Text
+                            className={cn(
+                              "font-t3-bold text-sm",
+                              selected ? "text-foreground" : "text-foreground-secondary",
+                            )}
+                            style={proseDirectionStyle(option.label, setDirection)}
+                          >
+                            {option.label}
+                          </Text>
                           {description ? (
-                            <QuestionText
-                              markdown={description}
-                              environmentId={props.environmentId}
-                              threadId={props.threadId}
-                              workspaceRoot={props.workspaceRoot}
-                              setDirection={setDirection}
-                            />
+                            <Text
+                              className="font-sans text-sm leading-5 text-foreground-muted"
+                              style={proseDirectionStyle(description, setDirection)}
+                            >
+                              {description}
+                            </Text>
                           ) : null}
                         </View>
                       </Pressable>

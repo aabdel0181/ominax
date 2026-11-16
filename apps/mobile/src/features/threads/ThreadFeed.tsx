@@ -1772,7 +1772,8 @@ function AnsweredQuestionCard(props: {
             )
           : answer?.kind === "blanks"
             ? answer.answers.map((entry, index) => (
-                <View key={`${entry.answer}-${entry.grade}`}>
+                // oxlint-disable-next-line react/no-array-index-key -- blanks are ordered answers
+                <View key={index}>
                   {renderCardText(
                     `Blank ${index + 1}: ${entry.answer}. ${entry.grade === "right" ? "Right." : "Wrong."}`,
                     entry.grade === "right" ? "text-success" : "text-danger",
