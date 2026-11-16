@@ -2264,6 +2264,7 @@ export function makeClaudeQueryOptions(input: {
       toolName: hookInput.tool_name,
       toolInput: hookInput.tool_input,
       projectRoot: input.cwd ?? process.cwd(),
+      cwd: hookInput.cwd ?? input.cwd ?? process.cwd(),
       homeDir: input.environment?.HOME ?? process.env.HOME,
     });
     // No decision on allow, so approval-required lessons still ask.

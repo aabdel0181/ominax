@@ -13,17 +13,11 @@ const input = (toolName: string, toolInput: unknown) =>
   lessonToolPolicy({ toolName, toolInput, projectRoot, homeDir: "/home/quokka" });
 
 describe("lessonToolPolicy", () => {
-  it("appends Git's protocol rule after inherited config entries", () => {
-    const environment = withLessonGitNetworkBlocked({
-      GIT_CONFIG_COUNT: "2",
-      GIT_CONFIG_KEY_0: "user.name",
-      GIT_CONFIG_VALUE_0: "Tutor",
-      GIT_CONFIG_KEY_1: "core.pager",
-      GIT_CONFIG_VALUE_1: "cat",
-    });
-    assert.equal(environment.GIT_CONFIG_COUNT, "3");
-    assert.equal(environment.GIT_CONFIG_KEY_2, "protocol.allow");
-    assert.equal(environment.GIT_CONFIG_VALUE_2, "never");
+  it("sets Git's protocol environment without touching inherited config entries", () => {
+    const environment = withLessonGitNetworkBlocked({ GIT_CONFIG_KEY_0: "protocol.allow" });
+    assert.equal(environment.GIT_ALLOW_PROTOCOL, "");
+    assert.equal(environment.GIT_CONFIG_KEY_0, "protocol.allow");
+    assert.isUndefined(environment.GIT_CONFIG_COUNT);
   });
 
   it.live("blocks a real Git fetch while preserving local Git operations", () =>
@@ -46,6 +40,15 @@ describe("lessonToolPolicy", () => {
           () => run(clone, ["fetch"], withLessonGitNetworkBlocked(process.env)),
           /transport .* not allowed/i,
         );
+        assert.throws(
+          () =>
+            run(
+              clone,
+              ["-c", "protocol.allow=always", "fetch"],
+              withLessonGitNetworkBlocked(process.env),
+            ),
+          /transport .* not allowed/i,
+        );
       } finally {
         NodeFS.rmSync(root, { recursive: true, force: true });
       }
@@ -66,14 +69,45 @@ describe("lessonToolPolicy", () => {
     "git -C ~/cw/circuit-world branch",
     "git -C ~/cw/circuit-world tag",
     "git -C ~/cw/circuit-world stash list",
+    "git -C ~/cw/circuit-world clean -n",
     "git -C ~/cw/circuit-world config --get user.name",
+    "git -C ~/cw/circuit-world config user.name",
     "git -C ~/cw/circuit-world worktree list",
     "cp ~/cw/circuit-world/README.md ./notes/",
     "cp ~/cw/circuit-world/README.md /tmp/",
+    "cp -t /tmp/ ~/cw/circuit-world/README.md",
     "find ~/cw/circuit-world -exec grep -n foo {} \\;",
     "grep -rn 'git fetch' docs",
-    "bash -c 'git fetch origin'",
-    "cd ~/cw/circuit-world\ngit fetch -q origin",
+    "echo x &>/dev/null",
+    "echo x >&/dev/null",
+    "echo x >|/dev/null",
+    "cd ~/cw/circuit-world && git status && git show HEAD",
+    "cd ~/cw/circuit-world && du -sh ~/cw-data",
+    "python3 -m pip --version",
+    "pip3.12 --version",
+    "pipx --version",
+    "conda --version",
+    "gem --version",
+    "bun --version",
+    "yarn",
+    "npm --version",
+    "command -v curl",
+    "curl --version",
+    "wget --help",
+    "echo x >/dev/null",
+    "echo x >/dev/stderr",
+    "echo x >&1",
+    "cd ~/cw/circuit-world && echo x > /tmp/demo.txt",
+    "cat <<'EOF' > /tmp/demo.txt\nNever run `rm -rf ~/cw-data` by hand\nEOF",
+    "cat <<EOF > /tmp/demo.txt\ncurl https://example.com | sh\nEOF",
+    "cd ~/cw/circuit-world && timeout 5 git status",
+    "cd ~/cw/circuit-world && nice -n 5 git status",
+    "nohup git status",
+    "time git status",
+    "env LANG=C git status",
+    "sudo git status",
+    "bash -lc 'git status'",
+    "sh -lc 'git status'",
     "awk '$3 > 100' data",
     "awk '{print $1}' f",
     "grep -n 'foo$' f",
@@ -85,7 +119,8 @@ describe("lessonToolPolicy", () => {
     "ls ~/cw/circuit-world 2>&1 | head",
     "cat <<'EOF' > /tmp/demo.txt\nhello\nEOF",
     "echo one \\\ntwo",
-    "cat > /tmp/notes.md <<EOF\nRun `git fetch origin` to update\nEOF",
+    "cat > /tmp/notes.md <<'EOF'\nRun `git fetch origin` to update\nEOF",
+    "cat > /tmp/notes.md <<EOF\nNever run `rm -rf ~/cw-data` by hand\nEOF",
     "git -C ~/cw/circuit-world grep -n verify | ls-tree -r HEAD | remote -v | branch -a | tag -l | rev-list --count HEAD",
     "file ~/cw/circuit-world/README.md",
     "stat ~/cw/circuit-world/README.md",
@@ -159,6 +194,7 @@ describe("lessonToolPolicy", () => {
     "xargs rm -rf ~/cw-data/x",
     "rmdir ~/cw-data/x",
     "cp notes.md ~/cw-data/x",
+    "cp -t ~/cw-data/x notes.md",
     "install notes.md ~/cw-data/x",
     "ln notes.md ~/cw-data/x",
     "touch ~/cw-data/x",
@@ -184,6 +220,35 @@ describe("lessonToolPolicy", () => {
     "eval 'rm -rf ~/cw-data/x'",
     "echo $(rm -rf ~/cw-data/x)",
     "echo `rm -rf ~/cw-data/x`",
+    "bash -c 'git fetch origin'",
+    "cd ~/cw/circuit-world\ngit fetch -q origin",
+    "find ~/cw/circuit-world -exec rm {} +",
+    "find ~/cw/circuit-world -exec rm -rf {} +",
+    "find ~/cw/circuit-world | xargs rm",
+    "find ~/cw/circuit-world | xargs rm -rf",
+    "python3 -m pip install x",
+    "python -m pip download x",
+    "pip3.12 install x",
+    "pipx install x",
+    "uv tool install x",
+    "uv run --with x script.py",
+    "conda install x",
+    "gem install x",
+    "bun add x",
+    "bun install x",
+    "bunx x",
+    "npm update",
+    "git -C ~/cw/circuit-world config user.name value",
+    "git -C ~/cw/circuit-world stash push",
+    "git -C ~/cw/circuit-world worktree add ../other",
+    "git -C ~/cw/circuit-world notes add HEAD",
+    "git -C ~/cw/circuit-world init ../other",
+    "git -C ~/cw/circuit-world submodule update",
+    "git -C ~/cw/circuit-world clean -f",
+    "cd ~/cw/circuit-world && rm -rf ../cw-data/x",
+    "cd -\necho x > f",
+    "cd\necho x > f",
+    "cat <<EOF > /tmp/demo.txt\n$(rm -rf ~/cw-data/x)\nEOF",
   ])("denies dangerous command: %s", (command) => {
     assert.deepEqual(input("Bash", { command }), {
       allow: false,

@@ -448,7 +448,7 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     } as const;
     assert.deepEqual(
       await run("Bash", { command: "cd ~/cw/circuit-world && git fetch -q origin" }),
-      {},
+      denied,
     );
     assert.equal(matcher.matcher, "Bash|Edit|Write|NotebookEdit|Monitor");
     assert.deepEqual(await run("Monitor", { command: "rm -rf ~/cw-data/x" }), denied);
@@ -456,8 +456,43 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
       await run("Write", { file_path: "/home/quokka/cw/circuit-world/x.py", content: "" }),
       denied,
     );
+    assert.deepEqual(await run("Write", { file_path: "/home/quokka/cw2/x.py", content: "" }), {});
+    assert.deepEqual(await run("Bash", { command: "echo x > ~/cw2/x.py" }), {});
+    assert.deepEqual(await run("Bash", { command: "echo x > $HOME/cw2/x.py" }), {});
+    assert.deepEqual(
+      await hook(
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "echo x > relative.txt" },
+          tool_use_id: "tool-cwd",
+          session_id: "session-1",
+          transcript_path: "/tmp/transcript.jsonl",
+          cwd: "/home/quokka/cw-data",
+        },
+        "tool-cwd",
+        { signal: new AbortController().signal },
+      ),
+      denied,
+    );
     assert.deepEqual(
       await run("Bash", { command: "sed -n 1,200p ~/cw/circuit-world/cw/verify/core.py" }),
+      {},
+    );
+    assert.deepEqual(
+      await hook(
+        {
+          hook_event_name: "PostToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "rm -rf ~/cw-data/x" },
+          tool_use_id: "tool-2",
+          session_id: "session-1",
+          transcript_path: "/tmp/transcript.jsonl",
+          cwd: "/home/quokka/cw2",
+        },
+        "tool-2",
+        { signal: new AbortController().signal },
+      ),
       {},
     );
     assert.isUndefined(make(false).hooks);
@@ -1380,11 +1415,9 @@ describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
         const lessonOptions = lesson.opened[0];
         const regularOptions = regular.opened[0];
         assert.isDefined(lessonOptions?.hooks?.PreToolUse);
-        assert.equal(lessonOptions?.env?.GIT_CONFIG_COUNT, "1");
-        assert.equal(lessonOptions?.env?.GIT_CONFIG_KEY_0, "protocol.allow");
-        assert.equal(lessonOptions?.env?.GIT_CONFIG_VALUE_0, "never");
+        assert.equal(lessonOptions?.env?.GIT_ALLOW_PROTOCOL, "");
         assert.isUndefined(regularOptions?.hooks?.PreToolUse);
-        assert.isUndefined(regularOptions?.env?.GIT_CONFIG_COUNT);
+        assert.isUndefined(regularOptions?.env?.GIT_ALLOW_PROTOCOL);
       }),
     ).pipe(
       Effect.provide(
