@@ -108,9 +108,8 @@ export const coverageTokens = (value: string) =>
     .filter((token) => token.length >= 4 || /\d/u.test(token));
 
 export function replyCoverage(text: string, reply: string): number {
-  const tokens = coverageTokens;
-  const replyTokens = new Set(tokens(reply));
-  const textTokens = tokens(text);
+  const replyTokens = new Set(coverageTokens(reply));
+  const textTokens = coverageTokens(text);
   return (
     textTokens.filter((token) => replyTokens.has(token)).length / Math.max(1, textTokens.length)
   );

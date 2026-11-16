@@ -4733,6 +4733,16 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       tool: "mcp__t3-code__question_card",
       reply: "Try it.",
       lesson: true,
+      heldText:
+        "**My own answer, for grading:**\n- 20 N, since friction balances the push.\n\nFriction opposes sliding.",
+      thinking: "I'll prepare the card.",
+      shownText: ["Friction opposes sliding."],
+      expected: ["reasoning", "reasoning", "assistant_message"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
       heldText: "**My own answer, for grading:** 20 N.\nFriction opposes sliding.",
       thinking: "I'll prepare the card.",
       shownText: ["Friction opposes sliding."],

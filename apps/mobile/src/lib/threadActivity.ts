@@ -1465,6 +1465,7 @@ interface ThreadFeedPresentationBuild {
   readonly activeWorkStartedAt: string | null;
   readonly runlessWorkActive: boolean;
   readonly display: ThreadFeedDisplay;
+  readonly lesson: boolean;
   readonly rows: ReadonlyArray<ThreadFeedEntry>;
   /** Feed entry `entry` is a user message whose rows start at `rowsLength`. */
   readonly restarts: ReadonlyArray<{ readonly entry: number; readonly rowsLength: number }>;
@@ -1509,12 +1510,14 @@ function presentationRestart(
   activeWorkStartedAt: string | null,
   runlessWorkActive: boolean,
   display: ThreadFeedDisplay,
+  lesson: boolean,
 ): { readonly entry: number; readonly rowsLength: number; readonly index: number } | null {
   if (
     previous === null ||
     !latestRunsEqual(previous.latestRun, latestRun) ||
     previous.activeWorkStartedAt !== activeWorkStartedAt ||
     previous.runlessWorkActive !== runlessWorkActive ||
+    previous.lesson !== lesson ||
     previous.display.toolCallVisibility !== display.toolCallVisibility ||
     previous.display.revealedMessageId !== display.revealedMessageId ||
     !setsEqual(previous.expandedRunIds, expandedRunIds) ||
@@ -1693,6 +1696,7 @@ export function deriveThreadFeedPresentation(
     activeWorkStartedAt,
     runlessWorkActive,
     display,
+    lesson,
   );
   const start = restart?.entry ?? 0;
   const result: ThreadFeedEntry[] =
@@ -2001,6 +2005,7 @@ export function deriveThreadFeedPresentation(
       activeWorkStartedAt,
       runlessWorkActive,
       display,
+      lesson,
       rows: result,
       restarts: cleanRestarts,
       firstEntryByRun,

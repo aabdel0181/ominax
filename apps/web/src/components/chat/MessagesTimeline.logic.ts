@@ -282,7 +282,7 @@ export function workEntryIsVisibleInGroup(
   showEmptyReasoning = false,
 ): boolean {
   if (entry.itemType === "reasoning") {
-    return showEmptyReasoning && entry.detail === undefined ? true : Boolean(entry.detail?.trim());
+    return (showEmptyReasoning && entry.detail === undefined) || Boolean(entry.detail?.trim());
   }
   return (
     (expandedToolGroupEntry &&

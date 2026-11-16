@@ -2663,9 +2663,19 @@ const LESSON_COMMITMENT =
 
 // The tutor's private answer for grading never shows (APP-124: Haiku printed it).
 function withoutLessonCommitment(text: string) {
+  // A bare header ("My own answer, for grading:") owns the lines under it until a blank line.
+  let underHeader = false;
   return text
     .split("\n")
-    .filter((line) => !LESSON_COMMITMENT.test(line))
+    .filter((line) => {
+      if (line.trim() === "") underHeader = false;
+      const match = LESSON_COMMITMENT.exec(line);
+      if (match !== null) {
+        underHeader = line.slice(match[0].length).replace(/[*_\s]/gu, "") === "";
+        return false;
+      }
+      return !underHeader;
+    })
     .join("\n")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();
@@ -2688,7 +2698,7 @@ function stripCardReplyCoveredSentences(
       if (line.trimStart().startsWith("```")) inCode = !inCode;
       if (inCode || line.trimStart().startsWith("```")) return line;
       return line
-        .split(/(?<=[.!?])\s+/u)
+        .split(/(?<=[^\s\d][.!?])\s+/u)
         .filter(
           (sentence) =>
             coverageTokens(sentence).length < 5 || replyCoverage(sentence, covered) < 0.8,
