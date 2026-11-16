@@ -312,11 +312,18 @@ const handlers = {
           OrchestratorMcpService.stableThreadId({ scope, requestKey: clientRequestId, index: 0 }),
         )
         .pipe(Effect.mapError(fail));
+      // Unattended, so an approval prompt would stall it; it reads third-party scans, so never full access.
+      const { limits } = yield* loadCaller();
       yield* (yield* OrchestratorMcpService.OrchestratorMcpService)
         .createThreads(scope, {
           clientRequestId,
-          // No runtimeMode: the prep thread runs unattended in the lesson's mode, since approval prompts stall it.
-          threads: [{ title, prompt }],
+          threads: [
+            {
+              title,
+              prompt,
+              ...(limits.runtimeMode === "full-access" ? { runtimeMode: "auto" as const } : {}),
+            },
+          ],
         })
         .pipe(Effect.mapError(fail));
       return { started: true, units, message: COURSE_PROGRESS_NOTE };
