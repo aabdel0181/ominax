@@ -30,7 +30,7 @@ const QUESTION_CARD_SHOWN =
 
 // "Checking one thing in the code: …" says what the tutor is doing, not what the learner got right (APP-130).
 const STATUS_LINE =
-  /^(?:checking|reading|looking (?:at|into|up)|searching|opening|loading|fetching|running|let me (?:check|look|read|see))\b[^\n]*$/iu;
+  /^(?:checking|reading|looking (?:at|into|up)|searching|opening|loading|fetching|running|let me (?:check|look|read|see))\b(?:(?!\b(?:right|wrong|correct|incorrect|yes|no)\b)[^\n])*$/iu;
 
 // Card replies are appended after other messages and queued sends sit in delivery order, so sort by time.
 export const shownTutorText = (
@@ -70,7 +70,7 @@ export const shownTutorText = (
       visibleSinceAnswer = true;
     // The verdict doesn't count as teaching, but its text is still on screen.
     let verdictLength = 0;
-    if (verdictPending && !/:reply$/u.test(message.id)) {
+    if (verdictPending && !/:reply$/u.test(message.id) && !STATUS_LINE.test(message.text.trim())) {
       verdictLength = cardAnswerVerdictLength(message.text);
       verdictPending = false;
     }

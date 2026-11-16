@@ -73,6 +73,20 @@ describe("quiz card reply visibility", () => {
       answeredCard: true,
       visibleSinceAnswer: false,
     });
+    const verdict = "v".repeat(198);
+    expect(
+      shownTutorText([
+        at(26, "user", answer),
+        at(30, "assistant", status),
+        at(36, "assistant", verdict),
+      ]),
+    ).toMatchObject({ count: status.length, visibleSinceAnswer: true });
+    expect(
+      shownTutorText([
+        at(26, "user", answer),
+        at(36, "assistant", "Let me see: yes, that's right."),
+      ]),
+    ).toMatchObject({ visibleSinceAnswer: true });
   });
 
   it("does not count a card reply as visible text after an answer", () => {

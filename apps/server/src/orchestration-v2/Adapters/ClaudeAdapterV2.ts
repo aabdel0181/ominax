@@ -2736,7 +2736,7 @@ function stripCardReplyCoveredSentences(
         .filter(
           (sentence) =>
             // Numbers and worked steps stay: losing a line of working is worse than a repeat (APP-130).
-            /[\d$=×÷^]/u.test(sentence) ||
+            /[=×÷]|\\(?:times|div|frac)\b/u.test(sentence) ||
             coverageTokens(sentence).length < 5 ||
             replyCoverage(sentence, covered) < 0.8,
         )

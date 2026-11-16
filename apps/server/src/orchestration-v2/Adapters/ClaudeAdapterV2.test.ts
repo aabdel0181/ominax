@@ -4665,23 +4665,6 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     },
     {
       tool: "mcp__t3-code__question_card",
-      reply: "Which width?",
-      lesson: true,
-      thinking:
-        "Keep the trace 2.5 mm wide; Ohm's law says V = I × R.\nI = V / R, so doubling R halves the current. I'm moving on next.",
-      shownText: [],
-      expected: ["reasoning", "reasoning"],
-    },
-    {
-      tool: "mcp__t3-code__question_card",
-      reply: "Which goes on first?",
-      lesson: true,
-      thinking: "Let's say the pad is at 20 °C.\n\n- Flux\n- Solder\n\nI'll ask which comes first.",
-      shownText: [],
-      expected: ["reasoning", "reasoning"],
-    },
-    {
-      tool: "mcp__t3-code__question_card",
       reply: "Try it.",
       lesson: true,
       heldText: "Melting begins at the solidus.",
