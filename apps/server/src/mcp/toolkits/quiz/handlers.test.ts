@@ -7,7 +7,10 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Fiber from "effect/Fiber";
+import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { describe, expect, it } from "@effect/vitest";
 
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -46,13 +49,27 @@ describe("quiz card reply visibility", () => {
       "message:provider:claudeAgent:native-item:msg_011CgpYTQZCUAf5iyjZ9S6jP%3Athinking%3A1",
     );
     const outline = at(40, "assistant", "o".repeat(400), "toolu_2:outline");
-    expect(shownTutorText([at(26, "user", "answer"), thinking, outline]).count).toBe(0);
+    expect(shownTutorText([at(26, "user", "answer"), thinking, outline])).toMatchObject({
+      count: 0,
+      visibleSinceAnswer: false,
+    });
   });
 
   it("does not count a verdict paragraph after a card answer", () => {
     const verdict = "v".repeat(198);
     const answer = "The water beads on wax.\n\n(card card-1)";
-    expect(shownTutorText([at(26, "user", answer), at(36, "assistant", verdict)]).count).toBe(0);
+    expect(shownTutorText([at(26, "user", answer), at(36, "assistant", verdict)])).toMatchObject({
+      count: 0,
+      answeredCard: true,
+      visibleSinceAnswer: true,
+    });
+  });
+
+  it("does not count a card reply as visible text after an answer", () => {
+    const answer = "The water beads on wax.\n\n(card card-1)";
+    expect(
+      shownTutorText([at(26, "user", answer), at(30, "assistant", "teaching", "card-1:reply")]),
+    ).toMatchObject({ count: "teaching".length, visibleSinceAnswer: false });
   });
 
   it("counts teaching after the verdict paragraph", () => {
@@ -106,6 +123,7 @@ it.effect("folds source into both returned card replies", () =>
         reply: "x".repeat(1990),
         source: "grader/bank/compose.py; docs/grading.md is out of date",
         purpose: "opening-check",
+        verdict: "That is right because the units match.",
         answer: "A",
         explanation: "Because",
         level: "apply",
@@ -118,7 +136,7 @@ it.effect("folds source into both returned card replies", () =>
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(quizResult.at(-1)?.result).toMatchObject({
       quizCard: {
-        reply: `${"x".repeat(1990)}\n\nSource: grader/bank/compose.py; docs/grading.md is out of date`,
+        reply: `That is right because the units match.\n\n${"x".repeat(1990)}\n\nSource: grader/bank/compose.py; docs/grading.md is out of date`,
       },
     });
     const questionResult = yield* toolkit
@@ -126,11 +144,12 @@ it.effect("folds source into both returned card replies", () =>
         reply: "x".repeat(250),
         source: "",
         purpose: "opening-check",
+        verdict: "Right.",
         question: "Why?",
       })
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(questionResult.at(-1)?.result).toMatchObject({
-      questionCard: { reply: "x".repeat(250) },
+      questionCard: { reply: `Right.\n\n${"x".repeat(250)}` },
     });
   }).pipe(
     Effect.provide(
@@ -152,9 +171,13 @@ it.effect("folds source into both returned card replies", () =>
             const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
             return Effect.succeed(shell);
           },
+          // The learner just answered a card and no verdict is visible, so `verdict` is required.
           getProjectThreadRecords: () => {
             const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
-            return Effect.succeed(McpToolAccessTestkit.idleThreadProjection(shell));
+            return Effect.succeed({
+              ...McpToolAccessTestkit.idleThreadProjection(shell),
+              messages: [at(26, "user", "A\n\n(card card-1)")],
+            } as unknown as OrchestrationV2ThreadProjection);
           },
         }),
       ),
@@ -199,13 +222,15 @@ it.effect("refuses an answer stated since the learner's last message only", () =
         { option: "another", wrongIdea: "Another mistake" },
       ],
     };
-    const refused = yield* toolkit
+    const refusing = yield* toolkit
       .handle("quiz_card", {
         ...card,
         reply: "Friction matches the push it opposes, so a 20 N push means 20 N of friction.",
         answer: "20 N",
       })
-      .pipe(Stream.unwrap, Stream.runCollect);
+      .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+    yield* TestClock.adjust("1 second");
+    const refused = yield* Fiber.join(refusing);
     expect(refused.at(-1)?.result).toMatchObject({
       code: "invalid_request",
       message: "The answer is stated just above; pose a new case that needs one more step.",
@@ -220,6 +245,11 @@ it.effect("refuses an answer stated since the learner's last message only", () =
       .handle("quiz_card", { ...card, answer: "Right" })
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(commonWord.at(-1)?.result).toMatchObject({ quizCard: { answer: "Right" } });
+
+    const verdictAlreadyShown = yield* toolkit
+      .handle("quiz_card", { ...card, verdict: "Correct, 20 N." })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(verdictAlreadyShown.at(-1)?.result).toMatchObject({ quizCard: { reply: card.reply } });
 
     const verdictNumber = yield* toolkit
       .handle("quiz_card", { ...card, reply: "x".repeat(250), answer: "20 N" })
@@ -249,3 +279,57 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     ),
   );
 });
+
+it.effect(
+  "reads the thread again before refusing, since Claude's text before a card lands late",
+  () => {
+    const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
+    const projection = McpToolAccessTestkit.idleThreadProjection(shell);
+    const answer = at(26, "user", "It slows down.\n\n(card card-1)");
+    const verdict = at(30, "assistant", "Half right: friction slows it, but gravity does not.");
+    return Effect.gen(function* () {
+      const reads = yield* Ref.make(0);
+      const showCard = Effect.gen(function* () {
+        const toolkit = yield* QuizToolkit;
+        return yield* toolkit
+          .handle("question_card", { reply: "x".repeat(250), source: "", question: "Why?" })
+          .pipe(Stream.unwrap, Stream.runCollect);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            McpToolAccess.HandlersLayer.layer(QuizHandlers.layer),
+            Layer.succeed(McpInvocationContext.McpInvocationContext, {
+              environmentId: EnvironmentId.make("quiz-handler-environment"),
+              requestNamespace: "quiz-handler-provider-session",
+              thread: {
+                threadId: ThreadId.make("quiz-handler-test"),
+                providerSessionId: "quiz-handler-provider-session",
+                providerInstanceId: ProviderInstanceId.make("codex"),
+              },
+              client: undefined,
+              capabilities: new Set(["orchestration" as const]),
+              issuedAt: 0,
+            }),
+            Layer.mock(ThreadManagement.ThreadManagementService)({
+              getThreadShell: () => Effect.succeed(shell),
+              getProjectThreadRecords: () =>
+                Ref.getAndUpdate(reads, (n) => n + 1).pipe(
+                  Effect.map(
+                    (n) =>
+                      ({
+                        ...projection,
+                        messages: n === 0 ? [answer] : [answer, verdict],
+                      }) as unknown as OrchestrationV2ThreadProjection,
+                  ),
+                ),
+            }),
+          ),
+        ),
+      );
+      const showing = yield* showCard.pipe(Effect.forkChild({ startImmediately: true }));
+      yield* TestClock.adjust("1 second");
+      const shown = yield* Fiber.join(showing);
+      expect(shown.at(-1)?.result).toMatchObject({ questionCard: { question: "Why?" } });
+    });
+  },
+);

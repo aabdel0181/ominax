@@ -6,15 +6,27 @@ export const MIN_CARD_REPLY_CHARS = 250;
 
 export type CardPurpose = "opening-check" | "explain-back";
 
+// Phrases that point at teaching earlier in this turn; refused when nothing visible was taught yet.
+const POINTS_BACK =
+  /\bI (?:just|already) (?:gave|defined|showed|explained|described|covered)\b|\b(?:defined|given|shown|explained) (?:just )?above\b/iu;
+
 export function cardReplyProblem(input: {
   readonly reply: string;
   readonly purpose?: CardPurpose | undefined;
   readonly shownBefore: number;
   readonly shownText?: string;
+  readonly answeredCard?: boolean;
+  readonly visibleSinceAnswer?: boolean;
+  readonly verdict?: string | undefined;
   /** A quiz answer, or a number card's "<answer> <unit>"; checked only when it holds a digit. */
   readonly answer?: string;
 }): string | undefined {
+  if (input.answeredCard && !input.visibleSinceAnswer && !input.verdict?.trim()) {
+    return "The learner's last message answered a card, and no verdict on it is visible; they never see your thinking. Put your verdict on that answer (right or wrong, and why, in a line or two) in verdict, then call the card again.";
+  }
   if (input.purpose !== undefined) return undefined;
+  if (input.shownBefore === 0 && POINTS_BACK.test(input.reply))
+    return "Your reply points back to something, but nothing has been taught visibly since the learner's last message, and they never see your thinking or tool output. Write those facts out in reply, defining each term, then call the card again.";
   const visible = `${input.reply}\n${input.shownText ?? ""}`;
   const normalized = (value: string) => value.trim().replace(/\s+/gu, " ");
   const meaningful = (answer: string) => answer.length >= 3 && answer !== "0" && answer !== "1";
@@ -31,6 +43,15 @@ export function cardReplyProblem(input: {
     return "The answer is stated just above; pose a new case that needs one more step.";
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
+}
+
+export function explainBackClaimsProblem(
+  claims: ReadonlyArray<{ readonly claim: string; readonly holds: boolean }>,
+): string | undefined {
+  const wrong = claims.filter((claim) => !claim.holds).map((claim) => claim.claim.trim());
+  return wrong.length === 0
+    ? undefined
+    : `Not saved: these claims don't hold: ${wrong.join("; ")}. Tell the learner plainly what is wrong, fix it briefly, and ask once more through question_card.`;
 }
 
 export interface QuestionCard {
@@ -56,7 +77,7 @@ export type LessonCard = QuizCard | QuestionCard;
 
 const MAX_ANSWER = 300;
 const MAX_QUESTION = 2000;
-const MAX_REPLY = 2510;
+const MAX_REPLY = 3200;
 const MAX_OPTION = 300;
 const MAX_WRONG_IDEA = 500;
 const MAX_EXPLANATION = 1500;
@@ -74,9 +95,10 @@ const boundedString = (value: unknown, max: number) =>
     ? value.trim()
     : undefined;
 
-export function foldCardReply(reply: string, source: string) {
+export function foldCardReply(reply: string, source: string, verdict?: string) {
+  const shownReply = verdict?.trim() ? `${verdict.trim()}\n\n${reply.trim()}` : reply.trim();
   const trimmedSource = source.trim();
-  return trimmedSource === "" ? reply.trim() : `${reply.trim()}\n\nSource: ${trimmedSource}`;
+  return trimmedSource === "" ? shownReply : `${shownReply}\n\nSource: ${trimmedSource}`;
 }
 
 export function replyCoverage(text: string, reply: string): number {

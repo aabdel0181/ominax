@@ -10,10 +10,15 @@ import { McpSchema, Tool, Toolkit } from "effect/ai";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 
-// First, so the model writes the reply before the question.
+const verdict = Schema.optional(
+  Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(600)).annotate({
+    description:
+      "Your verdict on the card the learner just answered (right or wrong, and why, in a line or two), shown first above this card. Required when their last message answered a card and you have not already given the verdict as visible text this turn; leave it out otherwise. It does not count as this card's teaching.",
+  }),
+);
 const reply = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(2000)).annotate({
   description:
-    "Your words to the learner, shown as your message text just above the card; they never see your thinking. A short reply is refused unless purpose is set. When a picture is owed, give the verdict in visible text first; keep this card's reply for its new teaching. Otherwise, the reply must teach what this card tests with its facts (rules, numbers, definitions) written out here, never just a pointer to a table or text above. When purpose is set, the reply may be one short framing sentence.",
+    'Your words to the learner, shown as your message text just above the card; they never see your thinking. A short reply is refused unless purpose is set. When a picture is owed, give the verdict in visible text first; keep this card\'s reply for its new teaching. Otherwise, the reply must teach what this card tests with its facts (rules, numbers, definitions) written out here, never just a pointer to a table or text above. Point back ("defined above", "recall") only to words already in your visible messages; anything only in your thinking or tool output is new to the learner, so write it out and define its terms here. When purpose is set, the reply may be one short framing sentence.',
 });
 const source = Schema.String.pipe(Schema.check(Schema.isMaxLength(500))).annotate({
   description:
@@ -25,6 +30,7 @@ const purpose = Schema.Literals(["opening-check", "explain-back"]).annotate({
 });
 
 export const QuizCardInput = Schema.Struct({
+  verdict,
   reply,
   source,
   purpose: Schema.optional(purpose),
@@ -66,6 +72,7 @@ const QuizCardTool = Tool.make(QUIZ_CARD_TOOL_NAME, {
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 export const QuestionCardInput = Schema.Struct({
+  verdict,
   reply,
   source,
   purpose: Schema.optional(purpose),

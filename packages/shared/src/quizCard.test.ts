@@ -3,6 +3,7 @@ import * as DateTime from "effect/DateTime";
 import {
   answeredCardAnswers,
   cardReplyProblem,
+  explainBackClaimsProblem,
   foldCardReply,
   MIN_CARD_REPLY_CHARS,
   blankAnswerRight,
@@ -107,6 +108,56 @@ describe("quiz cards", () => {
     expect(cardReplyProblem({ reply: "x".repeat(250), shownBefore: 0 })).toBeUndefined();
     expect(
       cardReplyProblem({ reply: "Short.", purpose: "opening-check", shownBefore: 0 }),
+    ).toBeUndefined();
+  });
+  it("requires a visible verdict after an answered card", () => {
+    expect(
+      cardReplyProblem({
+        reply: "Short.",
+        purpose: "opening-check",
+        shownBefore: 0,
+        answeredCard: true,
+        visibleSinceAnswer: false,
+      }),
+    ).toMatch(/no verdict/u);
+    expect(
+      cardReplyProblem({
+        reply: "Short.",
+        purpose: "opening-check",
+        shownBefore: 0,
+        answeredCard: true,
+        visibleSinceAnswer: false,
+        verdict: "That is right because the units match.",
+      }),
+    ).toBeUndefined();
+    expect(
+      cardReplyProblem({
+        reply: "Short.",
+        shownBefore: 0,
+        answeredCard: true,
+        visibleSinceAnswer: true,
+      }),
+    ).toBeDefined();
+    expect(cardReplyProblem({ reply: "Short.", shownBefore: 0 })).toBeDefined();
+  });
+  it("refuses a reply that points back when nothing was taught visibly this turn", () => {
+    const pointsBack = `Use the weights and band formulas I just gave: Q is the weighted average. ${"x".repeat(250)}`;
+    expect(cardReplyProblem({ reply: pointsBack, shownBefore: 0 })).toMatch(/points back/u);
+    expect(cardReplyProblem({ reply: pointsBack, shownBefore: 300 })).toBeUndefined();
+    expect(
+      cardReplyProblem({
+        reply: `Q is the weighted average defined above. ${"x".repeat(250)}`,
+        shownBefore: 0,
+      }),
+    ).toMatch(/points back/u);
+    expect(
+      cardReplyProblem({
+        reply: `Recall the force diagram we drew last time. ${"x".repeat(250)}`,
+        shownBefore: 0,
+      }),
+    ).toBeUndefined();
+    expect(
+      cardReplyProblem({ reply: `I recall nothing odd. ${"x".repeat(250)}`, shownBefore: 0 }),
     ).toBeUndefined();
   });
   it("refuses answers repeated in the visible teaching", () => {
@@ -258,6 +309,17 @@ describe("quiz cards", () => {
     expect(foldCardReply(reply, source)).toBe(
       source === "" ? reply : `${reply}\n\nSource: ${source}`,
     );
+  });
+  it("puts a verdict before teaching and source", () => {
+    expect(foldCardReply("The teaching.", "grader.py", "That is right.")).toBe(
+      "That is right.\n\nThe teaching.\n\nSource: grader.py",
+    );
+  });
+  it("refuses explain-back claims that do not hold", () => {
+    expect(explainBackClaimsProblem([{ claim: "A wrong claim", holds: false }])).toContain(
+      "A wrong claim",
+    );
+    expect(explainBackClaimsProblem([{ claim: "A right claim", holds: true }])).toBeUndefined();
   });
   it("reads a card whose reply uses the full source allowance", () => {
     const reply = foldCardReply("r".repeat(2000), "s".repeat(500));

@@ -76,6 +76,7 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeUtil from "node:util";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import {
+  cardAnswerVerdictLength,
   QUESTION_CARD_TOOL_NAME,
   QUIZ_CARD_TOOL_NAME,
   replyCoverage,
@@ -2562,12 +2563,14 @@ function isLessonCardAnswerTurn(input: ProviderAdapter.ProviderAdapterV2TurnInpu
   return isLessonTurn(input) && withoutCardAnswerTag(input.message.text) !== input.message.text;
 }
 
-// A lesson card whose reply already says this text shows it once, as the reply (APP-102).
+// A lesson card whose reply or verdict already says this text shows it once, on the card (APP-102).
 function cardReplyRepeats(block: { readonly name: string; readonly input: unknown }, text: string) {
   if (!isLessonCardTool(block.name)) return false;
-  const reply = (block.input as { readonly reply?: unknown } | null)?.reply;
+  const input = block.input as { readonly reply?: unknown; readonly verdict?: unknown } | null;
   const words = (value: string) => value.replace(/\s+/gu, " ").trim();
-  return typeof reply === "string" && words(reply).includes(words(text));
+  return [input?.verdict, input?.reply].some(
+    (shown) => typeof shown === "string" && words(shown).includes(words(text)),
+  );
 }
 
 function cardReplyCoversLead(
@@ -9195,7 +9198,25 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             return;
           }
           if (isLessonCardTool(block.name)) {
-            for (const item of held) {
+            // A card that carries its own verdict shows it, so the held verdict paragraph would repeat it.
+            const verdict = (block.input as { readonly verdict?: unknown } | null)?.verdict;
+            let dropVerdict =
+              typeof verdict === "string" &&
+              verdict.trim() !== "" &&
+              isLessonCardAnswerTurn(context.input) &&
+              context.assistant.emittedNativeItemIds.size === 0;
+            for (const original of held) {
+              const item = dropVerdict
+                ? {
+                    ...original,
+                    text: original.text.slice(cardAnswerVerdictLength(original.text)).trim(),
+                  }
+                : original;
+              dropVerdict = false;
+              if (item.text === "") {
+                yield* emitHeldAssistantTextItemAsReasoning(context, original);
+                continue;
+              }
               const remainder = cardReplyCoversLead(block, item.text);
               if (cardReplyRepeats(block, item.text) || remainder === "") {
                 yield* emitHeldAssistantTextItemAsReasoning(context, item);
