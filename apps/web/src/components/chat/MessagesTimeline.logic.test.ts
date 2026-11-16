@@ -62,6 +62,86 @@ describe("resolveAssistantMessageCopyState", () => {
 });
 
 describe("deriveMessagesTimelineRows", () => {
+  it("hides reasoning text in lessons while keeping it in coding threads", () => {
+    const reasoning: TimelineEntry = {
+      kind: "work",
+      id: "reasoning",
+      createdAt: "2026-01-01T00:00:00Z",
+      entry: {
+        id: "reasoning",
+        runId: RunId.make("run"),
+        createdAt: "2026-01-01T00:00:00Z",
+        itemType: "reasoning",
+        label: "Friction at 30 N",
+        tone: "thinking",
+        detail: "The private answer is 30 N.",
+        toolLifecycleStatus: "inProgress",
+      },
+    };
+    const input = {
+      timelineEntries: [
+        reasoning,
+        {
+          kind: "message" as const,
+          id: "answer",
+          createdAt: "2026-01-01T00:00:01Z",
+          message: {
+            id: MessageId.make("answer"),
+            role: "assistant" as const,
+            text: "Here is the answer.",
+            runId: RunId.make("run"),
+            createdAt: "2026-01-01T00:00:01Z",
+            updatedAt: "2026-01-01T00:00:01Z",
+            streaming: false,
+          },
+        },
+        {
+          kind: "work" as const,
+          id: "tool",
+          createdAt: "2026-01-01T00:00:02Z",
+          entry: {
+            id: "tool",
+            runId: RunId.make("run"),
+            createdAt: "2026-01-01T00:00:02Z",
+            itemType: "command_execution" as const,
+            label: "Running a check",
+            tone: "tool" as const,
+            toolLifecycleStatus: "inProgress" as const,
+          },
+        },
+        {
+          kind: "quiz-card" as const,
+          id: "card",
+          createdAt: "2026-01-01T00:00:03Z",
+          runId: RunId.make("run"),
+          quizCard: { question: "What is the answer?" },
+        },
+      ] as TimelineEntry[],
+      expandedRunIds: new Set([RunId.make("run")]),
+      isWorking: true,
+      runningRunId: RunId.make("run"),
+      activeTurnStartedAt: null,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    };
+    const detail = (lesson: boolean) =>
+      deriveMessagesTimelineRows({ ...input, lesson }).flatMap((row) =>
+        row.kind === "work"
+          ? row.groupedEntries
+              .filter((entry) => entry.itemType === "reasoning")
+              .flatMap((entry) => [entry.detail ?? null, entry.label])
+          : row.kind === "work-live"
+            ? row.groupedEntries
+                .filter((entry) => entry.itemType === "reasoning")
+                .flatMap((entry) => [entry.detail ?? null, entry.label])
+            : [],
+      );
+    expect(detail(false)).toEqual(["The private answer is 30 N.", "Friction at 30 N"]);
+    expect(JSON.stringify(deriveMessagesTimelineRows({ ...input, lesson: true }))).not.toMatch(
+      /30 N/,
+    );
+  });
+
   it.each([
     ["html-render", "reply-run", true],
     ["mcp-app", "reply-run", true],

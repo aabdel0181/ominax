@@ -1427,6 +1427,36 @@ function settleSupersededReasoning(
   return settled;
 }
 
+const lessonThoughtGroups = new WeakMap<ThreadFeedEntry, ThreadFeedEntry>();
+
+// A lesson's thoughts can hold the next card's answer, so only "Thinking"/"Thought" shows (APP-124).
+function hideLessonThoughts<T extends ThreadFeedEntry>(entry: T): T {
+  if (entry.type !== "activity-group") return entry;
+  const cached = lessonThoughtGroups.get(entry);
+  if (cached) return cached as T;
+  const activities = entry.activities.map((activity) => {
+    const item = activity.projectedItem.item;
+    if (item.type !== "reasoning") return activity;
+    const { detail: _detail, ...workEntry } = activity.workEntry;
+    const hiddenItem = { ...item, text: "", title: null };
+    return {
+      ...activity,
+      summary: "Thinking",
+      detail: null,
+      canExpand: false,
+      getFullDetail: () => null,
+      getCopyText: () => "Thinking",
+      workEntry: { ...workEntry, label: "Thinking", structuredPayload: hiddenItem },
+      projectedItem: { ...activity.projectedItem, item: hiddenItem },
+    };
+  });
+  const hidden = activities.some((activity, index) => activity !== entry.activities[index])
+    ? { ...entry, activities }
+    : entry;
+  lessonThoughtGroups.set(entry, hidden);
+  return hidden;
+}
+
 interface ThreadFeedPresentationBuild {
   readonly feed: ReadonlyArray<ThreadFeedEntry>;
   readonly latestRun: ThreadFeedLatestRun | null;
@@ -1435,6 +1465,7 @@ interface ThreadFeedPresentationBuild {
   readonly activeWorkStartedAt: string | null;
   readonly runlessWorkActive: boolean;
   readonly display: ThreadFeedDisplay;
+  readonly lesson: boolean;
   readonly rows: ReadonlyArray<ThreadFeedEntry>;
   /** Feed entry `entry` is a user message whose rows start at `rowsLength`. */
   readonly restarts: ReadonlyArray<{ readonly entry: number; readonly rowsLength: number }>;
@@ -1479,12 +1510,14 @@ function presentationRestart(
   activeWorkStartedAt: string | null,
   runlessWorkActive: boolean,
   display: ThreadFeedDisplay,
+  lesson: boolean,
 ): { readonly entry: number; readonly rowsLength: number; readonly index: number } | null {
   if (
     previous === null ||
     !latestRunsEqual(previous.latestRun, latestRun) ||
     previous.activeWorkStartedAt !== activeWorkStartedAt ||
     previous.runlessWorkActive !== runlessWorkActive ||
+    previous.lesson !== lesson ||
     previous.display.toolCallVisibility !== display.toolCallVisibility ||
     previous.display.revealedMessageId !== display.revealedMessageId ||
     !setsEqual(previous.expandedRunIds, expandedRunIds) ||
@@ -1663,6 +1696,7 @@ export function deriveThreadFeedPresentation(
     activeWorkStartedAt,
     runlessWorkActive,
     display,
+    lesson,
   );
   const start = restart?.entry ?? 0;
   const result: ThreadFeedEntry[] =
@@ -1722,9 +1756,10 @@ export function deriveThreadFeedPresentation(
     retainedFeed.push(entry);
     retainedFeedIndices.push(index);
   }
-  const sourceFeed = retainedFeed.map((entry, index) =>
-    settleSupersededReasoning(entry, index === retainedFeed.length - 1),
-  );
+  const sourceFeed = retainedFeed.map((entry, index) => {
+    const settled = settleSupersededReasoning(entry, index === retainedFeed.length - 1);
+    return lesson ? hideLessonThoughts(settled) : settled;
+  });
   const answeredCards = lesson
     ? answeredCardAnswers(
         sourceFeed.flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
@@ -1888,7 +1923,11 @@ export function deriveThreadFeedPresentation(
       thinkingRow(
         activeWorkStartedAt,
         activeRunId,
-        waitingOn > 0 ? waitingOnSubagentsLabel(waitingOn) : zen ? liveAnswerPreview(feed) : null,
+        waitingOn > 0
+          ? waitingOnSubagentsLabel(waitingOn)
+          : zen
+            ? liveAnswerPreview(lesson ? sourceFeed : feed)
+            : null,
         latestRun?.providerStartingLabel,
       ),
     );
@@ -1966,6 +2005,7 @@ export function deriveThreadFeedPresentation(
       activeWorkStartedAt,
       runlessWorkActive,
       display,
+      lesson,
       rows: result,
       restarts: cleanRestarts,
       firstEntryByRun,

@@ -1248,7 +1248,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     providerStartingLabel,
     latestRunId: latestRun?.runId ?? null,
     liveAnswerPreview:
-      isWorking && toolCallVisibility === "zen" ? liveAnswerPreview(timelineEntries) : null,
+      isWorking && toolCallVisibility === "zen" ? liveAnswerPreview(timelineEntries, lesson) : null,
   };
   // Mounted in both the empty and filled timeline so a thread's first turn
   // starts from a baseline instead of a fresh, silent region.

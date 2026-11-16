@@ -77,6 +77,7 @@ import * as NodeUtil from "node:util";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import {
   cardAnswerVerdictLength,
+  coverageTokens,
   QUESTION_CARD_TOOL_NAME,
   QUIZ_CARD_TOOL_NAME,
   replyCoverage,
@@ -2651,6 +2652,59 @@ function stripLessonNarration(text: string) {
         })
         .join(" "),
     )
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+}
+
+// A line like "**My own answer, for grading:** 20 N" is the tutor's private answer.
+const LESSON_COMMITMENT =
+  /^[*_\s]*(?:my own answer,\s*for grading|my answer\s*\(for grading\)|committed answer|answer key)[*_\s]*:/iu;
+
+// The tutor's private answer for grading never shows (APP-124: Haiku printed it).
+function withoutLessonCommitment(text: string) {
+  // A bare header ("My own answer, for grading:") owns the lines under it until a blank line.
+  let underHeader = false;
+  return text
+    .split("\n")
+    .filter((line) => {
+      if (line.trim() === "") underHeader = false;
+      const match = LESSON_COMMITMENT.exec(line);
+      if (match !== null) {
+        underHeader = line.slice(match[0].length).replace(/[*_\s]/gu, "") === "";
+        return false;
+      }
+      return !underHeader;
+    })
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+}
+
+// Drops sentences of held text that the card's reply or verdict already says; code blocks stay whole.
+function stripCardReplyCoveredSentences(
+  block: { readonly name: string; readonly input: unknown },
+  text: string,
+): string {
+  const input = block.input as { readonly reply?: unknown; readonly verdict?: unknown } | null;
+  const covered = [input?.reply, input?.verdict]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
+  if (covered === "") return text;
+  let inCode = false;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (line.trimStart().startsWith("```")) inCode = !inCode;
+      if (inCode || line.trimStart().startsWith("```")) return line;
+      return line
+        .split(/(?<=[^\s\d][.!?])\s+/u)
+        .filter(
+          (sentence) =>
+            coverageTokens(sentence).length < 5 || replyCoverage(sentence, covered) < 0.8,
+        )
+        .join(" ");
+    })
     .join("\n")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();
@@ -9124,7 +9178,16 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           context: ActiveClaudeTurnContext,
         ) {
           for (const item of context.assistant.heldText) {
-            yield* emitAssistantTextArtifacts({ context, ...item });
+            const text = isLessonTurn(context.input)
+              ? withoutLessonCommitment(item.text)
+              : item.text;
+            if (text !== "") {
+              yield* emitAssistantTextArtifacts({ context, ...item, text });
+              continue;
+            }
+            yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            // The result frame repeats this text; it must not come back as the fallback message.
+            context.assistant.fallbackText = "";
           }
           context.assistant.heldText = [];
         });
@@ -9183,7 +9246,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             context.assistant.emittedNativeItemIds.size === 0
           ) {
             for (const item of held) {
-              const verdict = stripLessonNarration(item.text);
+              const verdict = withoutLessonCommitment(stripLessonNarration(item.text));
               if (verdict === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
               else yield* emitAssistantTextArtifacts({ context, ...item, text: verdict });
             }
@@ -9217,18 +9280,31 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 yield* emitHeldAssistantTextItemAsReasoning(context, original);
                 continue;
               }
-              const remainder = cardReplyCoversLead(block, item.text);
-              if (cardReplyRepeats(block, item.text) || remainder === "") {
+              const leadRemainder = cardReplyCoversLead(block, item.text);
+              if (leadRemainder === "") {
                 yield* emitHeldAssistantTextItemAsReasoning(context, item);
-              } else if (remainder !== undefined) {
-                yield* emitAssistantTextArtifacts({ context, ...item, text: remainder });
+                continue;
+              }
+              const visible = withoutLessonCommitment(
+                stripCardReplyCoveredSentences(block, leadRemainder ?? item.text),
+              );
+              if (visible === "") {
+                yield* emitHeldAssistantTextItemAsReasoning(context, original);
+                continue;
+              }
+              if (cardReplyRepeats(block, visible)) {
+                yield* emitHeldAssistantTextItemAsReasoning(context, item);
               } else {
-                yield* emitAssistantTextArtifacts({ context, ...item });
+                yield* emitAssistantTextArtifacts({ context, ...item, text: visible });
               }
             }
             return;
           }
-          for (const item of held) yield* emitAssistantTextArtifacts({ context, ...item });
+          for (const item of held) {
+            const text = withoutLessonCommitment(item.text);
+            if (text === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            else yield* emitAssistantTextArtifacts({ context, ...item, text });
+          }
         });
 
         const publishAssistantArtifacts = Effect.fnUntraced(function* (input: {
