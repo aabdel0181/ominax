@@ -19,6 +19,7 @@ import {
 import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { openLessonCard } from "@t3tools/shared/toolOutput";
 
 import type { PendingOrchestrationEffectV2 } from "../EffectOutbox.ts";
 import type * as ProjectionStore from "../ProjectionStore.ts";
@@ -259,5 +260,16 @@ export const loadSideChatOpeningSources = Effect.fn("loadSideChatOpeningSources"
       ? null
       : ((yield* projectionStore.getThreadRecords(sideChat.anchor.threadId, [])).thread.sideChat
           ?.opening.text ?? null);
-  return { lessonTopic, parentOpeningText, runningTurnItems };
+  const cardRecords = yield* projectionStore.getThreadRecords(
+    sideChat.lessonThreadId,
+    ["messages", "turnItems"],
+    { turnItemTypes: ["dynamic_tool"] },
+  );
+  const openCard = openLessonCard(cardRecords.messages, cardRecords.turnItems) ?? null;
+  return {
+    lessonTopic,
+    parentOpeningText,
+    runningTurnItems,
+    openCardQuestion: openCard?.question ?? null,
+  };
 });

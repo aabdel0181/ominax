@@ -1,5 +1,6 @@
 import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import { openLessonCard, spoilsOpenCard } from "@t3tools/shared/toolOutput";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -47,6 +48,29 @@ const pageSource = Effect.fn("HtmlToolkit.pageSource")(function* (input: {
   return { path: input.path } satisfies HtmlRender.HtmlRenderSource;
 });
 
+// A side chat's picture must not show the answer to the card still open in its lesson.
+const refuseOpenCardSpoiler = Effect.fn("HtmlToolkit.refuseOpenCardSpoiler")(function* (
+  html: string,
+) {
+  const { caller, threads } = yield* loadCaller();
+  const lessonThreadId = caller?.sideChat?.lessonThreadId;
+  if (caller === undefined || lessonThreadId === undefined) return;
+  const records = yield* threads
+    .getProjectThreadRecords(
+      { projectId: caller.projectId, threadId: lessonThreadId },
+      ["messages", "turnItems"],
+      { turnItemTypes: ["dynamic_tool"] },
+    )
+    .pipe(Effect.orElseSucceed(() => undefined));
+  const card = records && openLessonCard(records.messages, records.turnItems);
+  if (card === undefined || !spoilsOpenCard(html, card.answers)) return;
+  return yield* new OrchestratorMcpFailure({
+    code: "invalid_request",
+    message:
+      "Not shown: this picture states the answer to the card the learner still has open in the lesson. Draw it again without that answer, and don't give it in words either.",
+  });
+});
+
 const handlers = {
   // Local-file access limits this host browser to T3-launched agents.
   html_preview: McpToolAccess.readsAsCaller((input) =>
@@ -73,6 +97,7 @@ const handlers = {
       const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "html_render");
       const htmlRender = yield* HtmlRender.HtmlRender;
       const source = yield* pageSource(input);
+      if (input.html !== undefined) yield* refuseOpenCardSpoiler(input.html);
       const reference = yield* htmlRender
         .publish({ ...source, threadId: thread.threadId, title: input.title, height: input.height })
         .pipe(Effect.mapError(toFailure));

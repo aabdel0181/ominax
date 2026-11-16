@@ -370,6 +370,7 @@ export const McpToolUseCase = Schema.Struct({
         summary: Schema.String,
         excerpt: Schema.String,
         excerptContext: Schema.optional(Schema.String),
+        openCardQuestion: Schema.optional(Schema.String),
       }),
     ),
     /** The thread is a side chat's first turn: T3 puts the parent's digest ahead of `prompt`. */
@@ -1122,6 +1123,7 @@ const lessonSideChatOpening = (
             excerptContext: opening.excerptContext ?? "",
             lessonTopic: null,
             parentOpeningText: null,
+            openCardQuestion: opening.openCardQuestion ?? null,
           }),
           createdByProviderInstanceId: null,
           createdAt: now,

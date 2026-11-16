@@ -1662,7 +1662,12 @@ export const layer: Layer.Layer<
               runId,
               error,
             }).pipe(
-              Effect.as({ lessonTopic: null, parentOpeningText: null, runningTurnItems: null }),
+              Effect.as({
+                lessonTopic: null,
+                parentOpeningText: null,
+                runningTurnItems: null,
+                openCardQuestion: null,
+              }),
             ),
           ),
         );

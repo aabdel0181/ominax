@@ -466,3 +466,54 @@ export function omitToolOutputImageData(value: unknown): unknown {
   }
   return omit(value);
 }
+
+/** The lesson card the learner hasn't answered yet: the newest card reply with no user message after it. */
+export function openLessonCard(
+  messages: ReadonlyArray<{
+    readonly id: string;
+    readonly role: string;
+    readonly createdAt: unknown;
+  }>,
+  turnItems: ReadonlyArray<{
+    readonly id: string;
+    readonly type: string;
+    readonly toolName?: string | null;
+    readonly output?: unknown;
+  }>,
+): { readonly question: string; readonly answers: ReadonlyArray<string> } | undefined {
+  // ISO strings and DateTime.Utc both stringify in time order.
+  const at = (message: (typeof messages)[number]) => String(message.createdAt);
+  const ordered = [...messages].sort((a, b) => (at(a) < at(b) ? -1 : at(a) > at(b) ? 1 : 0));
+  const lastUser = ordered.findLastIndex((message) => message.role === "user");
+  const reply = ordered.slice(lastUser + 1).findLast((message) => message.id.endsWith(":reply"));
+  const item = reply && turnItems.find((candidate) => `${candidate.id}:reply` === reply.id);
+  const card =
+    item?.type === "dynamic_tool"
+      ? lessonCardFromToolItem({ toolName: item.toolName, output: item.output })
+      : undefined;
+  if (card === undefined) return undefined;
+  const answers =
+    "answer" in card
+      ? [card.answer]
+      : [
+          ...(card.number === undefined ? [] : [String(card.number.answer)]),
+          ...(card.blanks ?? []).flatMap((blank) => blank.answers),
+        ];
+  return { question: card.question, answers };
+}
+
+/** Whether `text` (HTML tags ignored) states one of an open card's answers. */
+export function spoilsOpenCard(text: string, answers: ReadonlyArray<string>): boolean {
+  const plain = text.replace(/<[^>]*>/gu, " ").replace(/\s+/gu, " ");
+  return answers.some((raw) => {
+    const answer = raw.trim().replace(/\s+/gu, " ");
+    const meaningful = answer.length >= 3 || (/\d/u.test(answer) && answer.length >= 2);
+    return (
+      meaningful &&
+      new RegExp(
+        `(?<![\\p{L}\\p{N}_])${answer.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?![\\p{L}\\p{N}_])`,
+        "iu",
+      ).test(plain)
+    );
+  });
+}

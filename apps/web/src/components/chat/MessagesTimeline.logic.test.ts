@@ -140,6 +140,34 @@ describe("deriveMessagesTimelineRows", () => {
     expect(JSON.stringify(deriveMessagesTimelineRows({ ...input, lesson: true }))).not.toMatch(
       /30 N/,
     );
+    // The live row: a thought still streaming after a finished tool call.
+    const live = deriveMessagesTimelineRows({
+      ...input,
+      lesson: true,
+      timelineEntries: [
+        {
+          ...input.timelineEntries[2]!,
+          entry: {
+            ...(input.timelineEntries[2] as Extract<TimelineEntry, { kind: "work" }>).entry,
+            toolLifecycleStatus: "completed" as const,
+          },
+        },
+        {
+          ...reasoning,
+          id: "live-reasoning",
+          createdAt: "2026-01-01T00:00:04Z",
+          entry: {
+            ...reasoning.entry,
+            structuredPayload: { type: "reasoning", text: "Card answer: 30 N", title: "30 N" },
+            projectedItem: {
+              item: { type: "reasoning", text: "Card answer: 30 N", title: "30 N" },
+            },
+          },
+        },
+      ] as TimelineEntry[],
+    });
+    expect(live.some((row) => row.kind === "work-live")).toBe(true);
+    expect(JSON.stringify(live)).not.toMatch(/30 N/);
   });
 
   it.each([

@@ -1,7 +1,12 @@
 import { makeAssistantStreamingFilter } from "./assistantStreaming.ts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { QUESTION_CARD_TOOL_NAME, QUIZ_CARD_TOOL_NAME } from "@t3tools/shared/quizCard";
+import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
+import { HTML_RENDER_TOOL_NAME } from "@t3tools/shared/htmlRender";
+import { compactDynamicToolOutput } from "@t3tools/shared/toolOutput";
 import {
   isAnySideChatThread,
+  isSideChatThread,
   isOrchestrationV2WorkActive,
   CommandId,
   type EventId,
@@ -585,6 +590,31 @@ export const RunExecutionServiceV2Error = Schema.Union([
   RunExecutionIngestError,
 ]);
 export type RunExecutionServiceV2Error = typeof RunExecutionServiceV2Error.Type;
+
+const OPEN_TURN_ITEM_STATUSES = new Set(["idle", "pending", "running", "waiting"]);
+
+const GUARDED_LESSON_TOOLS = new Set([
+  QUIZ_CARD_TOOL_NAME,
+  QUESTION_CARD_TOOL_NAME,
+  HTML_RENDER_TOOL_NAME,
+]);
+
+/** Lesson thoughts and refused cards' or pictures' inputs can hold an open card's answer. */
+function withoutLessonSecrets(
+  event: ProviderAdapter.ProviderAdapterV2Event,
+): ProviderAdapter.ProviderAdapterV2Event {
+  if (event.type !== "turn_item.updated") return event;
+  const item = event.turnItem;
+  if (item.type === "reasoning") return { ...event, turnItem: { ...item, text: "", title: null } };
+  if (
+    item.type === "dynamic_tool" &&
+    GUARDED_LESSON_TOOLS.has(resolveT3McpToolId(item.toolName) ?? "") &&
+    !OPEN_TURN_ITEM_STATUSES.has(item.status) &&
+    (item.status === "failed" || compactDynamicToolOutput(item.output)?.isError === true)
+  )
+    return { ...event, turnItem: { ...item, input: null } };
+  return event;
+}
 
 export interface RunExecutionServiceV2StartRootRunInput {
   readonly commandId: CommandId;
@@ -1514,6 +1544,8 @@ export const layer: Layer.Layer<
           }
           return { event, accepted };
         });
+        const lessonThread =
+          input.appThread.lesson !== undefined || isSideChatThread(input.appThread);
         // Per-event ingestion avoids adding a span for every provider snapshot.
         const ingestDelivered = Effect.fnUntraced(function* (
           event: ProviderAdapter.ProviderAdapterV2Event,
@@ -1549,7 +1581,7 @@ export const layer: Layer.Layer<
             threadId: input.run.threadId,
             runId: input.run.id,
             nodeId: input.rootNode.id,
-            event: deliveredEvent,
+            event: lessonThread ? withoutLessonSecrets(deliveredEvent) : deliveredEvent,
             ...(isRootProviderThreadUpdate
               ? rootTerminalAlreadySeen
                 ? {

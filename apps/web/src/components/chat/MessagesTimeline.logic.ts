@@ -1454,9 +1454,24 @@ function hideLessonReasoningDetails(
     if (entry.kind !== "work" || entry.entry.itemType !== "reasoning") return entry;
     let hidden = lessonReasoningEntries.get(entry);
     if (hidden === undefined) {
-      // A streaming thought's title is its first line, so the label goes too.
-      const hiddenEntry = { ...entry.entry, label: "Thinking" };
-      delete hiddenEntry.detail;
+      // A streaming thought's title is its first line, so the label goes too. The expanded
+      // live group renders the projected item, so its text goes as well.
+      const { detail: _detail, structuredPayload, projectedItem, ...rest } = entry.entry;
+      const hiddenEntry: WorkLogEntry = {
+        ...rest,
+        label: "Thinking",
+        ...(structuredPayload?.type === "reasoning"
+          ? { structuredPayload: { ...structuredPayload, text: "", title: null } }
+          : {}),
+        ...(projectedItem?.item.type === "reasoning"
+          ? {
+              projectedItem: {
+                ...projectedItem,
+                item: { ...projectedItem.item, text: "", title: null },
+              },
+            }
+          : {}),
+      };
       hidden = { ...entry, entry: hiddenEntry };
       lessonReasoningEntries.set(entry, hidden);
     }
