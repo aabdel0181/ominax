@@ -70,7 +70,6 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
   readonly reply: string;
   readonly purpose: CardPurpose | undefined;
   readonly answer?: string;
-  readonly numberAnswer?: number;
 }) {
   const shownBefore = yield* readShownTutor;
   const problem =
@@ -126,7 +125,9 @@ const handlers = {
       yield* refuseCardProblem({
         reply: input.reply,
         purpose: input.purpose,
-        ...(input.number === undefined ? {} : { numberAnswer: input.number.answer }),
+        ...(input.number?.unit === undefined
+          ? {}
+          : { answer: `${input.number.answer} ${input.number.unit}` }),
       });
       return {
         questionCard: { ...card, reply },

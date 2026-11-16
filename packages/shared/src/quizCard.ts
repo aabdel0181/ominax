@@ -11,8 +11,8 @@ export function cardReplyProblem(input: {
   readonly purpose?: CardPurpose | undefined;
   readonly shownBefore: number;
   readonly shownText?: string;
+  /** A quiz answer, or a number card's "<answer> <unit>"; checked only when it holds a digit. */
   readonly answer?: string;
-  readonly numberAnswer?: number;
 }): string | undefined {
   if (input.purpose !== undefined) return undefined;
   const visible = `${input.reply}\n${input.shownText ?? ""}`;
@@ -27,14 +27,7 @@ export function cardReplyProblem(input: {
       `(?<![\\p{L}\\p{N}_])${answer.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?![\\p{L}\\p{N}_])`,
       "iu",
     ).test(normalized(visible));
-  const numberAppears =
-    input.numberAnswer !== undefined &&
-    input.numberAnswer !== 0 &&
-    input.numberAnswer !== 1 &&
-    [...visible.matchAll(/(?<![\p{L}\p{N}_])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?![\p{L}\p{N}_])/gu)].some(
-      ([match]) => Number(match) === input.numberAnswer,
-    );
-  if (answerAppears || numberAppears)
+  if (answerAppears)
     return "The answer is stated just above; pose a new case that needs one more step.";
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";

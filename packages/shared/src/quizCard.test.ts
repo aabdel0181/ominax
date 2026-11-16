@@ -120,8 +120,8 @@ describe("quiz cards", () => {
     expect(
       cardReplyProblem({
         reply: "The score uses bands.",
-        shownText: "The score is 0.5 when half the checks pass.",
-        numberAnswer: 0.5,
+        shownText: "The score is 0.5 reward when half the checks pass.",
+        answer: "0.5 reward",
         shownBefore: 0,
       }),
     ).toBe("The answer is stated just above; pose a new case that needs one more step.");
@@ -144,10 +144,9 @@ describe("quiz cards", () => {
     ).toBeUndefined();
     expect(
       cardReplyProblem({
-        reply: "x".repeat(250),
-        numberAnswer: 20,
-        shownText: "",
-        shownBefore: 0,
+        reply: "Steps:\n1. Add the forces.\n2. Divide by mass in m/s^2.\n3. Check units.",
+        answer: "3 m/s^2",
+        shownBefore: 250,
       }),
     ).toBeUndefined();
   });

@@ -169,7 +169,7 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     {
       id: "assistant-old",
       role: "assistant",
-      text: "before",
+      text: "It travelled 12 m.",
       createdAt: DateTime.makeUnsafe("2026-01-01T00:00:00Z"),
     },
     {
@@ -190,7 +190,7 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     const card = {
       reply: "x".repeat(250),
       source: "",
-      answer: "before",
+      answer: "12 m",
       explanation: "Because",
       level: "apply" as const,
       question: "Which?",
@@ -214,7 +214,7 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     const accepted = yield* toolkit
       .handle("quiz_card", card)
       .pipe(Stream.unwrap, Stream.runCollect);
-    expect(accepted.at(-1)?.result).toMatchObject({ quizCard: { answer: "before" } });
+    expect(accepted.at(-1)?.result).toMatchObject({ quizCard: { answer: "12 m" } });
 
     const commonWord = yield* toolkit
       .handle("quiz_card", { ...card, answer: "Right" })
@@ -222,9 +222,9 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     expect(commonWord.at(-1)?.result).toMatchObject({ quizCard: { answer: "Right" } });
 
     const verdictNumber = yield* toolkit
-      .handle("quiz_card", { ...card, reply: "x".repeat(250), answer: "20" })
+      .handle("quiz_card", { ...card, reply: "x".repeat(250), answer: "20 N" })
       .pipe(Stream.unwrap, Stream.runCollect);
-    expect(verdictNumber.at(-1)?.result).toMatchObject({ quizCard: { answer: "20" } });
+    expect(verdictNumber.at(-1)?.result).toMatchObject({ quizCard: { answer: "20 N" } });
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
