@@ -234,7 +234,7 @@ export type ProjectionSettlementCandidate = Pick<
   | "pendingBackgroundTasks"
   | "pendingGuestMessageCount"
 > &
-  Pick<OrchestrationV2AppThread, "lastSnoozeWakeAt"> & {
+  Pick<OrchestrationV2AppThread, "lastSnoozeWakeAt" | "lesson"> & {
     readonly latestUserAuthoredMessageAt: DateTime.Utc | null;
   };
 

@@ -56,7 +56,7 @@ function at(offsetMs: number): DateTime.Utc {
 }
 
 type SettlementShell = OrchestrationV2ThreadShell &
-  Pick<ProjectionStore.ProjectionSettlementCandidate, "latestUserAuthoredMessageAt">;
+  Pick<ProjectionStore.ProjectionSettlementCandidate, "latestUserAuthoredMessageAt" | "lesson">;
 
 function shell(overrides: Partial<SettlementShell> = {}): SettlementShell {
   return {
@@ -155,6 +155,15 @@ describe("isAutoSettlementCandidate", () => {
             { taskId: "pull-request-watch:github.com/acme/app#1", kind: "monitor" },
           ],
         }),
+        NOW_MS,
+      ),
+    ).toBe(false);
+  });
+
+  it("never auto-settles a lesson", () => {
+    expect(
+      ThreadSettlementService.isAutoSettlementCandidate(
+        shell({ lesson: { topic: "Newton's laws", depth: "working", purpose: "outcome" } }),
         NOW_MS,
       ),
     ).toBe(false);
