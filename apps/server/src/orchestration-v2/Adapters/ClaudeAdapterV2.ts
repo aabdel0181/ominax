@@ -76,6 +76,7 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeUtil from "node:util";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import {
+  cardAnswerVerdictLength,
   QUESTION_CARD_TOOL_NAME,
   QUIZ_CARD_TOOL_NAME,
   replyCoverage,
@@ -9197,7 +9198,25 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             return;
           }
           if (isLessonCardTool(block.name)) {
-            for (const item of held) {
+            // A card that carries its own verdict shows it, so the held verdict paragraph would repeat it.
+            const verdict = (block.input as { readonly verdict?: unknown } | null)?.verdict;
+            let dropVerdict =
+              typeof verdict === "string" &&
+              verdict.trim() !== "" &&
+              isLessonCardAnswerTurn(context.input) &&
+              context.assistant.emittedNativeItemIds.size === 0;
+            for (const original of held) {
+              const item = dropVerdict
+                ? {
+                    ...original,
+                    text: original.text.slice(cardAnswerVerdictLength(original.text)).trim(),
+                  }
+                : original;
+              dropVerdict = false;
+              if (item.text === "") {
+                yield* emitHeldAssistantTextItemAsReasoning(context, original);
+                continue;
+              }
               const remainder = cardReplyCoversLead(block, item.text);
               if (cardReplyRepeats(block, item.text) || remainder === "") {
                 yield* emitHeldAssistantTextItemAsReasoning(context, item);

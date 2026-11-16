@@ -246,6 +246,11 @@ it.effect("refuses an answer stated since the learner's last message only", () =
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(commonWord.at(-1)?.result).toMatchObject({ quizCard: { answer: "Right" } });
 
+    const verdictAlreadyShown = yield* toolkit
+      .handle("quiz_card", { ...card, verdict: "Correct, 20 N." })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(verdictAlreadyShown.at(-1)?.result).toMatchObject({ quizCard: { reply: card.reply } });
+
     const verdictNumber = yield* toolkit
       .handle("quiz_card", { ...card, reply: "x".repeat(250), answer: "20 N" })
       .pipe(Stream.unwrap, Stream.runCollect);

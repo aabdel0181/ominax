@@ -77,28 +77,37 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
   readonly verdict: string | undefined;
 }) {
   const check = readShownTutor.pipe(
-    Effect.map((shownBefore) =>
-      shownBefore === undefined
-        ? undefined
-        : cardReplyProblem({
-            ...input,
-            shownBefore: shownBefore.count,
-            shownText: shownBefore.text,
-            answeredCard: shownBefore.answeredCard,
-            visibleSinceAnswer: shownBefore.visibleSinceAnswer,
-          }),
-    ),
+    Effect.map((shown) => ({
+      shown,
+      problem:
+        shown === undefined
+          ? undefined
+          : cardReplyProblem({
+              ...input,
+              shownBefore: shown.count,
+              shownText: shown.text,
+              answeredCard: shown.answeredCard,
+              visibleSinceAnswer: shown.visibleSinceAnswer,
+            }),
+    })),
   );
   // Claude's text before a card is committed when the card's tool_use frame arrives, racing this
   // call, so look once more before refusing.
-  const problem =
-    (yield* check) === undefined
-      ? undefined
-      : yield* Effect.andThen(Effect.sleep("1 second"), check);
+  const first = yield* check;
+  const { shown, problem } =
+    first.problem === undefined ? first : yield* Effect.andThen(Effect.sleep("1 second"), check);
   if (problem !== undefined) {
     return yield* new OrchestratorMcpFailure({ code: "invalid_request", message: problem });
   }
+  return shown;
 });
+
+// A verdict already shown as text isn't repeated on the card.
+const shownReply = (
+  input: { readonly reply: string; readonly source: string; readonly verdict?: string | undefined },
+  shown: { readonly visibleSinceAnswer: boolean } | undefined,
+) =>
+  foldCardReply(input.reply, input.source, shown?.visibleSinceAnswer ? undefined : input.verdict);
 
 const handlers = {
   quiz_card: McpToolAccess.readsAsCaller((input) =>
@@ -115,14 +124,14 @@ const handlers = {
           message: problem ?? "Invalid quiz card.",
         });
       }
-      yield* refuseCardProblem({
+      const shown = yield* refuseCardProblem({
         reply: input.reply,
         purpose: input.purpose,
         verdict: input.verdict,
         answer: input.answer,
       });
       return {
-        quizCard: { ...card, reply },
+        quizCard: { ...card, reply: shownReply(input, shown) },
         message: QUIZ_CARD_SHOWN,
       };
     }),
@@ -138,7 +147,7 @@ const handlers = {
             "Invalid question card: provide a non-empty question of at most 2000 characters; for blanks, provide one entry per ___ in the question and list every accepted answer; for number, provide answer and tolerance ≥ 0; do not provide both; keep reply under 2000 characters, source under 500, and the whole card under about 7 KB.",
         });
       }
-      yield* refuseCardProblem({
+      const shown = yield* refuseCardProblem({
         reply: input.reply,
         purpose: input.purpose,
         verdict: input.verdict,
@@ -147,7 +156,7 @@ const handlers = {
           : { answer: `${input.number.answer} ${input.number.unit}` }),
       });
       return {
-        questionCard: { ...card, reply },
+        questionCard: { ...card, reply: shownReply(input, shown) },
         message: QUESTION_CARD_SHOWN,
       };
     }),
