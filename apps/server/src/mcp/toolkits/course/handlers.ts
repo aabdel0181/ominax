@@ -17,7 +17,7 @@ import { COURSE_PROGRESS_NOTE } from "./tools.ts";
 import { loadCaller } from "../../threadAccess.ts";
 import { CourseReferenceToolkit, CourseToolkit } from "./tools.ts";
 
-const PREP_BRIEF = `You are a course preparation thread. Work only on the requested units for course {{courseId}} (units: {{units}}). For each unit, call course_read with courseId and its unit number. Write 2–3 likely sticking points, ranked by what the unit needs that knowledge_map_read lacks, what the learner asked before, the transcript, and common misconceptions. Write a four-question quiz with answers first. Save both with course_update using courseId. Use only the T3 course and reference tools; never run shell commands or read files. Do not message, wake, or delegate into the lesson thread; this is background preparation.{{solutionLeads}}`;
+const PREP_BRIEF = `You are a course preparation thread. Work only on the requested units for course {{courseId}} (units: {{units}}). For each unit, call course_read with courseId and its unit number. Write 2–3 likely sticking points, ranked by what the unit needs that knowledge_map_read lacks, what the learner asked before, the transcript, and common misconceptions. Write a four-question quiz with answers first. Save both with course_update using courseId. Use only T3 tools; never run shell commands or read files. Do not message, wake, or delegate into the lesson thread; this is background preparation.{{solutionLeads}}`;
 const isCourseIngestError = Schema.is(CourseIngestError);
 const isCourseReferenceFetchError = Schema.is(CourseReferenceFetchError);
 const fail = (e: { readonly message: string }) =>
@@ -53,7 +53,8 @@ const normalizeSolutionLeads = (raw: ReadonlyArray<string>): ReadonlyArray<strin
 };
 // The tutor gets numbers and titles, not the stored record (a 200-unit course is ~40 KB).
 const unitLine = (course: Course, index: number) => {
-  const unit = course.units[index]!;
+  const unit = course.units[index];
+  if (!unit) return `${index + 1}.`;
   const section =
     unit.section !== undefined && unit.section !== course.units[index - 1]?.section
       ? ` [${unit.section}]`
@@ -64,6 +65,7 @@ const unitLine = (course: Course, index: number) => {
 const courseOutline = (course: Course) => ({
   courseId: course.id,
   title: course.title,
+  ...(course.source ? { source: course.source } : {}),
   ...(course.attribution ? { attribution: course.attribution } : {}),
   ...(course.position ? { position: course.position } : {}),
   units: course.units.map((_, index) => unitLine(course, index)),
@@ -273,13 +275,6 @@ const handlers = {
           code: "invalid_request",
           message: "units must name one or more course units",
         });
-      if (input.solutionLeads !== undefined)
-        yield* service
-          .update({
-            courseId: course.id,
-            solutionSearchedAt: DateTime.formatIso(yield* DateTime.now),
-          })
-          .pipe(Effect.mapError(fail));
       if (input.solutionLeads !== undefined && solutionLeads.length === 0 && course.problemSets) {
         for (const [index, pset] of course.problemSets.entries()) {
           if (!pset.hasSolution && pset.references === undefined)
@@ -314,18 +309,31 @@ const handlers = {
         .pipe(Effect.mapError(fail));
       // Unattended, so an approval prompt would stall it; it reads third-party scans, so never full access.
       const { limits } = yield* loadCaller();
-      yield* (yield* OrchestratorMcpService.OrchestratorMcpService)
-        .createThreads(scope, {
+      const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
+      const createPrep = (runtimeMode?: "auto" | "approval-required") =>
+        orchestrator.createThreads(scope, {
           clientRequestId,
-          threads: [
-            {
-              title,
-              prompt,
-              ...(limits.runtimeMode === "full-access" ? { runtimeMode: "auto" as const } : {}),
-            },
-          ],
-        })
-        .pipe(Effect.mapError(fail));
+          threads: [{ title, prompt, ...(runtimeMode ? { runtimeMode } : {}) }],
+        });
+      yield* (
+        limits.runtimeMode === "full-access"
+          ? createPrep("auto").pipe(
+              // Providers without Auto (Pi, Kiro, Muse, Antigravity) get the narrowest mode instead.
+              Effect.catchIf(
+                (error) => /runtime mode/i.test(error.message),
+                () => createPrep("approval-required"),
+              ),
+            )
+          : createPrep()
+      ).pipe(Effect.mapError(fail));
+      // Stamped once the prep thread exists, so a failed start never shows "Reference still loading."
+      if (input.solutionLeads !== undefined)
+        yield* service
+          .update({
+            courseId: course.id,
+            solutionSearchedAt: DateTime.formatIso(yield* DateTime.now),
+          })
+          .pipe(Effect.mapError(fail));
       return { started: true, units, message: COURSE_PROGRESS_NOTE };
     }),
   ),

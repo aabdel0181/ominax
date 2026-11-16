@@ -4,11 +4,13 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import { ThreadId } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as TestClock from "effect/testing/TestClock";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as CourseService from "./CourseService.ts";
@@ -157,13 +159,20 @@ describe("CourseService", () => {
           },
         });
         // A search in flight: grading says so instead of passing as "no reference".
-        yield* service.update({ courseId: course.id, solutionSearchedAt: "2026-11-16T15:29:00Z" });
+        yield* service.update({
+          courseId: course.id,
+          solutionSearchedAt: DateTime.formatIso(yield* DateTime.now),
+        });
         const loading = yield* service.problems({ courseId: course.id, pset: 1 });
         assert.strictEqual(loading.problemSets[0]?.cite, "Reference still loading.");
         assert.include(
           loading.problemSets[0]?.note ?? "",
           "call course_problems with this pset again",
         );
+        // A prep thread that died never leaves grading waiting.
+        yield* TestClock.adjust("31 minutes");
+        const stale = yield* service.problems({ courseId: course.id, pset: 1 });
+        assert.isUndefined(stale.problemSets[0]?.cite);
         yield* service.update({ courseId: course.id, pset: 1, references: [] });
         const result = yield* service.problems({ courseId: course.id, pset: 1, reveal: true });
         assert.include(result.problemSets[0]?.note ?? "", "No published solution was found online");

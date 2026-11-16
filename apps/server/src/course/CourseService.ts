@@ -122,6 +122,8 @@ const slug = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .slice(0, 80)
     .replace(/^-|-$/g, "") || "course";
+// A prep search older than this has died or stalled, so grading stops waiting for it.
+const REFERENCE_SEARCH_WINDOW_MS = 30 * 60 * 1000;
 const failure = (message: string) => new CourseError({ message });
 const isCourseError = Schema.is(CourseError);
 const isCourseId = (id: string) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id);
@@ -621,6 +623,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
     return yield* locked(
       Effect.gen(function* () {
         const course = yield* read(input.courseId);
+        const now = DateTime.toEpochMillis(yield* DateTime.now);
         const attribution = course.attribution ? { attribution: course.attribution } : {};
         if (!course.problemSets)
           return {
@@ -667,7 +670,8 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
             const referencesLoading =
               references === undefined &&
               !pset.hasSolution &&
-              course.solutionSearchedAt !== undefined;
+              course.solutionSearchedAt !== undefined &&
+              now - Date.parse(course.solutionSearchedAt) < REFERENCE_SEARCH_WINDOW_MS;
             const referencesNote =
               references === undefined
                 ? referencesLoading

@@ -11,6 +11,7 @@ import {
   NodeId,
   OrchestratorMcpThreadReadResult,
   ProjectId,
+  OrchestratorMcpFailure,
   ProviderDriverKind,
   ProviderInstanceId,
   RunId,
@@ -1654,6 +1655,7 @@ it.effect("animation_render caches a concept clip and replays it without renderi
 it.effect("course_prepare starts a standalone prep thread and sends nothing to the lesson", () => {
   const requests: unknown[] = [];
   const recordedAtCreate: ThreadId[][] = [];
+  let providerOffersAuto = true;
   let courses: CourseService.CourseService["Service"] | undefined;
   return Effect.gen(function* () {
     const service = yield* CourseService.CourseService;
@@ -1686,7 +1688,7 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 2 });
     expect(JSON.stringify(moved.content)).not.toContain("prepThreadIds");
     expect(JSON.stringify(moved.content)).toContain("2. Two");
-    expect((yield* callAs("course_update", { unit: 9 })).isError).toBe(true);
+    expect((yield* callAs("course_update", { position: { unit: 9 } })).isError).toBe(true);
     const outline = JSON.stringify((yield* callAs("course_read", {})).content);
     expect(outline).toContain("1. One");
     expect(outline).not.toContain("prepThreadIds");
@@ -1697,6 +1699,10 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     yield* callAs("course_prepare", { units: [1] });
     animationRuntimeMode = "full-access";
     expect(requests.at(-1)).not.toHaveProperty("threads.0.runtimeMode");
+    providerOffersAuto = false;
+    expect((yield* callAs("course_prepare", { units: [1] })).isError).not.toBe(true);
+    providerOffersAuto = true;
+    expect(requests.at(-1)).toHaveProperty("threads.0.runtimeMode", "approval-required");
     yield* service.add({
       lessonThreadId: threadId,
       ingested: {
@@ -1808,6 +1814,11 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
           Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({
             createThreads: (scope, input) =>
               Effect.gen(function* () {
+                if (!providerOffersAuto && input.threads[0]?.runtimeMode === "auto")
+                  return yield* new OrchestratorMcpFailure({
+                    code: "invalid_request",
+                    message: "Provider pi does not offer runtime mode auto.",
+                  });
                 requests.push(input);
                 const prepThreadId = OrchestratorMcpService.stableThreadId({
                   scope,
