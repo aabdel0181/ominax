@@ -122,6 +122,8 @@ const slug = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .slice(0, 80)
     .replace(/^-|-$/g, "") || "course";
+// A prep search older than this has died or stalled, so grading stops waiting for it.
+const REFERENCE_SEARCH_WINDOW_MS = 30 * 60 * 1000;
 const failure = (message: string) => new CourseError({ message });
 const isCourseError = Schema.is(CourseError);
 const isCourseId = (id: string) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id);
@@ -551,6 +553,8 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
           return yield* failure("references are required with pset.");
         if (input.pset !== undefined && input.unit !== undefined)
           return yield* failure("pset updates cannot include a unit.");
+        if (input.position && !course.units[input.position.unit - 1])
+          return yield* failure(`Unit ${input.position.unit} was not found.`);
         if (
           input.pset !== undefined &&
           (!course.problemSets || !course.problemSets[input.pset - 1])
@@ -619,6 +623,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
     return yield* locked(
       Effect.gen(function* () {
         const course = yield* read(input.courseId);
+        const now = DateTime.toEpochMillis(yield* DateTime.now);
         const attribution = course.attribution ? { attribution: course.attribution } : {};
         if (!course.problemSets)
           return {
@@ -661,15 +666,25 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
               input.pset === undefined
                 ? undefined
                 : yield* readReferences(path.join(root, course.id), number);
+            // course_prepare stamps solutionSearchedAt; references stay unset until its prep thread saves them.
+            const referencesLoading =
+              references === undefined &&
+              !pset.hasSolution &&
+              course.solutionSearchedAt !== undefined &&
+              now - Date.parse(course.solutionSearchedAt) < REFERENCE_SEARCH_WINDOW_MS;
             const referencesNote =
               references === undefined
-                ? ""
+                ? referencesLoading
+                  ? 'A prep thread is still looking for a published solution. Grade against your own working, end the verdict with "Reference still loading.", and call course_problems with this pset again before the next verdict; once references arrive, re-check earlier verdicts on this set against them and correct any that differ. '
+                  : ""
                 : references.length === 0
                   ? "No published solution was found online. End every verdict on this problem with the cite line. "
                   : 'Published references (hidden from the learner until their final answer) are a check, not the truth. End every verdict on this problem, even a quick "correct", with the cite line. If your worked answer differs, say "the posted solution disagrees; here\'s why mine differs" and grade against your own working, never the reference. If a reference\'s numbers differ from the problem\'s own, treat it as a likely transcription misread; never say its author used wrong numbers. ';
             const referenceFields =
               references === undefined
-                ? {}
+                ? referencesLoading
+                  ? { cite: "Reference still loading.", note: referencesNote.trim() }
+                  : {}
                 : {
                     references,
                     cite:
