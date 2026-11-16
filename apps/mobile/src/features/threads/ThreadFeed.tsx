@@ -4007,6 +4007,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             threadTitle: props.threadTitle,
             skills: props.skills,
             workspaceRoot: props.workspaceRoot,
+            lesson: props.lesson,
             workflowOpening,
           })}
           {props.worktreeSetup && info.index === setupAnchorIndex ? (
