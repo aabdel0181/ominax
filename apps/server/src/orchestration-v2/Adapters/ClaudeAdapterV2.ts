@@ -6,6 +6,7 @@ import {
 } from "@t3tools/shared/toolOutput";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
 import { lessonToolPolicy } from "./lessonToolPolicy.ts";
+import { withLessonGitNetworkBlocked } from "./lessonGitEnvironment.ts";
 import { claudeTaskOutputRoot, tailClaudeTaskOutput } from "./ClaudeTaskOutputTail.ts";
 import {
   dynamicToolTitle,
@@ -2069,6 +2070,7 @@ export function claudeQueryEnvironment(
   appThread: Pick<OrchestrationV2AppThread, "lineage">,
   subagentPromptCacheTtl: "5m" | "1h" | undefined,
   resume = false,
+  lessonTurn = false,
 ): NodeJS.ProcessEnv {
   const promptCacheTtl =
     appThread.lineage.relationshipToParent === "subagent" &&
@@ -2077,11 +2079,11 @@ export function claudeQueryEnvironment(
       ? subagentPromptCacheTtl
       : undefined;
   const blockingMcpConnect = resume && environment.MCP_CONNECTION_NONBLOCKING === undefined;
-  if (promptCacheTtl === undefined && !blockingMcpConnect) {
+  if (promptCacheTtl === undefined && !blockingMcpConnect && !lessonTurn) {
     return environment;
   }
   return {
-    ...environment,
+    ...(lessonTurn ? withLessonGitNetworkBlocked(environment) : environment),
     ...(promptCacheTtl === undefined ? {} : { CLAUDE_CODE_PROMPT_CACHE_TTL: promptCacheTtl }),
     ...(blockingMcpConnect ? { MCP_CONNECTION_NONBLOCKING: "0" } : {}),
   };
@@ -13094,6 +13096,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 ? yield* resolveSubagentPromptCacheTtl(turnInput.runtimePolicy.cwd)
                 : undefined,
               shouldResume,
+              isLessonTurn(turnInput),
             ),
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,
             lessonTurn: isLessonTurn(turnInput),

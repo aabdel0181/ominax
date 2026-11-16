@@ -448,10 +448,10 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     } as const;
     assert.deepEqual(
       await run("Bash", { command: "cd ~/cw/circuit-world && git fetch -q origin" }),
-      denied,
+      {},
     );
     assert.equal(matcher.matcher, "Bash|Edit|Write|NotebookEdit|Monitor");
-    assert.deepEqual(await run("Monitor", { command: "git fetch origin" }), denied);
+    assert.deepEqual(await run("Monitor", { command: "rm -rf ~/cw-data/x" }), denied);
     assert.deepEqual(
       await run("Write", { file_path: "/home/quokka/cw/circuit-world/x.py", content: "" }),
       denied,
@@ -1290,7 +1290,11 @@ describe("ClaudeAdapterV2 Auto-accept edits", () => {
 });
 
 describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
-  const startTurnWithLaunchArgs = Effect.fnUntraced(function* (launchArgs: string, cwd: string) {
+  const startTurnWithLaunchArgs = Effect.fnUntraced(function* (
+    launchArgs: string,
+    cwd: string,
+    lesson = false,
+  ) {
     const fileSystem = yield* FileSystem.FileSystem;
     const opened: Array<ClaudeAdapterV2.ClaudeAgentSdkQueryOptions> = [];
     const adapter = yield* ClaudeAdapterV2.makeClaudeAdapterV2({
@@ -1356,12 +1360,43 @@ describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
           attemptId: RunAttemptId.make("attempt-claude-append-file"),
           text: "What is the sentinel?",
           attachments: [],
+          lesson,
           runtimePolicy,
         }),
       )
       .pipe(Effect.exit);
     return { exit, opened };
   });
+
+  it.effect("wires lesson hooks and Git isolation only for lesson turns", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const cwd = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-claude-lesson-env-",
+        });
+        const lesson = yield* startTurnWithLaunchArgs("", cwd, true);
+        const regular = yield* startTurnWithLaunchArgs("", cwd, false);
+        const lessonOptions = lesson.opened[0];
+        const regularOptions = regular.opened[0];
+        assert.isDefined(lessonOptions?.hooks?.PreToolUse);
+        assert.equal(lessonOptions?.env?.GIT_CONFIG_COUNT, "1");
+        assert.equal(lessonOptions?.env?.GIT_CONFIG_KEY_0, "protocol.allow");
+        assert.equal(lessonOptions?.env?.GIT_CONFIG_VALUE_0, "never");
+        assert.isUndefined(regularOptions?.hooks?.PreToolUse);
+        assert.isUndefined(regularOptions?.env?.GIT_CONFIG_COUNT);
+      }),
+    ).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          IdAllocator.layer,
+          McpProviderSessions.layer,
+          NodeServices.layer,
+          NodeCrypto.layer,
+        ),
+      ),
+    ),
+  );
 
   const appendSystemPrompt = (options: ClaudeAdapterV2.ClaudeAgentSdkQueryOptions | undefined) =>
     (options?.systemPrompt as { readonly append?: string } | undefined)?.append;
