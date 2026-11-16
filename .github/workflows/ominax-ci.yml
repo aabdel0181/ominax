@@ -80,7 +80,7 @@ jobs:
           TREE: ${{ steps.tree.outputs.tree }}
         run: |
           for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=ominax-tested-tree-$TREE" -q '.artifacts[].workflow_run.id' | sort -u); do
-            url="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" -q 'select(.name == "OminaX CI" and .event == "pull_request" and .conclusion == "success") | .html_url' || true)"
+            url="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" -q 'select(.path == ".github/workflows/ominax-ci.yml" and .event == "pull_request" and .head_repository.full_name == .repository.full_name and .conclusion == "success") | .html_url' || true)"
             if [ -n "$url" ]; then
               echo "$url passed this exact tree; skipping every job."
               { echo "run=$url"; echo lint=false; node .github/scripts/ci-changes.cjs --paths /dev/null; } >> "$GITHUB_OUTPUT"
@@ -483,6 +483,8 @@ jobs:
       contents: read
       id-token: write
     name: Test Server ${{ matrix.shard }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.test_server != 'false' }}
     runs-on: ominax-linux-x64
     # Shards take 2-5 minutes. When the shared task cache throttles reads, each
     # failed fetch stalls vp for 15-90s, which pushed shards past 10 minutes.

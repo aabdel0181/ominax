@@ -96,7 +96,7 @@ s/mobile_native_static_analysis: \["mobile_native"\]/mobile_native_static_analys
           TREE: ${{ steps.tree.outputs.tree }}\
         run: |\
           for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=ominax-tested-tree-$TREE" -q '\''.artifacts[].workflow_run.id'\'' | sort -u); do\
-            url="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" -q '\''select(.name == "OminaX CI" and .event == "pull_request" and .conclusion == "success") | .html_url'\'' || true)"\
+            url="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" -q '\''select(.path == ".github/workflows/ominax-ci.yml" and .event == "pull_request" and .head_repository.full_name == .repository.full_name and .conclusion == "success") | .html_url'\'' || true)"\
             if [ -n "$url" ]; then\
               echo "$url passed this exact tree; skipping every job."\
               { echo "run=$url"; echo lint=false; node .github/scripts/ci-changes.cjs --paths /dev/null; } >> "$GITHUB_OUTPUT"\
@@ -108,6 +108,10 @@ s/mobile_native_static_analysis: \["mobile_native"\]/mobile_native_static_analys
   /^        id: detect$/a\
         if: steps.tested.outputs.run == '\'''\''
 }
+# Test Server detects its own gate, so it needs the reuse result too.
+s/^    name: Test Server \$\{\{ matrix\.shard \}\}$/&\
+    needs: changes\
+    if: ${{ !cancelled() \&\& needs.changes.outputs.test_server != '\''false'\'' }}/
 /^  lint:$/,/^  [a-z_]+:$/s/^    name: Lint$/&\
     needs: changes\
     if: ${{ !cancelled() \&\& needs.changes.outputs.lint != '\''false'\'' }}/
@@ -160,7 +164,8 @@ count() { grep -c "$1" <<<"$generated" || true; }
 [[ $(count '^    if: false$') -eq 1 && $(count 'mobile_native_static_analysis: \[\]') -eq 1 ]] ||
   fail "macOS job not disabled"
 [[ $(count '|| steps.tested.outputs.') -eq 10 && $(count '^      - name: Reuse a passing PR run of this tree$') -eq 1 &&
-  $(count "^        if: steps.tested.outputs.run == ''$") -eq 1 && $(count "needs.changes.outputs.lint != 'false'") -eq 1 ]] ||
+  $(count "^        if: steps.tested.outputs.run == ''$") -eq 1 && $(count "needs.changes.outputs.lint != 'false'") -eq 1 &&
+  $(count "needs.changes.outputs.test_server != 'false' }}$") -eq 1 ]] ||
   fail "tested-tree reuse not applied"
 # Any runner label, including one set through a matrix or an input.
 if grep -nE 'blacksmith-[0-9]+vcpu-' <<<"$generated" >&2; then
