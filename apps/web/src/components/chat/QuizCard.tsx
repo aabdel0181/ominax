@@ -27,6 +27,35 @@ import { Button } from "../ui/button";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { Textarea } from "../ui/textarea";
 import { Input } from "../ui/input";
+import ChatMarkdown from "../ChatMarkdown";
+
+function stripCardLinks(text: string) {
+  return text.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+}
+
+function CardText(props: {
+  readonly text: string;
+  readonly inline?: boolean;
+  readonly className?: string;
+  readonly option?: boolean;
+}) {
+  if (!props.text.includes("$")) {
+    return props.inline ? (
+      <span className={props.className}>{props.text}</span>
+    ) : (
+      <p className={props.className}>{props.text}</p>
+    );
+  }
+  const text = props.option ? stripCardLinks(props.text) : props.text;
+  return (
+    <ChatMarkdown
+      text={text}
+      cwd={undefined}
+      {...(props.inline ? { inline: true } : {})}
+      {...(props.className ? { className: props.className } : {})}
+    />
+  );
+}
 
 const focusedCardSeeds = new Set<string>();
 // The virtualized timeline unmounts a card scrolled out of view; keep the learner's draft.
@@ -215,14 +244,14 @@ function OpenQuestionCard(props: {
   };
   const renderQuestion = () => {
     if (props.card.blanks === undefined)
-      return <p className="font-medium">{props.card.question}</p>;
+      return <CardText text={props.card.question} className="font-medium" />;
     const parts = props.card.question.split(/_{3,}/g);
     return (
       <p className="font-medium leading-9">
         {parts.map((part, index) => (
           // oxlint-disable-next-line react/no-array-index-key -- fixed segments of an immutable card
           <span key={index}>
-            {part}
+            <CardText text={part} inline className="font-medium" />
             {index < props.card.blanks!.length ? (
               revealed ? (
                 (savedBlanks?.[index]?.answer ?? answers[index])
@@ -326,7 +355,9 @@ function OpenQuestionCard(props: {
       {revealed ? (
         <div className="mt-4 space-y-2 text-sm">
           {skipped || savedAnswer?.kind === "skipped" ? (
-            <p>{savedAnswer?.kind === "skipped" ? savedAnswer.label : "I don't know."}</p>
+            <CardText
+              text={savedAnswer?.kind === "skipped" ? savedAnswer.label : "I don't know."}
+            />
           ) : props.card.blanks ? (
             props.answered && !submitted && savedBlanks === undefined ? (
               <>
@@ -345,14 +376,12 @@ function OpenQuestionCard(props: {
                   savedBlanks?.[index]?.grade === "right" ||
                   (savedBlanks === undefined && blankAnswerRight(blank, answer));
                 return (
-                  <p
+                  <CardText
                     // oxlint-disable-next-line react/no-array-index-key -- blanks of an immutable card
                     key={index}
                     className={right ? "text-success" : "text-destructive"}
-                  >
-                    Blank {index + 1}: {savedBlanks ? `${answer}. ` : ""}
-                    {right ? "Right." : "Wrong."} Accepted: {blank.answers.join(" / ")}
-                  </p>
+                    text={`Blank ${index + 1}: ${savedBlanks ? `${answer}. ` : ""}${right ? "Right." : "Wrong."} Accepted: ${blank.answers.join(" / ")}`}
+                  />
                 );
               })
             )
@@ -363,22 +392,14 @@ function OpenQuestionCard(props: {
                 <p>Expected {numberAnswerExpected(props.card.number)}</p>
               </>
             ) : (
-              <p
+              <CardText
                 className={
                   savedNumber?.grade === "right" || (savedNumber === undefined && numberRight)
                     ? "text-success"
                     : "text-destructive"
                 }
-              >
-                Your answer:{" "}
-                {savedNumber?.answer ??
-                  `${numberAnswer.trim()}${props.card.number.unit ? ` ${props.card.number.unit}` : ""}`}
-                .{" "}
-                {savedNumber?.grade === "right" || (savedNumber === undefined && numberRight)
-                  ? "Right."
-                  : "Wrong."}{" "}
-                Expected {numberAnswerExpected(props.card.number)}
-              </p>
+                text={`Your answer: ${savedNumber?.answer ?? `${numberAnswer.trim()}${props.card.number.unit ? ` ${props.card.number.unit}` : ""}`}. ${savedNumber?.grade === "right" || (savedNumber === undefined && numberRight) ? "Right." : "Wrong."} Expected ${numberAnswerExpected(props.card.number)}`}
+              />
             )
           ) : (
             <p>Answered.</p>
@@ -455,7 +476,7 @@ function MultipleChoiceCard(props: {
       data-quiz-card-seed={props.seed}
       className="min-w-0 rounded-lg border border-border bg-card p-4 text-card-foreground"
     >
-      <p className="font-medium">{props.card.question}</p>
+      <CardText text={props.card.question} className="font-medium" />
       <RadioGroup
         value={
           selected ?? (savedAnswer?.answer === null ? "__unknown__" : (savedAnswer?.answer ?? ""))
@@ -468,7 +489,7 @@ function MultipleChoiceCard(props: {
           <label key={option.option} className="flex items-center gap-2">
             <RadioGroupItem value={option.option} aria-label={option.option} />
             <span>
-              {option.option}
+              <CardText text={option.option} inline option />
               {revealed && option.correct ? " (right)" : ""}
             </span>
           </label>
@@ -539,29 +560,29 @@ function MultipleChoiceCard(props: {
       ) : null}
       {revealed ? (
         <div className="mt-4 space-y-2 text-sm">
-          <p
-            className={
-              sentPick === undefined
-                ? undefined
-                : sentPickCorrect
-                  ? "text-success"
-                  : "text-destructive"
+          <CardText
+            {...(sentPick === undefined
+              ? {}
+              : { className: sentPickCorrect ? "text-success" : "text-destructive" })}
+            text={
+              parsedAnswer?.kind === "skipped"
+                ? parsedAnswer.label
+                : sentAnswer === undefined
+                  ? "Answered."
+                  : sentAnswer === null
+                    ? "Your answer: I don't know."
+                    : sentPickCorrect
+                      ? `Your answer: ${sentAnswer}. Right.`
+                      : `Your answer: ${sentAnswer}. Wrong.`
             }
-          >
-            {parsedAnswer?.kind === "skipped"
-              ? parsedAnswer.label
-              : sentAnswer === undefined
-                ? "Answered."
-                : sentAnswer === null
-                  ? "Your answer: I don't know."
-                  : sentPickCorrect
-                    ? `Your answer: ${sentAnswer}. Right.`
-                    : `Your answer: ${sentAnswer}. Wrong.`}
-          </p>
-          <p>{props.card.explanation}</p>
+          />
+          <CardText text={props.card.explanation} />
           {wrongOptions.map((option) => (
             <p key={option.option}>
-              <strong>{option.label}</strong> {option.wrongIdea}
+              <strong>
+                <CardText text={option.label} inline option />
+              </strong>{" "}
+              <CardText text={option.wrongIdea} inline />
             </p>
           ))}
         </div>

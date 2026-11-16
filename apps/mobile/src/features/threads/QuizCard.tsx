@@ -15,6 +15,9 @@ import { Button } from "../../components/ui/Button";
 import { cn } from "../../lib/cn";
 import { uuidv4 } from "../../lib/uuid";
 import { enqueueThreadOutboxMessage } from "../../state/thread-outbox";
+import { SelectableMarkdownText } from "../../native/SelectableMarkdownText";
+import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
+import { useResolveClassNames } from "uniwind";
 
 const nowIso = () => new Date().toISOString();
 
@@ -26,6 +29,20 @@ export function QuizCard(props: {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
 }) {
+  const markdownStyles = useMarkdownPreviewStyles();
+  const successColor = String(useResolveClassNames("text-success").color ?? "");
+  const dangerColor = String(useResolveClassNames("text-danger").color ?? "");
+  const renderCardText = (text: string, color?: string, fontSize?: number) =>
+    text.includes("$") ? (
+      <SelectableMarkdownText
+        markdown={text}
+        textStyle={{
+          ...markdownStyles.nativeTextStyle,
+          ...(color ? { color } : {}),
+          ...(fontSize ? { fontSize } : {}),
+        }}
+      />
+    ) : null;
   const options = shuffledQuizOptions(props.quizCard, props.seed);
   const [selected, setSelected] = useState<string | null>(null);
   const [confidence, setConfidence] = useState<number | undefined>(undefined);
@@ -84,12 +101,15 @@ export function QuizCard(props: {
 
   return (
     <View className="mb-3 rounded-2xl border border-border bg-card p-4">
-      <Text className="font-t3-medium text-base">{props.quizCard.question}</Text>
+      {renderCardText(props.quizCard.question, undefined, 16) ?? (
+        <Text className="font-t3-medium text-base">{props.quizCard.question}</Text>
+      )}
       <View accessibilityRole="radiogroup" accessibilityLabel="Answer" className="mt-3 gap-2">
         {options.map((option) => (
           <Pressable
             key={option.option}
             accessibilityRole="radio"
+            accessibilityLabel={option.option}
             accessibilityState={{
               checked: (selected ?? savedAnswer?.answer) === option.option,
               disabled: revealed,
@@ -180,31 +200,37 @@ export function QuizCard(props: {
         </>
       ) : (
         <View className="mt-4 gap-2">
-          <Text
-            className={
+          {(() => {
+            const verdict =
+              parsedAnswer?.kind === "skipped"
+                ? parsedAnswer.label
+                : sentAnswer === undefined
+                  ? "Answered."
+                  : sentAnswer === null
+                    ? "Your answer: I don't know."
+                    : `Your answer: ${sentAnswer}. ${sentPickCorrect ? "Right." : "Wrong."}`;
+            const className =
               sentPick === undefined
                 ? "text-foreground"
                 : sentPickCorrect
                   ? "text-success"
-                  : "text-danger"
-            }
-          >
-            {parsedAnswer?.kind === "skipped"
-              ? parsedAnswer.label
-              : sentAnswer === undefined
-                ? "Answered."
-                : sentAnswer === null
-                  ? "Your answer: I don't know."
-                  : sentPickCorrect
-                    ? `Your answer: ${sentAnswer}. Right.`
-                    : `Your answer: ${sentAnswer}. Wrong.`}
-          </Text>
-          <Text>{props.quizCard.explanation}</Text>
-          {wrongOptions.map((option) => (
-            <Text key={option.option}>
-              <Text className="font-t3-medium">{option.label}</Text> {option.wrongIdea}
-            </Text>
-          ))}
+                  : "text-danger";
+            const color =
+              sentPick === undefined ? undefined : sentPickCorrect ? successColor : dangerColor;
+            return renderCardText(verdict, color) ?? <Text className={className}>{verdict}</Text>;
+          })()}
+          {renderCardText(props.quizCard.explanation) ?? <Text>{props.quizCard.explanation}</Text>}
+          {wrongOptions.map((option) =>
+            option.label.includes("$") || option.wrongIdea.includes("$") ? (
+              <View key={option.option}>
+                {renderCardText(`**${option.label}** ${option.wrongIdea}`)}
+              </View>
+            ) : (
+              <Text key={option.option}>
+                <Text className="font-t3-medium">{option.label}</Text> {option.wrongIdea}
+              </Text>
+            ),
+          )}
         </View>
       )}
     </View>

@@ -289,7 +289,8 @@ export function AppearancePreferencesProvider(props: { readonly children: ReactN
     updatePreferences({ codeWordBreak: value });
   };
 
-  const mathRenderingEnabled = storedPreferences?.mathRenderingEnabled === true;
+  // OminaX defaults TeX typesetting on; an explicit false remains respected.
+  const mathRenderingEnabled = storedPreferences?.mathRenderingEnabled !== false;
   const setMathRenderingEnabled = (value: boolean) =>
     updatePreferences({ mathRenderingEnabled: value });
 

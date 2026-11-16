@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { render } from "../../../test/render";
+
+vi.mock(import("../../hooks/useSettings"), async (original) => {
+  const actual = await original();
+  type Settings = ReturnType<typeof actual.getClientSettings>;
+  function useClientSettings<T = Settings>(select?: (settings: Settings) => T): T {
+    const settings = { ...actual.getClientSettings(), mathRenderingEnabled: true };
+    return select ? select(settings) : (settings as T);
+  }
+  return { ...actual, useClientSettings };
+});
+
 import { QuizCardTimelineCard } from "./QuizCard";
 
 const quiz = {
@@ -83,7 +94,7 @@ describe("QuizCardTimelineCard", () => {
     await using screen = await render(
       <QuizCardTimelineCard
         quizCard={{
-          question: "The unit is ___ and the symbol is ___.",
+          question: "For $x$ metres, the unit is ___ and the symbol is ___.",
           blanks: [{ answers: ["meter"] }, { answers: ["m"] }],
         }}
         seed="blanks-1"
@@ -92,6 +103,11 @@ describe("QuizCardTimelineCard", () => {
       />,
     );
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Blank 1" }).element());
+    const blankInput = screen.getByRole("textbox", { name: "Blank 1" }).element();
+    const questionText = screen.getByText("the unit is", { exact: false }).element();
+    expect(
+      Math.abs(blankInput.getBoundingClientRect().top - questionText.getBoundingClientRect().top),
+    ).toBeLessThan(3);
     await userEvent.type(screen.getByRole("textbox", { name: "Blank 1" }), "meter");
     await userEvent.type(screen.getByRole("textbox", { name: "Blank 2" }), "x");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -123,5 +139,23 @@ describe("QuizCardTimelineCard", () => {
     expect(onSendMessage).toHaveBeenCalledWith(
       'Number answer: "9.8 m/s", right.\n\n(card number-1)',
     );
+  });
+
+  it("renders math in card text and keeps the option accessible name", async () => {
+    await using screen = await render(
+      <QuizCardTimelineCard
+        quizCard={{
+          answer: "$x$",
+          explanation: "The explanation uses $y$.",
+          level: "apply",
+          question: "Choose $$x^2$$.",
+          wrongOptions: [{ option: "$y$", wrongIdea: "A different symbol." }],
+        }}
+        seed="math-1"
+        answered={false}
+      />,
+    );
+    expect(screen.container.querySelector("[data-markdown-math]")).not.toBeNull();
+    expect(screen.getByRole("radio", { name: "$x$" })).toHaveAttribute("aria-label", "$x$");
   });
 });

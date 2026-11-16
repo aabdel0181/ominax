@@ -175,6 +175,7 @@ import {
   type NativeMarkdownTextStyle,
   type SelectableMarkdownSkill,
 } from "../../native/SelectableMarkdownText";
+import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { VideoPreviewModal, type VideoPreviewSource } from "../../components/ui/VideoPreviewModal";
@@ -1724,6 +1725,28 @@ function AnsweredQuestionCard(props: {
   readonly answered: boolean;
   readonly answer?: string;
 }) {
+  const markdownStyles = useMarkdownPreviewStyles();
+  const successColor = String(useResolveClassNames("text-success").color ?? "");
+  const dangerColor = String(useResolveClassNames("text-danger").color ?? "");
+  const mutedColor = String(useResolveClassNames("text-foreground-muted").color ?? "");
+  const renderCardText = (text: string, className: string, color?: string) =>
+    text.includes("$") ? (
+      <SelectableMarkdownText
+        markdown={text}
+        textStyle={{
+          ...markdownStyles.nativeTextStyle,
+          ...(color
+            ? { color }
+            : className.includes("text-foreground-muted")
+              ? { color: mutedColor }
+              : {}),
+          ...(className.includes("text-sm") ? { fontSize: 14 } : {}),
+        }}
+        marginTop={className.includes("mt-2") ? 8 : undefined}
+      />
+    ) : (
+      <Text className={className}>{text}</Text>
+    );
   const parsed = props.answer === undefined ? undefined : parseCardAnswer(props.answer);
   const answer =
     parsed?.kind === "blanks" && props.card.blanks?.length !== parsed.answers.length
@@ -1731,28 +1754,37 @@ function AnsweredQuestionCard(props: {
       : parsed;
   return (
     <View className="mb-3 rounded-2xl border border-border bg-card p-4">
-      <Text className="font-t3-medium text-base">{props.card.question}</Text>
-      {answer?.kind === "skipped" ? (
-        <Text className="mt-2 text-sm text-foreground-muted">{answer.label}</Text>
-      ) : answer?.kind === "number" ? (
-        <Text
-          className={cn("mt-2 text-sm", answer.grade === "right" ? "text-success" : "text-danger")}
-        >
-          Your answer: {answer.answer}. {answer.grade === "right" ? "Right." : "Wrong."} Expected{" "}
-          {props.card.number ? numberAnswerExpected(props.card.number) : ""}
-        </Text>
-      ) : answer?.kind === "blanks" ? (
-        answer.answers.map((entry, index) => (
-          // oxlint-disable-next-line react/no-array-index-key -- blanks are ordered answers
-          <Text key={index} className={entry.grade === "right" ? "text-success" : "text-danger"}>
-            Blank {index + 1}: {entry.answer}. {entry.grade === "right" ? "Right." : "Wrong."}
-          </Text>
-        ))
+      {props.card.question.includes("$") ? (
+        <SelectableMarkdownText
+          markdown={props.card.question}
+          textStyle={{ ...markdownStyles.nativeTextStyle, fontSize: 16 }}
+        />
       ) : (
-        <Text className="mt-2 text-sm text-foreground-muted">
-          {props.answered ? "Answered." : "Answer in the chat"}
-        </Text>
+        <Text className="font-t3-medium text-base">{props.card.question}</Text>
       )}
+      {answer?.kind === "skipped"
+        ? renderCardText(answer.label, "mt-2 text-sm text-foreground-muted")
+        : answer?.kind === "number"
+          ? renderCardText(
+              `Your answer: ${answer.answer}. ${answer.grade === "right" ? "Right." : "Wrong."} Expected ${props.card.number ? numberAnswerExpected(props.card.number) : ""}`,
+              `mt-2 text-sm ${answer.grade === "right" ? "text-success" : "text-danger"}`,
+              answer.grade === "right" ? successColor : dangerColor,
+            )
+          : answer?.kind === "blanks"
+            ? answer.answers.map((entry, index) => (
+                // oxlint-disable-next-line react/no-array-index-key -- blanks are ordered answers
+                <View key={index}>
+                  {renderCardText(
+                    `Blank ${index + 1}: ${entry.answer}. ${entry.grade === "right" ? "Right." : "Wrong."}`,
+                    entry.grade === "right" ? "text-success" : "text-danger",
+                    entry.grade === "right" ? successColor : dangerColor,
+                  )}
+                </View>
+              ))
+            : renderCardText(
+                props.answered ? "Answered." : "Answer in the chat",
+                "mt-2 text-sm text-foreground-muted",
+              )}
     </View>
   );
 }

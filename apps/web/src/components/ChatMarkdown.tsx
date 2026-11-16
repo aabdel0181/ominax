@@ -1064,11 +1064,12 @@ const CHAT_MARKDOWN_COMPONENTS = {
     return <div {...props}>{children}</div>;
   },
   p: function MarkdownParagraph({ node: _node, children, ...props }) {
-    const { skills, threadRef, environmentId } = use(ChatMarkdownRendererContext);
+    const { skills, threadRef, environmentId, inline } = use(ChatMarkdownRendererContext);
+    const Tag = inline ? "span" : "p";
     return (
-      <p {...props}>
+      <Tag {...props}>
         {renderSkillInlineMarkdownChildren(children, skills, threadRef, environmentId)}
-      </p>
+      </Tag>
     );
   },
   blockquote: function MarkdownBlockquote({ node: _node, children, ...props }) {

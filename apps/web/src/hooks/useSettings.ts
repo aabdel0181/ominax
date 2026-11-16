@@ -161,6 +161,7 @@ async function hydrateClientSettings(): Promise<void> {
       );
       setClientSettingsHydrationStatus("ready");
       switchFollowUpsToQueueOnce(persistedSettings?.followUpBehavior === "steer");
+      switchMathRenderingOnOnce(persistedSettings?.mathRenderingEnabled);
     } catch (error) {
       if (hydrationGeneration === clientSettingsHydrationGeneration) {
         setClientSettingsHydrationStatus("failed");
@@ -185,6 +186,8 @@ async function hydrateClientSettings(): Promise<void> {
 
 // OminaX (D98): saves wrote the old "steer" default for everyone, so a saved Steer is not a choice.
 const FOLLOW_UPS_QUEUE_SWITCH_KEY = "ominax:follow-ups-queue-switched";
+// OminaX (APP-126): the upstream false default was serialized with every settings write.
+const MATH_RENDERING_DEFAULT_SWITCH_KEY = "ominax:math-rendering-default-switched";
 
 function switchFollowUpsToQueueOnce(savedSteer: boolean): void {
   const markSwitched = () => setLocalStorageItem(FOLLOW_UPS_QUEUE_SWITCH_KEY, true, Schema.Boolean);
@@ -195,6 +198,20 @@ function switchFollowUpsToQueueOnce(savedSteer: boolean): void {
     return; // Unusable storage can't remember the switch, so leave the setting alone.
   }
   void persistClientSettingsUpdate((current) => ({ ...current, followUpBehavior: "queue" }))
+    .then(markSwitched)
+    .catch(() => undefined);
+}
+
+function switchMathRenderingOnOnce(savedMathRenderingEnabled: boolean | undefined): void {
+  const markSwitched = () =>
+    setLocalStorageItem(MATH_RENDERING_DEFAULT_SWITCH_KEY, true, Schema.Boolean);
+  try {
+    if (getLocalStorageItem(MATH_RENDERING_DEFAULT_SWITCH_KEY, Schema.Boolean)) return;
+    if (savedMathRenderingEnabled !== false) return markSwitched();
+  } catch {
+    return;
+  }
+  void persistClientSettingsUpdate((current) => ({ ...current, mathRenderingEnabled: true }))
     .then(markSwitched)
     .catch(() => undefined);
 }
