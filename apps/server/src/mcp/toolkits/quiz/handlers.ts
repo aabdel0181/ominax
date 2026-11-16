@@ -76,17 +76,25 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
   readonly answer?: string;
   readonly verdict: string | undefined;
 }) {
-  const shownBefore = yield* readShownTutor;
+  const check = readShownTutor.pipe(
+    Effect.map((shownBefore) =>
+      shownBefore === undefined
+        ? undefined
+        : cardReplyProblem({
+            ...input,
+            shownBefore: shownBefore.count,
+            shownText: shownBefore.text,
+            answeredCard: shownBefore.answeredCard,
+            visibleSinceAnswer: shownBefore.visibleSinceAnswer,
+          }),
+    ),
+  );
+  // Claude's text before a card is committed when the card's tool_use frame arrives, racing this
+  // call, so look once more before refusing.
   const problem =
-    shownBefore === undefined
+    (yield* check) === undefined
       ? undefined
-      : cardReplyProblem({
-          ...input,
-          shownBefore: shownBefore.count,
-          shownText: shownBefore.text,
-          answeredCard: shownBefore.answeredCard,
-          visibleSinceAnswer: shownBefore.visibleSinceAnswer,
-        });
+      : yield* Effect.andThen(Effect.sleep("1 second"), check);
   if (problem !== undefined) {
     return yield* new OrchestratorMcpFailure({ code: "invalid_request", message: problem });
   }
