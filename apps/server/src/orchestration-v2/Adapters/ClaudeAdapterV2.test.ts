@@ -4624,6 +4624,13 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     },
     {
       tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      verdict: "Right. The repo review found three task families.",
+      lesson: true,
+      expected: ["reasoning", "reasoning"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
       reply: "Good. Yes, it is. Try it.",
       lesson: true,
       thinking: "Yes, it is.",
@@ -4729,6 +4736,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       reply,
       expected,
       lesson,
+      verdict,
       thinking = "The repo review found three task families.",
       heldText,
       shownText,
@@ -4778,7 +4786,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
               type: "tool_use",
               id: "tool-1",
               name: tool,
-              input: reply === undefined ? {} : { reply },
+              input:
+                reply === undefined ? {} : { reply, ...(verdict === undefined ? {} : { verdict }) },
             },
           ]),
           makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000904", result: "" }),

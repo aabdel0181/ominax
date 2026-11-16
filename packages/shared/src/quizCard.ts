@@ -6,9 +6,9 @@ export const MIN_CARD_REPLY_CHARS = 250;
 
 export type CardPurpose = "opening-check" | "explain-back";
 
-// Phrases that point at earlier teaching; refused when nothing visible was taught this turn.
+// Phrases that point at teaching earlier in this turn; refused when nothing visible was taught yet.
 const POINTS_BACK =
-  /\b(?:I (?:just |already )?(?:gave|defined|showed|explained|described|covered)|(?:defined|given|shown|explained|described) (?:above|earlier|before)|recall (?:the|that|how|what)|as (?:above|before|I said|I mentioned))\b/iu;
+  /\bI (?:just|already) (?:gave|defined|showed|explained|described|covered)\b|\b(?:defined|given|shown|explained) (?:just )?above\b/iu;
 
 export function cardReplyProblem(input: {
   readonly reply: string;

@@ -145,8 +145,17 @@ describe("quiz cards", () => {
     expect(cardReplyProblem({ reply: pointsBack, shownBefore: 0 })).toMatch(/points back/u);
     expect(cardReplyProblem({ reply: pointsBack, shownBefore: 300 })).toBeUndefined();
     expect(
-      cardReplyProblem({ reply: `Recall the weights. ${"x".repeat(250)}`, shownBefore: 0 }),
+      cardReplyProblem({
+        reply: `Q is the weighted average defined above. ${"x".repeat(250)}`,
+        shownBefore: 0,
+      }),
     ).toMatch(/points back/u);
+    expect(
+      cardReplyProblem({
+        reply: `Recall the force diagram we drew last time. ${"x".repeat(250)}`,
+        shownBefore: 0,
+      }),
+    ).toBeUndefined();
     expect(
       cardReplyProblem({ reply: `I recall nothing odd. ${"x".repeat(250)}`, shownBefore: 0 }),
     ).toBeUndefined();

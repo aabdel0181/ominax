@@ -930,6 +930,8 @@ type Sample = {
   shownSinceLastUser: number;
   /** The same text, for the card answer check. */
   shownTextSinceLastUser: string;
+  /** Any real tutor text (verdict included, card replies not) since the learner's message. */
+  visibleSinceAnswer: boolean;
   verdictPending: boolean;
   /** Root Claude text held until the next tool in lesson cases. */
   readonly heldLessonText: Array<string>;
@@ -985,6 +987,7 @@ export const makeSample = (testCase: McpToolUseCase, base: Base): Sample => {
     said: [],
     shownSinceLastUser: 0,
     shownTextSinceLastUser: "",
+    visibleSinceAnswer: false,
     verdictPending: (() => {
       const answer =
         testCase.prompt || [...prior].findLast((turn) => turn.role === "user")?.text || "";
@@ -1898,7 +1901,7 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
         shownBefore: sample.shownSinceLastUser,
         shownText: sample.shownTextSinceLastUser,
         answeredCard: withoutCardAnswerTag(testCase.prompt) !== testCase.prompt,
-        visibleSinceAnswer: sample.shownSinceLastUser > 0,
+        visibleSinceAnswer: sample.visibleSinceAnswer,
         ...(typeof input.verdict === "string" ? { verdict: input.verdict } : {}),
         ...(quiz === undefined ? {} : { answer: quiz.answer }),
         ...(question?.number?.unit === undefined
@@ -2612,6 +2615,7 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
       sample.heldLessonText.length = 0;
     }
     said.push(...texts);
+    if (texts.some((text) => text.trim() !== "")) sample.visibleSinceAnswer = true;
     const shownTexts = [...texts];
     if (sample.verdictPending && shownTexts.length > 0) {
       shownTexts[0] = shownTexts[0]!.slice(cardAnswerVerdictLength(shownTexts[0]!));

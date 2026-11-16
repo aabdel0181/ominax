@@ -2562,12 +2562,14 @@ function isLessonCardAnswerTurn(input: ProviderAdapter.ProviderAdapterV2TurnInpu
   return isLessonTurn(input) && withoutCardAnswerTag(input.message.text) !== input.message.text;
 }
 
-// A lesson card whose reply already says this text shows it once, as the reply (APP-102).
+// A lesson card whose reply or verdict already says this text shows it once, on the card (APP-102).
 function cardReplyRepeats(block: { readonly name: string; readonly input: unknown }, text: string) {
   if (!isLessonCardTool(block.name)) return false;
-  const reply = (block.input as { readonly reply?: unknown } | null)?.reply;
+  const input = block.input as { readonly reply?: unknown; readonly verdict?: unknown } | null;
   const words = (value: string) => value.replace(/\s+/gu, " ").trim();
-  return typeof reply === "string" && words(reply).includes(words(text));
+  return [input?.verdict, input?.reply].some(
+    (shown) => typeof shown === "string" && words(shown).includes(words(text)),
+  );
 }
 
 function cardReplyCoversLead(
