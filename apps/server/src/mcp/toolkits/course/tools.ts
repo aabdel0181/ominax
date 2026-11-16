@@ -87,7 +87,7 @@ const CourseUpdateTool = Tool.make("course_update", {
     ),
     courseId: Schema.optional(CourseId),
   }),
-  success: CourseToolResult,
+  success: Schema.Unknown,
   failure: OrchestratorMcpFailure,
   dependencies: [
     McpInvocationContext.McpInvocationContext,

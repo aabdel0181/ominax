@@ -11,6 +11,7 @@ import {
   NodeId,
   OrchestratorMcpThreadReadResult,
   ProjectId,
+  OrchestratorMcpFailure,
   ProviderDriverKind,
   ProviderInstanceId,
   RunId,
@@ -1654,6 +1655,7 @@ it.effect("animation_render caches a concept clip and replays it without renderi
 it.effect("course_prepare starts a standalone prep thread and sends nothing to the lesson", () => {
   const requests: unknown[] = [];
   const recordedAtCreate: ThreadId[][] = [];
+  let providerOffersAuto = true;
   let courses: CourseService.CourseService["Service"] | undefined;
   return Effect.gen(function* () {
     const service = yield* CourseService.CourseService;
@@ -1674,14 +1676,33 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
           {
             title: "Prep: Signals L1–2",
             prompt: expect.stringContaining(course.id),
-            runtimeMode: "approval-required",
+            // Never approval-required (nobody answers it) and never full access (it reads scans).
+            runtimeMode: "auto",
           },
         ],
       },
     ]);
+    // A bare unit saves the position, and the tutor gets a slim result, not the stored course.
+    const moved = yield* callAs("course_update", { unit: 2 });
+    expect(moved.isError).not.toBe(true);
+    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 2 });
+    expect(JSON.stringify(moved.content)).not.toContain("prepThreadIds");
+    expect(JSON.stringify(moved.content)).toContain("2. Two");
+    expect((yield* callAs("course_update", { position: { unit: 9 } })).isError).toBe(true);
+    const outline = JSON.stringify((yield* callAs("course_read", {})).content);
+    expect(outline).toContain("1. One");
+    expect(outline).not.toContain("prepThreadIds");
     // The prep turn may call course_read at once, so its id is recorded before it starts.
     expect(recordedAtCreate).toEqual([(yield* service.get({ id: course.id })).prepThreadIds]);
     expect(recordedAtCreate[0]).toHaveLength(1);
+    animationRuntimeMode = "auto";
+    yield* callAs("course_prepare", { units: [1] });
+    animationRuntimeMode = "full-access";
+    expect(requests.at(-1)).not.toHaveProperty("threads.0.runtimeMode");
+    providerOffersAuto = false;
+    expect((yield* callAs("course_prepare", { units: [1] })).isError).not.toBe(true);
+    providerOffersAuto = true;
+    expect(requests.at(-1)).toHaveProperty("threads.0.runtimeMode", "approval-required");
     yield* service.add({
       lessonThreadId: threadId,
       ingested: {
@@ -1793,6 +1814,11 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
           Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({
             createThreads: (scope, input) =>
               Effect.gen(function* () {
+                if (!providerOffersAuto && input.threads[0]?.runtimeMode === "auto")
+                  return yield* new OrchestratorMcpFailure({
+                    code: "invalid_request",
+                    message: "Provider pi does not offer runtime mode auto.",
+                  });
                 requests.push(input);
                 const prepThreadId = OrchestratorMcpService.stableThreadId({
                   scope,
