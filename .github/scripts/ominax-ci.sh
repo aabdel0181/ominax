@@ -61,6 +61,60 @@ s/mobile_native_static_analysis: \["mobile_native"\]/mobile_native_static_analys
           name: learner-e2e\
           path: ${{ runner.temp }}/learner-e2e
 }
+# REL-81: a PR merged while up to date leaves main with the exact tree its PR
+# run tested. PR runs name an artifact after their tree; a push to main whose
+# tree has a passing PR run reuses it and skips every other job, Lint included.
+# Dispatched runs and any other tree run in full, so a green main run still
+# means this exact tree passed CI.
+/^  changes:$/,/^  [a-z_]+:$/{
+  s/^    runs-on: /    permissions:\
+      contents: read\
+      actions: read\
+&/
+  s/^    outputs:$/&\
+      lint: ${{ steps.tested.outputs.lint }}/
+  s/^(      [a-z_]+: \$\{\{ steps\.detect\.outputs\.([a-z_]+)) \}\}$/\1 || steps.tested.outputs.\2 }}/
+  /^      - name: Detect affected jobs$/i\
+      - name: Record the tested tree\
+        id: tree\
+        run: echo "tree=$(git rev-parse '\''HEAD^{tree}'\'' | tee "$RUNNER_TEMP/tree")" >> "$GITHUB_OUTPUT"\
+\
+      - name: Upload the tested tree\
+        if: github.event_name == '\''pull_request'\''\
+        uses: actions/upload-artifact@v7\
+        with:\
+          name: ominax-tested-tree-${{ steps.tree.outputs.tree }}\
+          path: ${{ runner.temp }}/tree\
+          retention-days: 30\
+          overwrite: true\
+\
+      - name: Reuse a passing PR run of this tree\
+        id: tested\
+        if: github.event_name == '\''push'\''\
+        env:\
+          GH_TOKEN: ${{ github.token }}\
+          TREE: ${{ steps.tree.outputs.tree }}\
+        run: |\
+          for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=ominax-tested-tree-$TREE" -q '\''.artifacts[].workflow_run.id'\'' | sort -u); do\
+            url="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" -q '\''select(.path == ".github/workflows/ominax-ci.yml" and .event == "pull_request" and .head_repository.full_name == .repository.full_name and .conclusion == "success") | .html_url'\'' || true)"\
+            if [ -n "$url" ]; then\
+              echo "$url passed this exact tree; skipping every job."\
+              { echo "run=$url"; echo lint=false; node .github/scripts/ci-changes.cjs --paths /dev/null; } >> "$GITHUB_OUTPUT"\
+              exit 0\
+            fi\
+          done\
+          echo "No passing PR run tested tree $TREE; running every job."\
+
+  /^        id: detect$/a\
+        if: steps.tested.outputs.run == '\'''\''
+}
+# Test Server detects its own gate, so it needs the reuse result too.
+s/^    name: Test Server \$\{\{ matrix\.shard \}\}$/&\
+    needs: changes\
+    if: ${{ !cancelled() \&\& needs.changes.outputs.test_server != '\''false'\'' }}/
+/^  lint:$/,/^  [a-z_]+:$/s/^    name: Lint$/&\
+    needs: changes\
+    if: ${{ !cancelled() \&\& needs.changes.outputs.lint != '\''false'\'' }}/
 /^      - name: Reject repository-owned PR assets$/i\
       - name: Require ominax-ci.yml to match ci.yml\
         run: bash .github/scripts/ominax-ci.sh && git diff --exit-code -- .github/workflows/ominax-ci.yml\
@@ -109,6 +163,10 @@ count() { grep -c "$1" <<<"$generated" || true; }
   fail "Chromium steps not widened for server-only changes"
 [[ $(count '^    if: false$') -eq 1 && $(count 'mobile_native_static_analysis: \[\]') -eq 1 ]] ||
   fail "macOS job not disabled"
+[[ $(count '|| steps.tested.outputs.') -eq 10 && $(count '^      - name: Reuse a passing PR run of this tree$') -eq 1 &&
+  $(count "^        if: steps.tested.outputs.run == ''$") -eq 1 && $(count "needs.changes.outputs.lint != 'false'") -eq 1 &&
+  $(count "needs.changes.outputs.test_server != 'false' }}$") -eq 1 ]] ||
+  fail "tested-tree reuse not applied"
 # Any runner label, including one set through a matrix or an input.
 if grep -nE 'blacksmith-[0-9]+vcpu-' <<<"$generated" >&2; then
   fail "unmapped Blacksmith runner"
