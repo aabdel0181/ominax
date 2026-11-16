@@ -2,6 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import * as DateTime from "effect/DateTime";
 import {
   answeredCardAnswers,
+  lessonCardAnswers,
+  openLessonCardItemId,
+  statesAnswer,
   cardReplyProblem,
   explainBackClaimsProblem,
   foldCardReply,
@@ -36,6 +39,41 @@ const card: QuizCard = {
 };
 
 describe("quiz cards", () => {
+  it("finds the card the lesson still shows open and spots a picture that states its answer", () => {
+    const card = {
+      role: "assistant",
+      id: "card:reply",
+      text: "",
+      createdAt: "2026-01-01T00:00:02Z",
+    };
+    // A question typed in the lesson leaves the card open, as the app shows it.
+    const asked = {
+      role: "user",
+      text: "wait, what is a ratio?",
+      createdAt: "2026-01-01T00:00:03Z",
+    };
+    expect(openLessonCardItemId([card, asked])).toBe("card");
+    const answer = cardAnswerMessage("20", "card");
+    expect(
+      openLessonCardItemId([
+        card,
+        { role: "user", text: answer, createdAt: "2026-01-01T00:00:04Z" },
+      ]),
+    ).toBeUndefined();
+    const answers = lessonCardAnswers({
+      question: "Ratio?",
+      number: { answer: 20.09, tolerance: 0 },
+    });
+    // A number card with a unit: the bare number in the picture still counts.
+    expect(statesAnswer("<text>about 20.09 times</text>", answers[0]!)).toBe(true);
+    expect(statesAnswer("<text>about 120.09 times</text>", answers[0]!)).toBe(false);
+    expect(statesAnswer("<script>ctx.arc(20.09, 4)</script><text>ramp</text>", answers[0]!)).toBe(
+      false,
+    );
+    expect(statesAnswer("<text>0.01&nbsp;to 0.25</text>", "0.01 to 0.25")).toBe(true);
+    expect(statesAnswer("<text>ticks 0 10 20</text>", "20")).toBe(false);
+  });
+
   it("closes an unanswered card when a later card is posted after a user exchange", () => {
     expect(
       answeredCardAnswers([

@@ -13,6 +13,7 @@ import {
   type OrchestrationV2ProviderThread,
   type OrchestrationV2ProviderTurn,
   type OrchestrationV2Run,
+  type OrchestrationV2SideChat,
   type OrchestrationV2RunAttempt,
   type OrchestrationV2StoredEvent,
   type OrchestrationV2Subagent,
@@ -4357,6 +4358,8 @@ function runBackgroundItemScenario(
     readonly onFinalized?: (
       events: ReadonlyArray<OrchestrationV2DomainEvent>,
     ) => Effect.Effect<void>;
+    readonly lesson?: boolean;
+    readonly sideChat?: boolean;
   },
 ) {
   return Effect.gen(function* () {
@@ -4450,7 +4453,14 @@ function runBackgroundItemScenario(
       const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
       yield* runExecution.startRootRun({
         commandId: CommandId.make(`command:${key}`),
-        appThread: rootAppThread(ids.threadId),
+        appThread: {
+          ...rootAppThread(ids.threadId),
+          ...(options?.lesson === true
+            ? { lesson: { topic: "forces", depth: "working", purpose: "outcome" } as const }
+            : {}),
+          // Only its presence matters to the run.
+          ...(options?.sideChat === true ? { sideChat: {} as OrchestrationV2SideChat } : {}),
+        },
         providerSessionId: ProviderSessionId.make(`session:${key}`),
         session: {
           events: Stream.empty,
@@ -4533,6 +4543,71 @@ function runBackgroundItemScenario(
     return yield* Ref.get(observed);
   });
 }
+
+it.effect.each([
+  {
+    name: "a coding thread keeps",
+    lesson: false,
+    expected: ["Card answer: 30 N", '{"answer":"30 N"}'],
+  },
+  { name: "a lesson stores no", lesson: true, expected: ["", "null"] },
+])("$name reasoning text or refused card input", ({ lesson, expected }) =>
+  Effect.gen(function* () {
+    const texts = yield* Ref.make<ReadonlyArray<string>>([]);
+    yield* runBackgroundItemScenario(
+      `lesson-thoughts-${lesson}`,
+      (ids) => [
+        {
+          type: "turn_item.updated",
+          driver,
+          turnItem: {
+            ...makeLinkedChildTurnItemFixture({ ids, driver, type: "reasoning" }),
+            id: ids.itemId,
+            threadId: ids.threadId,
+            runId: ids.runId,
+            nodeId: ids.rootNodeId,
+            status: "completed",
+            text: "Card answer: 30 N",
+            streaming: false,
+          },
+        } as ProviderAdapter.ProviderAdapterV2Event,
+        {
+          type: "turn_item.updated",
+          driver,
+          turnItem: {
+            ...makeLinkedChildTurnItemFixture({ ids, driver, type: "command_execution" }),
+            id: TurnItemId.make(`${ids.itemId}:card`),
+            threadId: ids.threadId,
+            runId: ids.runId,
+            nodeId: ids.rootNodeId,
+            status: "failed",
+            type: "dynamic_tool",
+            toolName: "quiz_card",
+            input: { answer: "30 N" },
+            output: { isError: true, content: [{ type: "text", text: "Refused." }] },
+          },
+        } as ProviderAdapter.ProviderAdapterV2Event,
+        rootTerminalEvent(ids, "completed"),
+      ],
+      {
+        lesson,
+        onIngest: (event) =>
+          event.type === "turn_item.updated" && event.turnItem.type === "reasoning"
+            ? Ref.update(texts, (current) => [
+                ...current,
+                (event.turnItem as { readonly text: string }).text,
+              ])
+            : event.type === "turn_item.updated" && event.turnItem.type === "dynamic_tool"
+              ? Ref.update(texts, (current) => [
+                  ...current,
+                  JSON.stringify((event.turnItem as { readonly input: unknown }).input),
+                ])
+              : Effect.void,
+      },
+    );
+    assert.deepEqual(yield* Ref.get(texts), expected);
+  }),
+);
 
 it.effect("keeps a failed root's still-running native children live while the run settles", () =>
   Effect.gen(function* () {
@@ -4817,6 +4892,38 @@ it.effect("settles a child message only an idle flush wrote when the root is int
     assert.equal(settled[0]?.status, "interrupted");
     assert.equal("text" in settled[0]! ? settled[0].text : null, heldChildText);
     assert.isFalse("streaming" in settled[0]! && settled[0].streaming);
+  }),
+);
+
+it.effect("settles a lesson subagent's open thought without its text", () =>
+  Effect.gen(function* () {
+    const ids = backgroundScenarioIds("lesson-child-thought");
+    const finalized = yield* Ref.make<ReadonlyArray<OrchestrationV2DomainEvent>>([]);
+    yield* runBackgroundItemScenario(
+      "lesson-child-thought",
+      (ids) => [
+        childThreadCreatedEvent(ids),
+        {
+          type: "turn_item.updated",
+          driver,
+          turnItem: {
+            ...makeLinkedChildTurnItemFixture({ ids, driver, type: "reasoning" }),
+            text: "Card answer: 30 N",
+            streaming: false,
+          },
+        } as ProviderAdapter.ProviderAdapterV2Event,
+        linkedSubagentEvent(ids, "running"),
+        rootTerminalEvent(ids, "interrupted"),
+      ],
+      { sideChat: true, onFinalized: (written) => Ref.set(finalized, written) },
+    );
+    const settled = (yield* Ref.get(finalized)).flatMap((event) =>
+      event.type === "turn-item.updated" && event.payload.id === ids.childItemId
+        ? [event.payload]
+        : [],
+    );
+    assert.equal(settled.length, 1);
+    assert.equal("text" in settled[0]! ? settled[0].text : null, "");
   }),
 );
 

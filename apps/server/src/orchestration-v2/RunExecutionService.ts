@@ -1,7 +1,12 @@
 import { makeAssistantStreamingFilter } from "./assistantStreaming.ts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { QUESTION_CARD_TOOL_NAME, QUIZ_CARD_TOOL_NAME } from "@t3tools/shared/quizCard";
+import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
+import { HTML_RENDER_TOOL_NAME } from "@t3tools/shared/htmlRender";
+import { compactDynamicToolOutput } from "@t3tools/shared/toolOutput";
 import {
   isAnySideChatThread,
+  isSideChatThread,
   isOrchestrationV2WorkActive,
   CommandId,
   type EventId,
@@ -586,6 +591,28 @@ export const RunExecutionServiceV2Error = Schema.Union([
 ]);
 export type RunExecutionServiceV2Error = typeof RunExecutionServiceV2Error.Type;
 
+const GUARDED_LESSON_TOOLS = new Set([
+  QUIZ_CARD_TOOL_NAME,
+  QUESTION_CARD_TOOL_NAME,
+  HTML_RENDER_TOOL_NAME,
+]);
+
+/** Lesson thoughts and refused cards' or pictures' inputs can hold an open card's answer. */
+function withoutLessonSecrets(
+  event: ProviderAdapter.ProviderAdapterV2Event,
+): ProviderAdapter.ProviderAdapterV2Event {
+  if (event.type !== "turn_item.updated") return event;
+  const item = event.turnItem;
+  if (item.type === "reasoning") return { ...event, turnItem: { ...item, text: "", title: null } };
+  if (
+    item.type === "dynamic_tool" &&
+    GUARDED_LESSON_TOOLS.has(resolveT3McpToolId(item.toolName) ?? "") &&
+    (item.status === "failed" || compactDynamicToolOutput(item.output)?.isError === true)
+  )
+    return { ...event, turnItem: { ...item, input: null } };
+  return event;
+}
+
 export interface RunExecutionServiceV2StartRootRunInput {
   readonly commandId: CommandId;
   readonly appThread: OrchestrationV2AppThread;
@@ -1158,6 +1185,8 @@ export const layer: Layer.Layer<
         const childSnapshotPendingWork = new Set<ProviderThreadId>();
         let rootTurnOwnershipChecked = false;
         const assistantStreaming = makeAssistantStreamingFilter(responseStreamingMode);
+        const lessonThread =
+          input.appThread.lesson !== undefined || isSideChatThread(input.appThread);
         // Set when ingestion ends or finalization settles the run's open items, which a later
         // streaming snapshot must not reopen.
         let idleFlushClosed = false;
@@ -1630,13 +1659,15 @@ export const layer: Layer.Layer<
           yield* scheduleIdleFlush;
         });
         const ingestEvent = Effect.fnUntraced(function* ({
-          event,
+          event: providerEvent,
           accepted,
         }: {
           event: ProviderAdapter.ProviderAdapterV2Event;
           accepted: boolean;
         }) {
           if (!accepted) return;
+          // Redacted before anything keeps it: the stream filter, child tracking, every write.
+          const event = lessonThread ? withoutLessonSecrets(providerEvent) : providerEvent;
           if (
             event.type === "provider_turn.updated" &&
             event.providerTurn.runAttemptId === input.attempt.id &&
