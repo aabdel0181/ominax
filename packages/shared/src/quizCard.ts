@@ -22,6 +22,7 @@ export function cardReplyProblem(input: {
   const answerAppears =
     answer !== undefined &&
     meaningful(answer) &&
+    /\d/u.test(answer) &&
     new RegExp(
       `(?<![\\p{L}\\p{N}_])${answer.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?![\\p{L}\\p{N}_])`,
       "iu",

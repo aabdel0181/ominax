@@ -25,30 +25,6 @@ const QUESTION_CARD_SHOWN =
   "Shown to the learner as a card. Don't repeat the question. Draw nothing now. When they answer, give the verdict as text, then draw the picture this turn's teaching owes (tag it with that answered card's id using forCard) before any new teaching; then end your turn. Their answer arrives as their next message. For blanks and numbers, the app already marked each answer right or wrong; confirm and explain. Grade open text strictly against the answer you wrote before asking: say plainly what holds and what is missing or wrong, never soften a wrong idea.";
 
 // Card replies are appended after other messages and queued sends sit in delivery order, so sort by time.
-const shownTutorContent = (
-  messages: ReadonlyArray<{
-    readonly id: string;
-    readonly role: string;
-    readonly text: string;
-    readonly createdAt: DateTime.Utc;
-  }>,
-) => {
-  const ordered = messages.toSorted(
-    (a, b) => DateTime.toEpochMillis(a.createdAt) - DateTime.toEpochMillis(b.createdAt),
-  );
-  const lastUser = ordered.findLastIndex((message) => message.role === "user");
-  return ordered
-    .slice(lastUser + 1)
-    .filter(
-      (message) =>
-        message.role === "assistant" &&
-        !/(?::|%3A)thinking(?::|%3A)/iu.test(message.id) &&
-        !message.id.endsWith(":outline"),
-    )
-    .map((message) => message.text)
-    .join("\n");
-};
-
 export const shownTutorText = (
   messages: ReadonlyArray<{
     readonly id: string;
@@ -61,32 +37,36 @@ export const shownTutorText = (
     (a, b) => DateTime.toEpochMillis(a.createdAt) - DateTime.toEpochMillis(b.createdAt),
   );
   const lastUser = ordered.findLastIndex((message) => message.role === "user");
+  const texts: string[] = [];
   let verdictPending =
     lastUser !== -1 && withoutCardAnswerTag(ordered[lastUser]!.text) !== ordered[lastUser]!.text;
-  return ordered
-    .slice(lastUser + 1)
-    .filter(
-      (message) =>
-        message.role === "assistant" &&
-        !/(?::|%3A)thinking(?::|%3A)/iu.test(message.id) &&
-        !message.id.endsWith(":outline"),
+  let count = 0;
+  for (const message of ordered.slice(lastUser + 1)) {
+    if (
+      message.role !== "assistant" ||
+      /(?::|%3A)thinking(?::|%3A)/iu.test(message.id) ||
+      message.id.endsWith(":outline")
     )
-    .reduce((total, message) => {
-      if (!verdictPending || /:reply$/u.test(message.id)) return total + message.text.length;
+      continue;
+    let text = message.text;
+    if (verdictPending && !/:reply$/u.test(message.id)) {
+      text = text.slice(cardAnswerVerdictLength(text));
       verdictPending = false;
-      return total + message.text.length - cardAnswerVerdictLength(message.text);
-    }, 0);
+    }
+    texts.push(text);
+    count += text.length;
+  }
+  return { text: texts.join("\n"), count };
 };
 
 const readShownTutor = readThread(undefined, ["messages"]).pipe(
   Effect.map(({ projection }) => ({
-    text: shownTutorContent(projection.messages),
-    count: shownTutorText(projection.messages),
+    ...shownTutorText(projection.messages),
   })),
   Effect.orElseSucceed(() => undefined),
 );
 
-const refuseThinReply = Effect.fn("quiz.refuseThinReply")(function* (input: {
+const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: {
   readonly reply: string;
   readonly purpose: CardPurpose | undefined;
   readonly answer?: string;
@@ -121,7 +101,7 @@ const handlers = {
           message: problem ?? "Invalid quiz card.",
         });
       }
-      yield* refuseThinReply({
+      yield* refuseCardProblem({
         reply: input.reply,
         purpose: input.purpose,
         answer: input.answer,
@@ -143,7 +123,7 @@ const handlers = {
             "Invalid question card: provide a non-empty question of at most 2000 characters; for blanks, provide one entry per ___ in the question and list every accepted answer; for number, provide answer and tolerance ≥ 0; do not provide both; keep reply under 2000 characters, source under 500, and the whole card under about 7 KB.",
         });
       }
-      yield* refuseThinReply({
+      yield* refuseCardProblem({
         reply: input.reply,
         purpose: input.purpose,
         ...(input.number === undefined ? {} : { numberAnswer: input.number.answer }),

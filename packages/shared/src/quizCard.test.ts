@@ -135,6 +135,21 @@ describe("quiz cards", () => {
         shownBefore: 0,
       }),
     ).toBe("The answer is stated just above; pose a new case that needs one more step.");
+    expect(
+      cardReplyProblem({
+        reply: "Right. Friction opposes the push.",
+        answer: "Right",
+        shownBefore: 250,
+      }),
+    ).toBeUndefined();
+    expect(
+      cardReplyProblem({
+        reply: "x".repeat(250),
+        numberAnswer: 20,
+        shownText: "",
+        shownBefore: 0,
+      }),
+    ).toBeUndefined();
   });
   it.each([
     [

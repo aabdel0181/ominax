@@ -35,7 +35,7 @@ describe("quiz card reply visibility", () => {
       at(31, "user", "queued send"),
       at(6, "assistant", "r".repeat(265), "toolu_1:reply"),
     ];
-    expect(shownTutorText(messages)).toBe(321);
+    expect(shownTutorText(messages).count).toBe(321);
   });
 
   it("does not count promoted thinking summaries or course outlines", () => {
@@ -46,13 +46,13 @@ describe("quiz card reply visibility", () => {
       "message:provider:claudeAgent:native-item:msg_011CgpYTQZCUAf5iyjZ9S6jP%3Athinking%3A1",
     );
     const outline = at(40, "assistant", "o".repeat(400), "toolu_2:outline");
-    expect(shownTutorText([at(26, "user", "answer"), thinking, outline])).toBe(0);
+    expect(shownTutorText([at(26, "user", "answer"), thinking, outline]).count).toBe(0);
   });
 
   it("does not count a verdict paragraph after a card answer", () => {
     const verdict = "v".repeat(198);
     const answer = "The water beads on wax.\n\n(card card-1)";
-    expect(shownTutorText([at(26, "user", answer), at(36, "assistant", verdict)])).toBe(0);
+    expect(shownTutorText([at(26, "user", answer), at(36, "assistant", verdict)]).count).toBe(0);
   });
 
   it("counts teaching after the verdict paragraph", () => {
@@ -60,7 +60,8 @@ describe("quiz card reply visibility", () => {
     const teaching = "t".repeat(100);
     const answer = 'Quiz answer: "A", right.\n\n(card card-1)';
     expect(
-      shownTutorText([at(26, "user", answer), at(36, "assistant", `${verdict}\n\n${teaching}`)]),
+      shownTutorText([at(26, "user", answer), at(36, "assistant", `${verdict}\n\n${teaching}`)])
+        .count,
     ).toBe(teaching.length + 2);
   });
 
@@ -69,18 +70,16 @@ describe("quiz card reply visibility", () => {
     const teaching = "t".repeat(100);
     const answer = "The water beads on wax.\n\n(card card-1)";
     expect(
-      shownTutorText([
-        at(26, "user", answer),
-        at(36, "assistant", `\n\n${verdict}\n\n${teaching}`),
-      ]),
+      shownTutorText([at(26, "user", answer), at(36, "assistant", `\n\n${verdict}\n\n${teaching}`)])
+        .count,
     ).toBe(teaching.length + 2);
   });
 
   it("keeps counting text after a non-answer user message", () => {
     const text = "v".repeat(198);
-    expect(shownTutorText([at(26, "user", "not a card answer"), at(36, "assistant", text)])).toBe(
-      text.length,
-    );
+    expect(
+      shownTutorText([at(26, "user", "not a card answer"), at(36, "assistant", text)]).count,
+    ).toBe(text.length);
   });
 
   it("counts a card reply but does not use it as the verdict", () => {
@@ -92,7 +91,7 @@ describe("quiz card reply visibility", () => {
         at(26, "user", answer),
         at(30, "assistant", cardReply, "card-1:reply"),
         at(36, "assistant", verdict),
-      ]),
+      ]).count,
     ).toBe(cardReply.length);
   });
 });
@@ -176,13 +175,13 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     {
       id: "user-current",
       role: "user",
-      text: "next",
+      text: 'Quiz answer: "A", right.\n\n(card item-q1)',
       createdAt: DateTime.makeUnsafe("2026-01-01T00:01:00Z"),
     },
     {
       id: "assistant-current",
       role: "assistant",
-      text: "current",
+      text: "Correct, 20 N.\n\ncurrent Right.",
       createdAt: DateTime.makeUnsafe("2026-01-01T00:02:00Z"),
     },
   ] as unknown as OrchestrationV2ThreadProjection["messages"];
@@ -191,7 +190,7 @@ it.effect("refuses an answer stated since the learner's last message only", () =
     const card = {
       reply: "x".repeat(250),
       source: "",
-      answer: "current",
+      answer: "before",
       explanation: "Because",
       level: "apply" as const,
       question: "Which?",
@@ -200,16 +199,32 @@ it.effect("refuses an answer stated since the learner's last message only", () =
         { option: "another", wrongIdea: "Another mistake" },
       ],
     };
-    const refused = yield* toolkit.handle("quiz_card", card).pipe(Stream.unwrap, Stream.runCollect);
+    const refused = yield* toolkit
+      .handle("quiz_card", {
+        ...card,
+        reply: "Friction matches the push it opposes, so a 20 N push means 20 N of friction.",
+        answer: "20 N",
+      })
+      .pipe(Stream.unwrap, Stream.runCollect);
     expect(refused.at(-1)?.result).toMatchObject({
       code: "invalid_request",
       message: "The answer is stated just above; pose a new case that needs one more step.",
     });
 
     const accepted = yield* toolkit
-      .handle("quiz_card", { ...card, answer: "before" })
+      .handle("quiz_card", card)
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(accepted.at(-1)?.result).toMatchObject({ quizCard: { answer: "before" } });
+
+    const commonWord = yield* toolkit
+      .handle("quiz_card", { ...card, answer: "Right" })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(commonWord.at(-1)?.result).toMatchObject({ quizCard: { answer: "Right" } });
+
+    const verdictNumber = yield* toolkit
+      .handle("quiz_card", { ...card, reply: "x".repeat(250), answer: "20" })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(verdictNumber.at(-1)?.result).toMatchObject({ quizCard: { answer: "20" } });
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
