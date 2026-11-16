@@ -13,6 +13,7 @@ import * as ServerSettings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
+import { COURSE_PROGRESS_NOTE } from "./tools.ts";
 import { loadCaller } from "../../threadAccess.ts";
 import { CourseReferenceToolkit, CourseToolkit } from "./tools.ts";
 
@@ -104,9 +105,12 @@ const handlers = {
             code: "invalid_request",
             message: "title and units are required when source is omitted",
           });
-        return yield* service
-          .add({ lessonThreadId: thread.threadId, title: input.title, units: input.units })
-          .pipe(Effect.mapError(fail));
+        return {
+          ...(yield* service
+            .add({ lessonThreadId: thread.threadId, title: input.title, units: input.units })
+            .pipe(Effect.mapError(fail))),
+          message: COURSE_PROGRESS_NOTE,
+        };
       }
       const config = yield* ServerConfig.ServerConfig;
       const path = yield* Path.Path;
@@ -135,9 +139,12 @@ const handlers = {
         // The course id comes from the downloaded course, so ingest lines name the lesson only.
         audit: { stateDir: config.stateDir, threadId: thread.threadId, courseId: null },
       }).pipe(Effect.mapError(fail));
-      return yield* service
-        .add({ lessonThreadId: thread.threadId, ingested })
-        .pipe(Effect.mapError(fail));
+      return {
+        ...(yield* service
+          .add({ lessonThreadId: thread.threadId, ingested })
+          .pipe(Effect.mapError(fail))),
+        message: COURSE_PROGRESS_NOTE,
+      };
     }),
   ),
   course_read: McpToolAccess.readsAsCaller((input) =>
@@ -175,18 +182,21 @@ const handlers = {
         });
       const service = yield* CourseService.CourseService;
       const course = yield* getOwnedCourse(service, thread.threadId, input.courseId);
-      return yield* service
-        .update({
-          courseId: course.id,
-          ...(input.position ? { position: input.position } : {}),
-          ...(input.unit === undefined ? {} : { unit: input.unit }),
-          ...(input.plan === undefined ? {} : { plan: input.plan }),
-          ...(input.quiz === undefined ? {} : { quiz: input.quiz }),
-          ...(input.transcript === undefined ? {} : { transcript: input.transcript }),
-          ...(input.pset === undefined ? {} : { pset: input.pset }),
-          ...(input.references === undefined ? {} : { references: input.references }),
-        })
-        .pipe(Effect.mapError(fail));
+      return {
+        ...(yield* service
+          .update({
+            courseId: course.id,
+            ...(input.position ? { position: input.position } : {}),
+            ...(input.unit === undefined ? {} : { unit: input.unit }),
+            ...(input.plan === undefined ? {} : { plan: input.plan }),
+            ...(input.quiz === undefined ? {} : { quiz: input.quiz }),
+            ...(input.transcript === undefined ? {} : { transcript: input.transcript }),
+            ...(input.pset === undefined ? {} : { pset: input.pset }),
+            ...(input.references === undefined ? {} : { references: input.references }),
+          })
+          .pipe(Effect.mapError(fail))),
+        message: COURSE_PROGRESS_NOTE,
+      };
     }),
   ),
   course_prepare: McpToolAccess.actsAsCaller((input) =>
@@ -257,7 +267,7 @@ const handlers = {
           threads: [{ title, prompt, runtimeMode: "approval-required" }],
         })
         .pipe(Effect.mapError(fail));
-      return { started: true, units };
+      return { started: true, units, message: COURSE_PROGRESS_NOTE };
     }),
   ),
   course_problems: McpToolAccess.readsAsCaller((input) =>

@@ -927,6 +927,8 @@ type Sample = {
   readonly said: Array<string>;
   /** Real tutor text shown since the learner's last message. */
   shownSinceLastUser: number;
+  /** The same text, for the card answer check. */
+  shownTextSinceLastUser: string;
   verdictPending: boolean;
   /** Root Claude text held until the next tool in lesson cases. */
   readonly heldLessonText: Array<string>;
@@ -981,6 +983,7 @@ export const makeSample = (testCase: McpToolUseCase, base: Base): Sample => {
     mockCalls: new Map(),
     said: [],
     shownSinceLastUser: 0,
+    shownTextSinceLastUser: "",
     verdictPending: (() => {
       const answer =
         testCase.prompt || [...prior].findLast((turn) => turn.role === "user")?.text || "";
@@ -1866,12 +1869,13 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
       const shownReply = foldCardReply(reply, input.source);
       const shown = { ...input, reply: shownReply };
       const quiz = name === "quiz_card" ? readQuizCard(shown) : undefined;
+      const question = name === "question_card" ? readQuestionCard(shown) : undefined;
       const problem =
         name === "quiz_card"
           ? quiz === undefined
             ? "Invalid quiz card."
             : quizCardProblem(quiz)
-          : readQuestionCard(shown) === undefined
+          : question === undefined
             ? "Invalid question card."
             : undefined;
       if (problem !== undefined) return failed(problem);
@@ -1879,11 +1883,17 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
         reply,
         purpose: CARD_PURPOSES.find((purpose) => isRecord(input) && input.purpose === purpose),
         shownBefore: sample.shownSinceLastUser,
+        shownText: sample.shownTextSinceLastUser,
+        ...(quiz === undefined ? {} : { answer: quiz.answer }),
+        ...(question?.number?.unit === undefined
+          ? {}
+          : { answer: `${question.number.answer} ${question.number.unit}` }),
       });
       if (replyProblem !== undefined) return failed(replyProblem);
       // The app shows a card's reply as the tutor's message text.
       sample.said.push(shownReply);
       sample.shownSinceLastUser += shownReply.length;
+      sample.shownTextSinceLastUser += `\n${shownReply}`;
     }
     // T3 refuses a watch from a delegated child.
     if (name === "watch_pull_request" && testCase.setup.role === "delegated-child") {
@@ -2586,12 +2596,13 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
       sample.heldLessonText.length = 0;
     }
     said.push(...texts);
-    let shown = texts.reduce((total, text) => total + text.length, 0);
-    if (sample.verdictPending && texts.length > 0) {
-      shown -= cardAnswerVerdictLength(texts[0]!);
+    const shownTexts = [...texts];
+    if (sample.verdictPending && shownTexts.length > 0) {
+      shownTexts[0] = shownTexts[0]!.slice(cardAnswerVerdictLength(shownTexts[0]!));
       sample.verdictPending = false;
     }
-    sample.shownSinceLastUser += shown;
+    sample.shownSinceLastUser += shownTexts.reduce((total, text) => total + text.length, 0);
+    sample.shownTextSinceLastUser += shownTexts.map((text) => `\n${text}`).join("");
     const uses = response.content.filter(isToolUse);
     calls.push(...ranCalls(sample, step, uses));
     if (response.stop_reason !== "tool_use") {

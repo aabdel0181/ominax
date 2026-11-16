@@ -3,6 +3,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import { ProviderInstanceId } from "@t3tools/contracts";
 import { McpProviderSessions } from "@t3tools/provider-core/server/McpProviderSessions";
+import {
+  T3_LEARN_QUIZ_RULES_FULL,
+  T3_LEARN_SECTIONS,
+} from "@t3tools/provider-core/server/learnInstructions";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { McpServer } from "effect/ai";
@@ -126,6 +130,17 @@ const layerAdvertisedTools = McpHttpServer.layerTools.pipe(
   Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
   Layer.provide(toolHandlerServices),
 );
+
+it("keeps T3 Learn prompt sections below model limits", () => {
+  expect(
+    T3_LEARN_SECTIONS.every((section) => utf8Bytes(section) < 4_000),
+    "Every T3 Learn section must stay under Codex's 4,000-byte cap",
+  ).toBe(true);
+  expect(
+    T3_LEARN_QUIZ_RULES_FULL.length,
+    "The quiz_card description must stay under Claude's 4,096-character truncation limit",
+  ).toBeLessThan(4_096);
+});
 
 // Claude Code loads these tools up front instead of behind ToolSearch, outside this budget.
 it.effect("only request_secret and send_to_user ask Claude Code to load them up front", () =>

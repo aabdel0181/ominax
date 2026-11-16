@@ -37,36 +37,49 @@ export const shownTutorText = (
     (a, b) => DateTime.toEpochMillis(a.createdAt) - DateTime.toEpochMillis(b.createdAt),
   );
   const lastUser = ordered.findLastIndex((message) => message.role === "user");
-  const lastUserWasCardAnswer =
+  const texts: string[] = [];
+  let verdictPending =
     lastUser !== -1 && withoutCardAnswerTag(ordered[lastUser]!.text) !== ordered[lastUser]!.text;
-  let verdictPending = lastUserWasCardAnswer;
-  return ordered
-    .slice(lastUser + 1)
-    .filter(
-      (message) =>
-        message.role === "assistant" &&
-        !/(?::|%3A)thinking(?::|%3A)/iu.test(message.id) &&
-        !message.id.endsWith(":outline"),
+  let count = 0;
+  for (const message of ordered.slice(lastUser + 1)) {
+    if (
+      message.role !== "assistant" ||
+      /(?::|%3A)thinking(?::|%3A)/iu.test(message.id) ||
+      message.id.endsWith(":outline")
     )
-    .reduce((total, message) => {
-      if (!verdictPending || /:reply$/u.test(message.id)) return total + message.text.length;
+      continue;
+    let text = message.text;
+    if (verdictPending && !/:reply$/u.test(message.id)) {
+      text = text.slice(cardAnswerVerdictLength(text));
       verdictPending = false;
-      return total + message.text.length - cardAnswerVerdictLength(message.text);
-    }, 0);
+    }
+    texts.push(text);
+    count += text.length;
+  }
+  return { text: texts.join("\n"), count };
 };
 
-const readShownTutorText = readThread(undefined, ["messages"]).pipe(
-  Effect.map(({ projection }) => shownTutorText(projection.messages)),
+const readShownTutor = readThread(undefined, ["messages"]).pipe(
+  Effect.map(({ projection }) => ({
+    ...shownTutorText(projection.messages),
+  })),
   Effect.orElseSucceed(() => undefined),
 );
 
-const refuseThinReply = Effect.fn("quiz.refuseThinReply")(function* (
-  reply: string,
-  purpose: CardPurpose | undefined,
-) {
-  const shownBefore = yield* readShownTutorText;
+const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: {
+  readonly reply: string;
+  readonly purpose: CardPurpose | undefined;
+  readonly answer?: string;
+}) {
+  const shownBefore = yield* readShownTutor;
   const problem =
-    shownBefore === undefined ? undefined : cardReplyProblem({ reply, purpose, shownBefore });
+    shownBefore === undefined
+      ? undefined
+      : cardReplyProblem({
+          ...input,
+          shownBefore: shownBefore.count,
+          shownText: shownBefore.text,
+        });
   if (problem !== undefined) {
     return yield* new OrchestratorMcpFailure({ code: "invalid_request", message: problem });
   }
@@ -87,7 +100,11 @@ const handlers = {
           message: problem ?? "Invalid quiz card.",
         });
       }
-      yield* refuseThinReply(input.reply, input.purpose);
+      yield* refuseCardProblem({
+        reply: input.reply,
+        purpose: input.purpose,
+        answer: input.answer,
+      });
       return {
         quizCard: { ...card, reply },
         message: QUIZ_CARD_SHOWN,
@@ -105,7 +122,13 @@ const handlers = {
             "Invalid question card: provide a non-empty question of at most 2000 characters; for blanks, provide one entry per ___ in the question and list every accepted answer; for number, provide answer and tolerance ≥ 0; do not provide both; keep reply under 2000 characters, source under 500, and the whole card under about 7 KB.",
         });
       }
-      yield* refuseThinReply(input.reply, input.purpose);
+      yield* refuseCardProblem({
+        reply: input.reply,
+        purpose: input.purpose,
+        ...(input.number?.unit === undefined
+          ? {}
+          : { answer: `${input.number.answer} ${input.number.unit}` }),
+      });
       return {
         questionCard: { ...card, reply },
         message: QUESTION_CARD_SHOWN,

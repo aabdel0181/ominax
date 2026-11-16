@@ -12,6 +12,12 @@ import * as ProcessRunner from "../../../processRunner.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 
 export const CourseId = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/));
+export const COURSE_PROGRESS_NOTE =
+  "Read the current unit with course_read before teaching it; teach units in order from the course's current position.";
+const CourseToolResult = Schema.Struct({
+  ...Course.fields,
+  message: Schema.optional(Schema.String),
+});
 
 const CourseAddTool = Tool.make("course_add", {
   description:
@@ -21,7 +27,7 @@ const CourseAddTool = Tool.make("course_add", {
     title: Schema.optional(Schema.String),
     units: Schema.optional(Schema.Array(Schema.String)),
   }),
-  success: Course,
+  success: CourseToolResult,
   failure: OrchestratorMcpFailure,
   dependencies: [
     McpInvocationContext.McpInvocationContext,
@@ -81,7 +87,7 @@ const CourseUpdateTool = Tool.make("course_update", {
     ),
     courseId: Schema.optional(CourseId),
   }),
-  success: Course,
+  success: CourseToolResult,
   failure: OrchestratorMcpFailure,
   dependencies: [
     McpInvocationContext.McpInvocationContext,
@@ -102,7 +108,11 @@ const CoursePrepareTool = Tool.make("course_prepare", {
     solutionLeads: Schema.optional(Schema.Array(Schema.String)),
     courseId: Schema.optional(CourseId),
   }),
-  success: Schema.Struct({ started: Schema.Boolean, units: Schema.Array(Schema.Int) }),
+  success: Schema.Struct({
+    started: Schema.Boolean,
+    units: Schema.Array(Schema.Int),
+    message: Schema.String,
+  }),
   failure: OrchestratorMcpFailure,
   dependencies: [
     McpInvocationContext.McpInvocationContext,
