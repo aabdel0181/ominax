@@ -485,6 +485,7 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
           hook_event_name: "PostToolUse",
           tool_name: "Bash",
           tool_input: { command: "rm -rf ~/cw-data/x" },
+          tool_response: "",
           tool_use_id: "tool-2",
           session_id: "session-1",
           transcript_path: "/tmp/transcript.jsonl",

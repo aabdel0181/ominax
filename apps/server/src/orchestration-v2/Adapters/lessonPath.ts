@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off -- this pure policy only resolves command paths.
 import * as NodePath from "node:path";
 import type { LessonToolPolicyInput } from "./lessonToolPolicy.ts";
 
