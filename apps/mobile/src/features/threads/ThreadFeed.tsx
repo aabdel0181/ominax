@@ -39,6 +39,7 @@ import type { HandoffEndpoints } from "@t3tools/client-runtime/handoff";
 import {
   IDLE_COMPACTING_LABELS,
   resolveUserMessageFileCards,
+  escapeUserMessageAsterisks,
   resolveUserMessagePresentation,
 } from "@t3tools/client-runtime/user-message";
 import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
@@ -2102,9 +2103,8 @@ function renderFeedEntry(
     const { message } = entry;
     const isUser = message.role === "user";
     const presentation = resolveUserMessagePresentation(message);
-    // A learner's "4*4 - 3*2" is maths, not emphasis.
     const renderedText = renderAssistantCitationsAsText(
-      isUser && props.lesson ? presentation.text.replaceAll("*", "\\*") : presentation.text,
+      isUser && props.lesson ? escapeUserMessageAsterisks(presentation.text) : presentation.text,
     );
     const styles = isUser ? markdownStyles.user : markdownStyles.assistant;
     const timestampLabel = props.formatMessageTime(isUser ? message.createdAt : message.updatedAt);

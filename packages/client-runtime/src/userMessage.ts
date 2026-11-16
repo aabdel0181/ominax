@@ -140,3 +140,10 @@ export function resolveUserMessageGrouping(
     continuesSteer: groupedWithPrevious && isSteer(message) && isSteer(previous),
   };
 }
+
+/** Shows a learner's `*` as typed ("4*4 - 3*2" is maths, not emphasis); code, math and escapes keep theirs. */
+export function escapeUserMessageAsterisks(text: string) {
+  return text.replace(/\\[\s\S]|(`+)[\s\S]*?\1|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|\*/g, (match) =>
+    match === "*" ? "\\*" : match,
+  );
+}

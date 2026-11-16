@@ -13,7 +13,10 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
+import {
+  escapeUserMessageAsterisks,
+  resolveUserMessagePresentation,
+} from "@t3tools/client-runtime/user-message";
 import { Link } from "@tanstack/react-router";
 import { useQuietThreadShell } from "../../state/entities";
 import { useEnvironment } from "../../state/environments";
@@ -1223,8 +1226,7 @@ const UserMessageBody = memo(function UserMessageBody(props: {
   }
   return (
     <ChatMarkdown
-      // A learner's "4*4 - 3*2" is maths, not emphasis.
-      text={ctx.lesson ? props.text.replaceAll("*", "\\*") : props.text}
+      text={ctx.lesson ? escapeUserMessageAsterisks(props.text) : props.text}
       cwd={props.markdownCwd}
       threadRef={ctx.threadRef ?? undefined}
       skills={props.skills}
