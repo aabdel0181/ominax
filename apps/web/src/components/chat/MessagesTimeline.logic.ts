@@ -2163,9 +2163,10 @@ export function deriveMessagesTimelineRows(input: {
         groupedEntries.push(nextEntry.entry);
         cursor += 1;
       }
-      const visibleGroupedEntries = groupedEntries.filter((entry) =>
-        workEntryIsVisibleInGroup(entry, workEntryIsInActiveRun(entry), input.lesson === true),
-      );
+      const visibleGroupedEntries = groupedEntries.filter((entry) => {
+        const active = workEntryIsInActiveRun(entry);
+        return workEntryIsVisibleInGroup(entry, active, active && input.lesson === true);
+      });
       if (visibleGroupedEntries.length > 0) {
         const activeInProgressToolEntries = visibleGroupedEntries.filter(workEntryIsInActiveRun);
         if (activeInProgressToolEntries.length > 0) {

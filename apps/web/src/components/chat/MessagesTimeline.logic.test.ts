@@ -137,7 +137,9 @@ describe("deriveMessagesTimelineRows", () => {
             : [],
       );
     expect(detail(false)).toEqual(["The private answer is 30 N.", "Friction at 30 N"]);
-    expect(detail(true)).toEqual([null, "Thinking"]);
+    expect(JSON.stringify(deriveMessagesTimelineRows({ ...input, lesson: true }))).not.toMatch(
+      /30 N/,
+    );
   });
 
   it.each([

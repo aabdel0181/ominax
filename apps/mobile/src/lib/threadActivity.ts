@@ -1427,6 +1427,32 @@ function settleSupersededReasoning(
   return settled;
 }
 
+const lessonThoughtGroups = new WeakMap<ThreadFeedEntry, ThreadFeedEntry>();
+
+// A lesson's thoughts can hold the next card's answer, so only "Thinking"/"Thought" shows (APP-124).
+function hideLessonThoughts<T extends ThreadFeedEntry>(entry: T): T {
+  if (entry.type !== "activity-group") return entry;
+  const cached = lessonThoughtGroups.get(entry);
+  if (cached) return cached as T;
+  const activities = entry.activities.map((activity) => {
+    const item = activity.projectedItem.item;
+    if (item.type !== "reasoning") return activity;
+    const { detail: _detail, ...workEntry } = activity.workEntry;
+    const hiddenItem = { ...item, text: "", title: null };
+    return {
+      ...activity,
+      detail: null,
+      workEntry: { ...workEntry, label: "Thinking", structuredPayload: hiddenItem },
+      projectedItem: { ...activity.projectedItem, item: hiddenItem },
+    };
+  });
+  const hidden = activities.some((activity, index) => activity !== entry.activities[index])
+    ? { ...entry, activities }
+    : entry;
+  lessonThoughtGroups.set(entry, hidden);
+  return hidden;
+}
+
 interface ThreadFeedPresentationBuild {
   readonly feed: ReadonlyArray<ThreadFeedEntry>;
   readonly latestRun: ThreadFeedLatestRun | null;
@@ -1722,9 +1748,10 @@ export function deriveThreadFeedPresentation(
     retainedFeed.push(entry);
     retainedFeedIndices.push(index);
   }
-  const sourceFeed = retainedFeed.map((entry, index) =>
-    settleSupersededReasoning(entry, index === retainedFeed.length - 1),
-  );
+  const sourceFeed = retainedFeed.map((entry, index) => {
+    const settled = settleSupersededReasoning(entry, index === retainedFeed.length - 1);
+    return lesson ? hideLessonThoughts(settled) : settled;
+  });
   const answeredCards = lesson
     ? answeredCardAnswers(
         sourceFeed.flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
@@ -1888,7 +1915,11 @@ export function deriveThreadFeedPresentation(
       thinkingRow(
         activeWorkStartedAt,
         activeRunId,
-        waitingOn > 0 ? waitingOnSubagentsLabel(waitingOn) : zen ? liveAnswerPreview(feed) : null,
+        waitingOn > 0
+          ? waitingOnSubagentsLabel(waitingOn)
+          : zen
+            ? liveAnswerPreview(lesson ? sourceFeed : feed)
+            : null,
         latestRun?.providerStartingLabel,
       ),
     );

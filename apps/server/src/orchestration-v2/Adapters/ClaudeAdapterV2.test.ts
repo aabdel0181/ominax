@@ -4733,6 +4733,27 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       tool: "mcp__t3-code__question_card",
       reply: "Try it.",
       lesson: true,
+      heldText: "**My own answer, for grading:** 20 N.\nFriction opposes sliding.",
+      thinking: "I'll prepare the card.",
+      shownText: ["Friction opposes sliding."],
+      expected: ["reasoning", "reasoning", "assistant_message"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "When a dead check fails the reward is 0.01 + 0.24 times q, so it stays low.",
+      lesson: true,
+      heldText:
+        "Here is the scoring function from grader/compose.py, step by step, before the next question.\n```python\nif dead_failed:\n    return 0.01 + 0.24 * q  # when a dead check fails the reward stays low\n```",
+      thinking: "I'll prepare the card.",
+      shownText: [
+        "Here is the scoring function from grader/compose.py, step by step, before the next question.\n```python\nif dead_failed:\n    return 0.01 + 0.24 * q  # when a dead check fails the reward stays low\n```",
+      ],
+      expected: ["reasoning", "reasoning", "assistant_message"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
       heldText: "My own answer, for grading: 20 N.\n\nFriction opposes sliding.",
       thinking: "I'll prepare the card.",
       shownText: ["Friction opposes sliding."],

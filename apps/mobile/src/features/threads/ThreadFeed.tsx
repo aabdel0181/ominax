@@ -1800,7 +1800,6 @@ function renderFeedEntry(
     | "onEditPendingMessage"
     | "threadId"
     | "workspaceRoot"
-    | "lesson"
   > & {
     readonly answeredCardAnswers: ReadonlyMap<string, string>;
     readonly formatMessageTime: (input: string) => string;
@@ -2024,7 +2023,7 @@ function renderFeedEntry(
         summaryToolIcon={entry.summaryToolIcon}
         hasFailure={entry.hasFailure}
         shimmer={entry.shimmer}
-        thought={props.lesson ? undefined : entry.thought}
+        thought={entry.thought}
         trailing={
           entry.checkpointSummary ? (
             <TurnDiffStat
@@ -2569,7 +2568,6 @@ function renderFeedEntry(
       onToggleRow={props.onToggleWorkRow}
       renderImage={props.renderViewedImage}
       renderReasoning={props.renderReasoning}
-      lesson={props.lesson}
       onPressPreview={props.onPressPreview}
     />
   );
@@ -4007,7 +4005,6 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             threadTitle: props.threadTitle,
             skills: props.skills,
             workspaceRoot: props.workspaceRoot,
-            lesson: props.lesson,
             workflowOpening,
           })}
           {props.worktreeSetup && info.index === setupAnchorIndex ? (

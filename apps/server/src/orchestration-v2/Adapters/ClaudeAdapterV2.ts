@@ -77,6 +77,7 @@ import * as NodeUtil from "node:util";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import {
   cardAnswerVerdictLength,
+  coverageTokens,
   QUESTION_CARD_TOOL_NAME,
   QUIZ_CARD_TOOL_NAME,
   replyCoverage,
@@ -2656,43 +2657,44 @@ function stripLessonNarration(text: string) {
     .trim();
 }
 
+// A line like "**My own answer, for grading:** 20 N" is the tutor's private answer.
 const LESSON_COMMITMENT =
-  /^(?:my own answer,\s*for grading|my answer\s*\(for grading\)|for grading|committed answer|answer key)\s*:/iu;
+  /^[*_\s]*(?:my own answer,\s*for grading|my answer\s*\(for grading\)|committed answer|answer key)[*_\s]*:/iu;
 
 // The tutor's private answer for grading never shows (APP-124: Haiku printed it).
 function withoutLessonCommitment(text: string) {
   return text
-    .split(/\n{2,}/u)
-    .filter((paragraph) => !LESSON_COMMITMENT.test(paragraph.trim()))
-    .join("\n\n")
+    .split("\n")
+    .filter((line) => !LESSON_COMMITMENT.test(line))
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n")
     .trim();
 }
 
+// Drops sentences of held text that the card's reply or verdict already says; code blocks stay whole.
 function stripCardReplyCoveredSentences(
   block: { readonly name: string; readonly input: unknown },
   text: string,
 ): string {
-  if (!isLessonCardTool(block.name)) return text;
   const input = block.input as { readonly reply?: unknown; readonly verdict?: unknown } | null;
-  const covered = [input?.reply, input?.verdict].filter(
-    (value): value is string => typeof value === "string",
-  );
-  if (covered.length === 0) return text;
-  const countedTokens = (value: string) =>
-    [...value.toLocaleLowerCase().matchAll(/[\p{L}\p{N}]+(?:['.][\p{L}\p{N}]+)*/gu)]
-      .map(([token]) => token)
-      .filter((token) => token.length >= 4 || /\d/u.test(token)).length;
+  const covered = [input?.reply, input?.verdict]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
+  if (covered === "") return text;
+  let inCode = false;
   return text
     .split("\n")
-    .map((line) =>
-      line
+    .map((line) => {
+      if (line.trimStart().startsWith("```")) inCode = !inCode;
+      if (inCode || line.trimStart().startsWith("```")) return line;
+      return line
         .split(/(?<=[.!?])\s+/u)
         .filter(
           (sentence) =>
-            countedTokens(sentence) < 5 || replyCoverage(sentence, covered.join("\n")) < 0.8,
+            coverageTokens(sentence).length < 5 || replyCoverage(sentence, covered) < 0.8,
         )
-        .join(" "),
-    )
+        .join(" ");
+    })
     .join("\n")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();

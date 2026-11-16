@@ -2488,3 +2488,39 @@ it("caps live thought previews while preserving reasoning detail", () => {
   expect(JSON.parse(activity.getFullDetail()!).item).toMatchObject({ text });
   expect(activity.getCopyText()).toContain(text);
 });
+
+it("shows no thought text in a lesson, live or settled", () => {
+  const at = "2026-06-20T00:00:02.000Z";
+  const thought: OrchestrationV2TurnItem = {
+    ...base("lesson-thought", at, 1),
+    type: "reasoning",
+    status: "running",
+    completedAt: null,
+    text: "Next card: friction at 30 N.",
+    streaming: true,
+  };
+  const feed = buildThreadFeed([projected(userMessage(), 0), projected(thought, 1)]);
+  const rows = (lesson: boolean, expanded: boolean) =>
+    JSON.stringify(
+      deriveThreadFeedPresentation(
+        feed,
+        { runId, status: "running", startedAt: at, completedAt: null },
+        new Set(),
+        expanded
+          ? new Set(
+              feed.flatMap((row) =>
+                row.type === "activity-group" ? [`work-group:${row.activities[0]!.id}`] : [],
+              ),
+            )
+          : new Set(),
+        at,
+        false,
+        undefined,
+        undefined,
+        lesson,
+      ),
+    );
+  expect(rows(false, false)).toContain("friction at 30 N");
+  expect(rows(true, false)).not.toContain("friction at 30 N");
+  expect(rows(true, true)).not.toContain("friction at 30 N");
+});

@@ -101,11 +101,14 @@ export function foldCardReply(reply: string, source: string, verdict?: string) {
   return trimmedSource === "" ? shownReply : `${shownReply}\n\nSource: ${trimmedSource}`;
 }
 
+/** Words of 4+ letters and tokens with a digit: what replyCoverage counts. */
+export const coverageTokens = (value: string) =>
+  [...value.toLocaleLowerCase().matchAll(/[\p{L}\p{N}]+(?:['.][\p{L}\p{N}]+)*/gu)]
+    .map(([token]) => token)
+    .filter((token) => token.length >= 4 || /\d/u.test(token));
+
 export function replyCoverage(text: string, reply: string): number {
-  const tokens = (value: string) =>
-    [...value.toLocaleLowerCase().matchAll(/[\p{L}\p{N}]+(?:['.][\p{L}\p{N}]+)*/gu)]
-      .map(([token]) => token)
-      .filter((token) => token.length >= 4 || /\d/u.test(token));
+  const tokens = coverageTokens;
   const replyTokens = new Set(tokens(reply));
   const textTokens = tokens(text);
   return (
