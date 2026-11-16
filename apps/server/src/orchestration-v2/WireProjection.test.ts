@@ -219,7 +219,7 @@ describe("orchestration V2 wire projection", () => {
     if (projected.type !== "dynamic_tool") throw new Error("expected dynamic_tool");
     const outline = courseOutlineFromToolItem(projected);
     expect(outline).toBe(courseOutlineFromToolItem(item));
-    expect(outline).toContain("- Week 9: units 270–299");
+    expect(outline).toContain("- Week 9: units 271–300");
     expect(projected.output).toEqual({ courseOutline: outline });
   });
 
