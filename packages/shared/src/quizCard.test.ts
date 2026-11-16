@@ -140,6 +140,17 @@ describe("quiz cards", () => {
     ).toBeDefined();
     expect(cardReplyProblem({ reply: "Short.", shownBefore: 0 })).toBeDefined();
   });
+  it("refuses a reply that points back when nothing was taught visibly this turn", () => {
+    const pointsBack = `Use the weights and band formulas I just gave: Q is the weighted average. ${"x".repeat(250)}`;
+    expect(cardReplyProblem({ reply: pointsBack, shownBefore: 0 })).toMatch(/points back/u);
+    expect(cardReplyProblem({ reply: pointsBack, shownBefore: 300 })).toBeUndefined();
+    expect(
+      cardReplyProblem({ reply: `Recall the weights. ${"x".repeat(250)}`, shownBefore: 0 }),
+    ).toMatch(/points back/u);
+    expect(
+      cardReplyProblem({ reply: `I recall nothing odd. ${"x".repeat(250)}`, shownBefore: 0 }),
+    ).toBeUndefined();
+  });
   it("refuses answers repeated in the visible teaching", () => {
     expect(
       cardReplyProblem({
