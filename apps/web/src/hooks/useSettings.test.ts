@@ -27,6 +27,7 @@ import { removeLocalStorageItem } from "./useLocalStorage";
 beforeEach(() => {
   persistenceMocks.getClientSettings.mockReset().mockResolvedValue(null);
   persistenceMocks.setClientSettings.mockReset().mockResolvedValue(undefined);
+  removeLocalStorageItem("ominax:math-rendering-default-switched");
   __resetClientSettingsPersistenceForTests();
 });
 
@@ -86,6 +87,23 @@ describe("client settings hydration", () => {
     await ensureClientSettingsHydrated();
     await persistClientSettingsUpdate((current) => current);
     expect(getClientSettings().followUpBehavior).toBe("steer");
+  });
+
+  it("switches an old saved math default on once, then preserves a later choice", async () => {
+    const savedMathOff = { ...savedSettings, mathRenderingEnabled: false };
+    persistenceMocks.getClientSettings.mockResolvedValue(savedMathOff);
+    await ensureClientSettingsHydrated();
+    await persistClientSettingsUpdate((current) => current);
+    expect(getClientSettings().mathRenderingEnabled).toBe(true);
+    expect(persistenceMocks.setClientSettings).toHaveBeenCalledWith({
+      ...savedMathOff,
+      mathRenderingEnabled: true,
+    });
+
+    __resetClientSettingsPersistenceForTests();
+    await ensureClientSettingsHydrated();
+    await persistClientSettingsUpdate((current) => current);
+    expect(getClientSettings().mathRenderingEnabled).toBe(false);
   });
 
   // regression: #16816 a failed read could overwrite synced model favorites with defaults

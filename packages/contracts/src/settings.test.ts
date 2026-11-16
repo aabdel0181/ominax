@@ -348,6 +348,18 @@ describe("ClientSettings notifications", () => {
   });
 });
 
+describe("ClientSettings math rendering", () => {
+  it("defaults on and preserves explicit preferences through patches and persistence", () => {
+    expect(decodeClientSettings({}).mathRenderingEnabled).toBe(true);
+    for (const mathRenderingEnabled of [true, false]) {
+      const preference = { mathRenderingEnabled };
+      expect(decodeClientSettingsPatch(preference)).toEqual(preference);
+      expect(encodeClientSettings(decodeClientSettings(preference))).toMatchObject(preference);
+    }
+    expect(() => decodeClientSettingsPatch({ mathRenderingEnabled: "yes" })).toThrow();
+  });
+});
+
 it("queues follow-ups unless the user chose Steer", () => {
   expect(decodeClientSettings({}).followUpBehavior).toBe("queue");
   expect(decodeClientSettings({ followUpBehavior: "steer" }).followUpBehavior).toBe("steer");
