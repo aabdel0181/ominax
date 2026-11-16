@@ -4719,6 +4719,26 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       expected: ["reasoning", "reasoning", "reasoning"],
     },
     {
+      tool: "mcp__t3-code__question_card",
+      reply:
+        "Differentiate twice. Worked example: x(t) = t⁴ gives v(t) = 4t³ and a(t) = 12t², so a(2 s) = 48 m/s².",
+      lesson: true,
+      heldText:
+        "Differentiate twice to connect position, velocity, and acceleration.\n\nWorked example: x(t) = t⁴ gives v(t) = 4t³ and a(t) = 12t², so a(2 s) = 48 m/s².",
+      thinking: "",
+      shownText: ["Differentiate twice to connect position, velocity, and acceleration."],
+      expected: ["reasoning", "assistant_message"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
+      heldText: "My own answer, for grading: 20 N.\n\nFriction opposes sliding.",
+      thinking: "I'll prepare the card.",
+      shownText: ["Friction opposes sliding."],
+      expected: ["reasoning", "reasoning", "reasoning", "assistant_message"],
+    },
+    {
       tool: "Bash",
       reply: undefined,
       lesson: true,

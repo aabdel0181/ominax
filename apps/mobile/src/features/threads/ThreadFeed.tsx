@@ -1800,6 +1800,7 @@ function renderFeedEntry(
     | "onEditPendingMessage"
     | "threadId"
     | "workspaceRoot"
+    | "lesson"
   > & {
     readonly answeredCardAnswers: ReadonlyMap<string, string>;
     readonly formatMessageTime: (input: string) => string;
@@ -2568,6 +2569,7 @@ function renderFeedEntry(
       onToggleRow={props.onToggleWorkRow}
       renderImage={props.renderViewedImage}
       renderReasoning={props.renderReasoning}
+      lesson={props.lesson}
       onPressPreview={props.onPressPreview}
     />
   );

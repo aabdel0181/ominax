@@ -2656,6 +2656,56 @@ function stripLessonNarration(text: string) {
     .trim();
 }
 
+const LESSON_COMMITMENT =
+  /^(?:my own answer,\s*for grading|my answer\s*\(for grading\)|for grading|committed answer|answer key)\s*:/iu;
+
+function splitLessonCommitmentParagraphs(text: string): {
+  readonly commitment: string;
+  readonly text: string;
+} {
+  const paragraphs = text.split(/\n{2,}/u);
+  return {
+    commitment: paragraphs
+      .filter((paragraph) => LESSON_COMMITMENT.test(paragraph.trim()))
+      .join("\n\n")
+      .trim(),
+    text: paragraphs
+      .filter((paragraph) => !LESSON_COMMITMENT.test(paragraph.trim()))
+      .join("\n\n")
+      .trim(),
+  };
+}
+
+function stripCardReplyCoveredSentences(
+  block: { readonly name: string; readonly input: unknown },
+  text: string,
+): string {
+  if (!isLessonCardTool(block.name)) return text;
+  const input = block.input as { readonly reply?: unknown; readonly verdict?: unknown } | null;
+  const covered = [input?.reply, input?.verdict].filter(
+    (value): value is string => typeof value === "string",
+  );
+  if (covered.length === 0) return text;
+  const countedTokens = (value: string) =>
+    [...value.toLocaleLowerCase().matchAll(/[\p{L}\p{N}]+(?:['.][\p{L}\p{N}]+)*/gu)]
+      .map(([token]) => token)
+      .filter((token) => token.length >= 4 || /\d/u.test(token)).length;
+  return text
+    .split("\n")
+    .map((line) =>
+      line
+        .split(/(?<=[.!?])\s+/u)
+        .filter(
+          (sentence) =>
+            countedTokens(sentence) < 5 || replyCoverage(sentence, covered.join("\n")) < 0.8,
+        )
+        .join(" "),
+    )
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+}
+
 // In SDK mode, /goal appears only in transcripts: command output names it and Stop hooks report unmet checks.
 const CLAUDE_GOAL_SET_PREFIX = "Goal set: ";
 const CLAUDE_GOAL_ACTIVE = /^Goal active: ([\s\S]+?) \((?:not yet evaluated|(\d+) turns?)\)/u;
@@ -9124,7 +9174,22 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           context: ActiveClaudeTurnContext,
         ) {
           for (const item of context.assistant.heldText) {
-            yield* emitAssistantTextArtifacts({ context, ...item });
+            if (isLessonTurn(context.input)) {
+              const { commitment, text } = splitLessonCommitmentParagraphs(item.text);
+              if (commitment !== "") {
+                yield* emitHeldAssistantTextItemAsReasoning(context, {
+                  ...item,
+                  text: commitment,
+                });
+              }
+              if (text === "") {
+                if (commitment === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
+              } else {
+                yield* emitAssistantTextArtifacts({ context, ...item, text });
+              }
+            } else {
+              yield* emitAssistantTextArtifacts({ context, ...item });
+            }
           }
           context.assistant.heldText = [];
         });
@@ -9184,8 +9249,15 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           ) {
             for (const item of held) {
               const verdict = stripLessonNarration(item.text);
-              if (verdict === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
-              else yield* emitAssistantTextArtifacts({ context, ...item, text: verdict });
+              const { commitment, text } = splitLessonCommitmentParagraphs(verdict);
+              if (commitment !== "") {
+                yield* emitHeldAssistantTextItemAsReasoning(context, { ...item, text: commitment });
+              }
+              if (text === "") {
+                if (commitment === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
+              } else {
+                yield* emitAssistantTextArtifacts({ context, ...item, text });
+              }
             }
             return;
           }
@@ -9217,18 +9289,43 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 yield* emitHeldAssistantTextItemAsReasoning(context, original);
                 continue;
               }
-              const remainder = cardReplyCoversLead(block, item.text);
-              if (cardReplyRepeats(block, item.text) || remainder === "") {
+              const leadRemainder = cardReplyCoversLead(block, item.text);
+              if (leadRemainder === "") {
                 yield* emitHeldAssistantTextItemAsReasoning(context, item);
-              } else if (remainder !== undefined) {
-                yield* emitAssistantTextArtifacts({ context, ...item, text: remainder });
+                continue;
+              }
+              const filtered = stripCardReplyCoveredSentences(block, leadRemainder ?? item.text);
+              const { commitment, text: visible } = splitLessonCommitmentParagraphs(filtered);
+              if (commitment !== "") {
+                yield* emitHeldAssistantTextItemAsReasoning(context, {
+                  ...original,
+                  text: commitment,
+                });
+              }
+              if (visible === "") {
+                if (commitment === "")
+                  yield* emitHeldAssistantTextItemAsReasoning(context, original);
+                continue;
+              }
+              if (cardReplyRepeats(block, visible)) {
+                yield* emitHeldAssistantTextItemAsReasoning(context, item);
               } else {
-                yield* emitAssistantTextArtifacts({ context, ...item });
+                yield* emitAssistantTextArtifacts({ context, ...item, text: visible });
               }
             }
             return;
           }
-          for (const item of held) yield* emitAssistantTextArtifacts({ context, ...item });
+          for (const item of held) {
+            const { commitment, text } = splitLessonCommitmentParagraphs(item.text);
+            if (commitment !== "") {
+              yield* emitHeldAssistantTextItemAsReasoning(context, { ...item, text: commitment });
+            }
+            if (text === "") {
+              if (commitment === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            } else {
+              yield* emitAssistantTextArtifacts({ context, ...item, text });
+            }
+          }
         });
 
         const publishAssistantArtifacts = Effect.fnUntraced(function* (input: {

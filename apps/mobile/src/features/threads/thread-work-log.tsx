@@ -476,6 +476,7 @@ interface ThreadWorkLogProps {
   readonly onToggleRow: (rowId: string, anchorKey: string, groupId?: string) => void;
   readonly renderImage: MarkdownImageRenderer;
   readonly renderReasoning: (text: string) => ReactNode;
+  readonly lesson?: boolean;
   readonly onPressPreview: (source: FilePreviewSource) => void;
 }
 
@@ -493,6 +494,7 @@ export function ThreadWorkLog(props: ThreadWorkLogProps) {
       onToggleRow={props.onToggleRow}
       renderImage={props.renderImage}
       renderReasoning={props.renderReasoning}
+      lesson={props.lesson}
       onPressPreview={props.onPressPreview}
       themeAppearance={props.themeAppearance}
     />
@@ -528,6 +530,7 @@ export function ThreadWorkLog(props: ThreadWorkLogProps) {
           activities={props.activities}
           edgeFadeColor={props.edgeFadeColor}
           renderReasoning={props.renderReasoning}
+          lesson={props.lesson}
         />
       </WorkLogBlock>
     );
@@ -556,6 +559,7 @@ function ThreadReasoningGroup(props: {
   readonly activities: ReadonlyArray<ThreadFeedActivity>;
   readonly edgeFadeColor: string;
   readonly renderReasoning: (text: string) => ReactNode;
+  readonly lesson?: boolean;
 }) {
   const scrollOffset = useSharedValue(0);
   const contentHeight = useSharedValue(0);
@@ -587,7 +591,9 @@ function ThreadReasoningGroup(props: {
         }}
       >
         {props.activities.map((row) => (
-          <View key={row.id}>{props.renderReasoning(row.workEntry.detail ?? "")}</View>
+          <View key={row.id}>
+            {props.lesson ? null : props.renderReasoning(row.workEntry.detail ?? "")}
+          </View>
         ))}
       </Animated.ScrollView>
       <Animated.View
@@ -1209,7 +1215,9 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
             contentContainerStyle={{ paddingRight: 8 }}
           >
             {reasoning ? (
-              props.renderReasoning(reasoning.text)
+              props.lesson ? null : (
+                props.renderReasoning(reasoning.text)
+              )
             ) : call ? (
               [
                 call.command ? (

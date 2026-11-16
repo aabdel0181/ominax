@@ -279,8 +279,11 @@ export function liveWorkEntryLabel(
 export function workEntryIsVisibleInGroup(
   entry: WorkLogEntry,
   expandedToolGroupEntry = false,
+  showEmptyReasoning = false,
 ): boolean {
-  if (entry.itemType === "reasoning") return Boolean(entry.detail?.trim());
+  if (entry.itemType === "reasoning") {
+    return showEmptyReasoning && entry.detail === undefined ? true : Boolean(entry.detail?.trim());
+  }
   return (
     (expandedToolGroupEntry &&
       (entry.toolLifecycleStatus === "inProgress" ||
@@ -1421,6 +1424,7 @@ function withoutSubagentDelegationRows(entries: ReadonlyArray<TimelineEntry>) {
 }
 
 const supersededReasoningEntries = new WeakMap<TimelineEntry, TimelineEntry>();
+const lessonReasoningEntries = new WeakMap<TimelineEntry, TimelineEntry>();
 
 function settleSupersededReasoning(entries: ReadonlyArray<TimelineEntry>) {
   return entries.map((entry, index) => {
@@ -1438,6 +1442,24 @@ function settleSupersededReasoning(entries: ReadonlyArray<TimelineEntry>) {
       supersededReasoningEntries.set(entry, settled);
     }
     return settled;
+  });
+}
+
+function hideLessonReasoningDetails(
+  entries: ReadonlyArray<TimelineEntry>,
+  lesson: boolean,
+): ReadonlyArray<TimelineEntry> {
+  if (!lesson) return entries;
+  return entries.map((entry): TimelineEntry => {
+    if (entry.kind !== "work" || entry.entry.itemType !== "reasoning") return entry;
+    let hidden = lessonReasoningEntries.get(entry);
+    if (hidden === undefined) {
+      const hiddenEntry = { ...entry.entry };
+      delete hiddenEntry.detail;
+      hidden = { ...entry, entry: hiddenEntry };
+      lessonReasoningEntries.set(entry, hidden);
+    }
+    return hidden;
   });
 }
 
@@ -1482,7 +1504,10 @@ function deriveInFlightSteerAnswerIds(entries: ReadonlyArray<TimelineEntry>): Re
   return ids;
 }
 
-export function liveAnswerPreview(entries: ReadonlyArray<TimelineEntry>): string | null {
+export function liveAnswerPreview(
+  entries: ReadonlyArray<TimelineEntry>,
+  lesson = false,
+): string | null {
   const boundary = lastResponseBoundaryIndex(entries);
   for (let index = entries.length - 1; index > boundary; index -= 1) {
     const entry = entries[index]!;
@@ -1490,7 +1515,9 @@ export function liveAnswerPreview(entries: ReadonlyArray<TimelineEntry>): string
       entry.kind === "message" && entry.message.role === "assistant"
         ? entry.message.text
         : entry.kind === "work" && entry.entry.itemType === "reasoning"
-          ? (entry.entry.detail ?? "")
+          ? lesson
+            ? ""
+            : (entry.entry.detail ?? "")
           : "";
     const line = liveThoughtLine(text);
     if (line !== "") return line;
@@ -1521,6 +1548,7 @@ function timelineRowEntries(
     | "latestRun"
     | "runningRunId"
     | "pendingApprovalRequestIds"
+    | "lesson"
   >,
 ) {
   const visibility = input.toolCallVisibility ?? "showAll";
@@ -1556,7 +1584,9 @@ function timelineRowEntries(
         entry.kind !== "work" || !workEntryHiddenByToolCallVisibility(entry.entry, visibility),
     );
   }
-  return withoutSubagentDelegationRows(settleSupersededReasoning(shown));
+  return withoutSubagentDelegationRows(
+    hideLessonReasoningDetails(settleSupersededReasoning(shown), input.lesson === true),
+  );
 }
 
 function deriveTimelineTurnFolds(
@@ -1805,7 +1835,7 @@ export function deriveMessagesTimelineRows(input: {
   }
   activeToolEntries.reverse();
   const visibleActiveToolEntries = activeToolEntries.filter((entry) =>
-    workEntryIsVisibleInGroup(entry.entry, true),
+    workEntryIsVisibleInGroup(entry.entry, true, input.lesson === true),
   );
   const activeWorkAnchor = activeToolEntries[0];
   const latestVisibleToolEntry = visibleActiveToolEntries.at(-1);
@@ -2133,7 +2163,7 @@ export function deriveMessagesTimelineRows(input: {
         cursor += 1;
       }
       const visibleGroupedEntries = groupedEntries.filter((entry) =>
-        workEntryIsVisibleInGroup(entry, workEntryIsInActiveRun(entry)),
+        workEntryIsVisibleInGroup(entry, workEntryIsInActiveRun(entry), input.lesson === true),
       );
       if (visibleGroupedEntries.length > 0) {
         const activeInProgressToolEntries = visibleGroupedEntries.filter(workEntryIsInActiveRun);
