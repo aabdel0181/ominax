@@ -4736,7 +4736,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       heldText: "My own answer, for grading: 20 N.\n\nFriction opposes sliding.",
       thinking: "I'll prepare the card.",
       shownText: ["Friction opposes sliding."],
-      expected: ["reasoning", "reasoning", "reasoning", "assistant_message"],
+      expected: ["reasoning", "reasoning", "assistant_message"],
     },
     {
       tool: "Bash",

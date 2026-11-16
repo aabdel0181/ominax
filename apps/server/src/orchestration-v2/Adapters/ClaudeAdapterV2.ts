@@ -2659,21 +2659,13 @@ function stripLessonNarration(text: string) {
 const LESSON_COMMITMENT =
   /^(?:my own answer,\s*for grading|my answer\s*\(for grading\)|for grading|committed answer|answer key)\s*:/iu;
 
-function splitLessonCommitmentParagraphs(text: string): {
-  readonly commitment: string;
-  readonly text: string;
-} {
-  const paragraphs = text.split(/\n{2,}/u);
-  return {
-    commitment: paragraphs
-      .filter((paragraph) => LESSON_COMMITMENT.test(paragraph.trim()))
-      .join("\n\n")
-      .trim(),
-    text: paragraphs
-      .filter((paragraph) => !LESSON_COMMITMENT.test(paragraph.trim()))
-      .join("\n\n")
-      .trim(),
-  };
+// The tutor's private answer for grading never shows (APP-124: Haiku printed it).
+function withoutLessonCommitment(text: string) {
+  return text
+    .split(/\n{2,}/u)
+    .filter((paragraph) => !LESSON_COMMITMENT.test(paragraph.trim()))
+    .join("\n\n")
+    .trim();
 }
 
 function stripCardReplyCoveredSentences(
@@ -9174,22 +9166,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           context: ActiveClaudeTurnContext,
         ) {
           for (const item of context.assistant.heldText) {
-            if (isLessonTurn(context.input)) {
-              const { commitment, text } = splitLessonCommitmentParagraphs(item.text);
-              if (commitment !== "") {
-                yield* emitHeldAssistantTextItemAsReasoning(context, {
-                  ...item,
-                  text: commitment,
-                });
-              }
-              if (text === "") {
-                if (commitment === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
-              } else {
-                yield* emitAssistantTextArtifacts({ context, ...item, text });
-              }
-            } else {
-              yield* emitAssistantTextArtifacts({ context, ...item });
-            }
+            const text = isLessonTurn(context.input)
+              ? withoutLessonCommitment(item.text)
+              : item.text;
+            if (text === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            else yield* emitAssistantTextArtifacts({ context, ...item, text });
           }
           context.assistant.heldText = [];
         });
@@ -9248,16 +9229,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             context.assistant.emittedNativeItemIds.size === 0
           ) {
             for (const item of held) {
-              const verdict = stripLessonNarration(item.text);
-              const { commitment, text } = splitLessonCommitmentParagraphs(verdict);
-              if (commitment !== "") {
-                yield* emitHeldAssistantTextItemAsReasoning(context, { ...item, text: commitment });
-              }
-              if (text === "") {
-                if (commitment === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
-              } else {
-                yield* emitAssistantTextArtifacts({ context, ...item, text });
-              }
+              const verdict = withoutLessonCommitment(stripLessonNarration(item.text));
+              if (verdict === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
+              else yield* emitAssistantTextArtifacts({ context, ...item, text: verdict });
             }
             return;
           }
@@ -9294,17 +9268,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 yield* emitHeldAssistantTextItemAsReasoning(context, item);
                 continue;
               }
-              const filtered = stripCardReplyCoveredSentences(block, leadRemainder ?? item.text);
-              const { commitment, text: visible } = splitLessonCommitmentParagraphs(filtered);
-              if (commitment !== "") {
-                yield* emitHeldAssistantTextItemAsReasoning(context, {
-                  ...original,
-                  text: commitment,
-                });
-              }
+              const visible = withoutLessonCommitment(
+                stripCardReplyCoveredSentences(block, leadRemainder ?? item.text),
+              );
               if (visible === "") {
-                if (commitment === "")
-                  yield* emitHeldAssistantTextItemAsReasoning(context, original);
+                yield* emitHeldAssistantTextItemAsReasoning(context, original);
                 continue;
               }
               if (cardReplyRepeats(block, visible)) {
@@ -9316,15 +9284,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             return;
           }
           for (const item of held) {
-            const { commitment, text } = splitLessonCommitmentParagraphs(item.text);
-            if (commitment !== "") {
-              yield* emitHeldAssistantTextItemAsReasoning(context, { ...item, text: commitment });
-            }
-            if (text === "") {
-              if (commitment === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
-            } else {
-              yield* emitAssistantTextArtifacts({ context, ...item, text });
-            }
+            const text = withoutLessonCommitment(item.text);
+            if (text === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            else yield* emitAssistantTextArtifacts({ context, ...item, text });
           }
         });
 
