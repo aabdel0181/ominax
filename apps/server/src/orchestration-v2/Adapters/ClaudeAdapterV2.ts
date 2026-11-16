@@ -5,6 +5,8 @@ import {
   toolOutputImages,
 } from "@t3tools/shared/toolOutput";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
+import { lessonToolPolicy } from "./lessonToolPolicy.ts";
+import { withLessonGitNetworkBlocked } from "./lessonGitEnvironment.ts";
 import { claudeTaskOutputRoot, tailClaudeTaskOutput } from "./ClaudeTaskOutputTail.ts";
 import {
   dynamicToolTitle,
@@ -2068,6 +2070,7 @@ export function claudeQueryEnvironment(
   appThread: Pick<OrchestrationV2AppThread, "lineage">,
   subagentPromptCacheTtl: "5m" | "1h" | undefined,
   resume = false,
+  lessonTurn = false,
 ): NodeJS.ProcessEnv {
   const promptCacheTtl =
     appThread.lineage.relationshipToParent === "subagent" &&
@@ -2076,11 +2079,11 @@ export function claudeQueryEnvironment(
       ? subagentPromptCacheTtl
       : undefined;
   const blockingMcpConnect = resume && environment.MCP_CONNECTION_NONBLOCKING === undefined;
-  if (promptCacheTtl === undefined && !blockingMcpConnect) {
+  if (promptCacheTtl === undefined && !blockingMcpConnect && !lessonTurn) {
     return environment;
   }
   return {
-    ...environment,
+    ...(lessonTurn ? withLessonGitNetworkBlocked(environment) : environment),
     ...(promptCacheTtl === undefined ? {} : { CLAUDE_CODE_PROMPT_CACHE_TTL: promptCacheTtl }),
     ...(blockingMcpConnect ? { MCP_CONNECTION_NONBLOCKING: "0" } : {}),
   };
@@ -2170,6 +2173,7 @@ export function makeClaudeQueryOptions(input: {
   readonly appendSystemPromptFileText?: string;
   // Flag settings, because a user's settings.json env beats the process env in Claude Code.
   readonly toolSearchOverride?: "true";
+  readonly lessonTurn?: boolean;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection, input.modelCatalog);
   const {
@@ -2254,6 +2258,25 @@ export function makeClaudeQueryOptions(input: {
           },
         } as ClaudeSdkSettings);
   const deviceInstructions = input.mcpServers !== undefined && input.deviceToolsAvailable === true;
+  const lessonToolGuard: HookCallback = (hookInput) => {
+    if (hookInput.hook_event_name !== "PreToolUse") return Promise.resolve({});
+    const result = lessonToolPolicy({
+      toolName: hookInput.tool_name,
+      toolInput: hookInput.tool_input,
+      projectRoot: input.cwd ?? process.cwd(),
+      cwd: hookInput.cwd ?? input.cwd ?? process.cwd(),
+      homeDir: input.environment?.HOME ?? process.env.HOME,
+    });
+    // No decision on allow, so approval-required lessons still ask.
+    if (result.allow) return Promise.resolve({});
+    return Promise.resolve({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse" as const,
+        permissionDecision: "deny" as const,
+        permissionDecisionReason: result.reason,
+      },
+    });
+  };
   const options: ClaudeAgentSdkQueryOptions = {
     model: compiledSelection.apiModelId,
     // T3 names threads; a supplied title skips Claude's redundant naming request.
@@ -2319,13 +2342,24 @@ export function makeClaudeQueryOptions(input: {
         ...launchAppendSystemPrompt,
       ].join("\n\n"),
     },
-    ...(deviceInstructions || input.onStop !== undefined
+    ...(deviceInstructions || input.onStop !== undefined || input.lessonTurn === true
       ? {
           hooks: {
             ...(deviceInstructions
               ? { SubagentStart: [{ hooks: [subagentDeviceInstructions] }] }
               : {}),
             ...(input.onStop === undefined ? {} : { Stop: [{ hooks: [input.onStop] }] }),
+            ...(input.lessonTurn === true
+              ? {
+                  PreToolUse: [
+                    {
+                      matcher: "Bash|Edit|Write|NotebookEdit|Monitor",
+                      hooks: [lessonToolGuard],
+                      onFailure: "block" as const,
+                    },
+                  ],
+                }
+              : {}),
           },
         }
       : {}),
@@ -13063,8 +13097,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 ? yield* resolveSubagentPromptCacheTtl(turnInput.runtimePolicy.cwd)
                 : undefined,
               shouldResume,
+              isLessonTurn(turnInput),
             ),
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,
+            lessonTurn: isLessonTurn(turnInput),
             ...(mcpOverrides.allowedTools === undefined
               ? {}
               : { allowedTools: mcpOverrides.allowedTools }),
