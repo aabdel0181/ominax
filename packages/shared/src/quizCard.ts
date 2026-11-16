@@ -78,16 +78,21 @@ export function explainBackClaimsProblem(
     : `Not saved: these claims don't hold: ${wrong.join("; ")}. Tell the learner plainly what is wrong, fix it briefly, and ask once more through question_card.`;
 }
 
-export function explainBackRetestProblem(input: {
-  readonly lastAnsweredExplainBack: boolean;
-  readonly previousExplainBackAnswered: boolean;
-  readonly previousExplainBackSaved: boolean;
-  readonly nonExplainBackCardAnsweredBetween: boolean;
-}): string | undefined {
-  return input.lastAnsweredExplainBack &&
-    input.previousExplainBackAnswered &&
-    !input.previousExplainBackSaved &&
-    !input.nonExplainBackCardAnsweredBetween
+/**
+ * Refuses saving an explain-back that follows another answered explain-back with no save and no
+ * ordinary card answered between: it restates the correction just above. `items` is thread order.
+ */
+export function explainBackRetestProblem(
+  items: ReadonlyArray<{ readonly id: string; readonly kind: "explain-back" | "card" | "save" }>,
+  answeredIds: ReadonlySet<string>,
+  lastAnsweredId: string | undefined,
+): string | undefined {
+  const at = items.findIndex((item) => item.id === lastAnsweredId);
+  if (items[at]?.kind !== "explain-back") return undefined;
+  const before = items
+    .slice(0, at)
+    .findLast((item) => item.kind === "save" || answeredIds.has(item.id));
+  return before?.kind === "explain-back"
     ? "Not saved: their restatement follows your correction, so check the corrected idea with a new case (a question_card applying it to a situation you haven't described) before saving."
     : undefined;
 }

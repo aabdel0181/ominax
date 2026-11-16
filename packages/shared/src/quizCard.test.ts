@@ -285,18 +285,23 @@ describe("quiz cards", () => {
       }),
     ).toBeUndefined();
   });
-  it("blocks an explain-back retest until an ordinary card intervenes", () => {
-    const input = {
-      lastAnsweredExplainBack: true,
-      previousExplainBackAnswered: true,
-      previousExplainBackSaved: false,
-      nonExplainBackCardAnsweredBetween: false,
-    };
-    expect(explainBackRetestProblem(input)).toMatch(/new case/u);
+  it("blocks an explain-back retest until an ordinary card or a save intervenes", () => {
+    const eb = (id: string) => ({ id, kind: "explain-back" as const });
+    const answered = new Set(["eb1", "eb2", "practice"]);
+    expect(explainBackRetestProblem([eb("eb1"), eb("eb2")], answered, "eb2")).toMatch(/new case/u);
+    const practice = { id: "practice", kind: "card" as const };
     expect(
-      explainBackRetestProblem({ ...input, nonExplainBackCardAnsweredBetween: true }),
+      explainBackRetestProblem([eb("eb1"), practice, eb("eb2")], answered, "eb2"),
     ).toBeUndefined();
+    const save = { id: "save", kind: "save" as const };
+    expect(explainBackRetestProblem([eb("eb1"), save, eb("eb2")], answered, "eb2")).toBeUndefined();
+    // An unanswered card in between doesn't count.
+    const open = { id: "open", kind: "card" as const };
+    expect(explainBackRetestProblem([eb("eb1"), open, eb("eb2")], answered, "eb2")).toMatch(
+      /new case/u,
+    );
   });
+
   it.each([
     [
       "number",

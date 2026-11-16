@@ -185,7 +185,7 @@ it.effect("folds source into both returned card replies", () =>
   ),
 );
 
-it.effect("refuses an answer stated since the learner's last message only", () => {
+it.effect("refuses an answer stated since the learner's last message or just before it", () => {
   const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
   const projection = McpToolAccessTestkit.idleThreadProjection(shell);
   const messages = [
@@ -240,6 +240,15 @@ it.effect("refuses an answer stated since the learner's last message only", () =
       .handle("quiz_card", card)
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(accepted.at(-1)?.result).toMatchObject({ quizCard: { answer: "13 m" } });
+
+    // The tutor's message before the learner's answer is still on screen.
+    const fromBefore = yield* toolkit
+      .handle("quiz_card", { ...card, answer: "12 m" })
+      .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+    yield* TestClock.adjust("1 second");
+    expect((yield* Fiber.join(fromBefore)).at(-1)?.result).toMatchObject({
+      code: "invalid_request",
+    });
 
     const commonWord = yield* toolkit
       .handle("quiz_card", { ...card, answer: "Right" })
@@ -331,5 +340,70 @@ it.effect(
       const shown = yield* Fiber.join(showing);
       expect(shown.at(-1)?.result).toMatchObject({ questionCard: { question: "Why?" } });
     });
+  },
+);
+
+it.effect(
+  "after I don't know on a number card, a new card waits for that card's worked answer",
+  () => {
+    const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
+    const projection = McpToolAccessTestkit.idleThreadProjection(shell);
+    const unknown = at(26, "user", "I don't know.\n\n(card card-n)");
+    const numberCard = {
+      type: "dynamic_tool",
+      toolName: "question_card",
+      output: { questionCard: { question: "Weight?", number: { answer: 50, tolerance: 0 } } },
+    };
+    return Effect.gen(function* () {
+      const toolkit = yield* QuizToolkit;
+      const ask = (verdict?: string) =>
+        toolkit
+          .handle("question_card", {
+            reply: "x".repeat(250),
+            source: "",
+            question: "Mass?",
+            ...(verdict === undefined ? {} : { verdict }),
+          })
+          .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+      const refusing = yield* ask("No problem, that's a gap.");
+      yield* TestClock.adjust("1 second");
+      expect((yield* Fiber.join(refusing)).at(-1)?.result).toMatchObject({
+        code: "invalid_request",
+      });
+      const worked = yield* ask("Friction 25 N = W sin 30°, so W = 25 / 0.5 = 50 N.");
+      expect((yield* Fiber.join(worked)).at(-1)?.result).toMatchObject({
+        questionCard: { question: "Mass?" },
+      });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          McpToolAccess.HandlersLayer.layer(QuizHandlers.layer),
+          Layer.succeed(McpInvocationContext.McpInvocationContext, {
+            environmentId: EnvironmentId.make("quiz-handler-environment"),
+            requestNamespace: "quiz-handler-provider-session",
+            thread: {
+              threadId: ThreadId.make("quiz-handler-test"),
+              providerSessionId: "quiz-handler-provider-session",
+              providerInstanceId: ProviderInstanceId.make("codex"),
+            },
+            client: undefined,
+            capabilities: new Set(["orchestration" as const]),
+            issuedAt: 0,
+          }),
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: () => Effect.succeed(shell),
+            getProjectThreadRecords: () =>
+              Effect.succeed({
+                ...projection,
+                messages: [unknown],
+              } as unknown as OrchestrationV2ThreadProjection),
+            getTurnItem: ({ itemId }) =>
+              Effect.succeed({
+                item: (itemId === "card-n" ? numberCard : null) as never,
+              }),
+          }),
+        ),
+      ),
+    );
   },
 );
