@@ -43,6 +43,7 @@ import type { HandoffEndpoints } from "@t3tools/client-runtime/handoff";
 import {
   IDLE_COMPACTING_LABELS,
   resolveUserMessageFileCards,
+  escapeUserMessageAsterisks,
   resolveUserMessagePresentation,
 } from "@t3tools/client-runtime/user-message";
 import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
@@ -1828,6 +1829,7 @@ function renderFeedEntry(
     | "onEditPendingMessage"
     | "threadId"
     | "workspaceRoot"
+    | "lesson"
   > & {
     readonly answeredCardAnswers: ReadonlyMap<string, string>;
     readonly formatMessageTime: (input: string) => string;
@@ -2129,7 +2131,9 @@ function renderFeedEntry(
     const { message } = entry;
     const isUser = message.role === "user";
     const presentation = resolveUserMessagePresentation(message);
-    const renderedText = renderAssistantCitationsAsText(presentation.text);
+    const renderedText = renderAssistantCitationsAsText(
+      isUser && props.lesson ? escapeUserMessageAsterisks(presentation.text) : presentation.text,
+    );
     const styles = isUser ? markdownStyles.user : markdownStyles.assistant;
     const timestampLabel = props.formatMessageTime(isUser ? message.createdAt : message.updatedAt);
     const attachments = message.attachments ?? [];
@@ -4042,6 +4046,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             threadTitle: props.threadTitle,
             skills: props.skills,
             workspaceRoot: props.workspaceRoot,
+            lesson: props.lesson,
             workflowOpening,
           })}
           {props.worktreeSetup && info.index === setupAnchorIndex ? (

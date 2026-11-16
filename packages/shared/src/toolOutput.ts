@@ -281,7 +281,7 @@ export function courseOutlineFromToolItem(item: {
   for (let index = 0; index < course.units.length;) {
     const unit = course.units[index]!;
     if (unit.section === undefined) {
-      entries.push({ text: `- ${index}. ${unit.title}`, start: index });
+      entries.push({ text: `- ${index + 1}. ${unit.title}`, start: index });
       index += 1;
       continue;
     }
@@ -290,7 +290,8 @@ export function courseOutlineFromToolItem(item: {
     while (index + 1 < course.units.length && course.units[index + 1]?.section === section)
       index += 1;
     entries.push({
-      text: `- ${section}: ${start === index ? `unit ${start}` : `units ${start}\u2013${index}`}`,
+      // Units are 1-based, as course_read and course_update take them.
+      text: `- ${section}: ${start === index ? `unit ${start + 1}` : `units ${start + 1}\u2013${index + 1}`}`,
       start,
     });
     index += 1;

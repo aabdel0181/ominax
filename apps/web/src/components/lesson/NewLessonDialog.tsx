@@ -5,6 +5,7 @@ import {
   type ProjectId,
   ThreadId,
   ModelSelection,
+  ProviderInstanceId,
   type ScopedProjectRef,
   supportsLessonProjects,
 } from "@t3tools/contracts";
@@ -72,22 +73,32 @@ export function openNewLesson(request: Request) {
 
 const LESSON_MODEL_SCHEMA = Schema.NullOr(ModelSelection);
 
+// What med and the golden walks run lessons on (APP-125); used when nothing is remembered.
+const POOL_LESSON_MODEL: ModelSelection = {
+  instanceId: ProviderInstanceId.make("claude-public-pool"),
+  model: "claude-sonnet-5-5",
+  options: [{ id: "effort", value: "high" }],
+};
+
 function lessonModelSelection(
   entries: ReadonlyArray<ProviderInstanceEntry>,
   remembered: ModelSelection | null,
   fallback: ModelSelection | null,
 ): ModelSelection | null {
-  const runnable =
-    remembered !== null &&
+  const runnable = (selection: ModelSelection) =>
     entries.some(
       (entry) =>
-        entry.instanceId === remembered.instanceId &&
+        entry.instanceId === selection.instanceId &&
         entry.enabled &&
         entry.isAvailable &&
         entry.status !== "error" &&
-        entry.models.some((candidate) => candidate.slug === remembered.model),
+        entry.models.some((candidate) => candidate.slug === selection.model),
     );
-  return runnable ? remembered : fallback;
+  return (
+    [remembered, POOL_LESSON_MODEL].find(
+      (selection) => selection !== null && runnable(selection),
+    ) ?? fallback
+  );
 }
 
 const depthOptions = [
