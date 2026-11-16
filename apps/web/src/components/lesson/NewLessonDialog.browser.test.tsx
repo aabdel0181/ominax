@@ -63,6 +63,11 @@ const LESSON_SELECTION: ModelSelection = {
   options: [{ id: "effort", value: "high" }],
 };
 
+const REMEMBERED_SELECTION: ModelSelection = {
+  instanceId: ProviderInstanceId.make("claudeAgent"),
+  model: "claude-opus-5-5",
+};
+
 function provider(
   instanceId: string,
   driver: string,
@@ -168,10 +173,10 @@ describe("NewLessonDialog", () => {
     ],
     [
       "uses a remembered lesson model",
-      LESSON_SELECTION,
+      REMEMBERED_SELECTION,
       ALL,
       "full-access",
-      LESSON_SELECTION,
+      REMEMBERED_SELECTION,
       "auto",
     ],
     [
