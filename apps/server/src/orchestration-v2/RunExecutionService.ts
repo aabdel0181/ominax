@@ -591,8 +591,6 @@ export const RunExecutionServiceV2Error = Schema.Union([
 ]);
 export type RunExecutionServiceV2Error = typeof RunExecutionServiceV2Error.Type;
 
-const OPEN_TURN_ITEM_STATUSES = new Set(["idle", "pending", "running", "waiting"]);
-
 const GUARDED_LESSON_TOOLS = new Set([
   QUIZ_CARD_TOOL_NAME,
   QUESTION_CARD_TOOL_NAME,
@@ -609,7 +607,6 @@ function withoutLessonSecrets(
   if (
     item.type === "dynamic_tool" &&
     GUARDED_LESSON_TOOLS.has(resolveT3McpToolId(item.toolName) ?? "") &&
-    !OPEN_TURN_ITEM_STATUSES.has(item.status) &&
     (item.status === "failed" || compactDynamicToolOutput(item.output)?.isError === true)
   )
     return { ...event, turnItem: { ...item, input: null } };
@@ -1188,6 +1185,8 @@ export const layer: Layer.Layer<
         const childSnapshotPendingWork = new Set<ProviderThreadId>();
         let rootTurnOwnershipChecked = false;
         const assistantStreaming = makeAssistantStreamingFilter(responseStreamingMode);
+        const lessonThread =
+          input.appThread.lesson !== undefined || isSideChatThread(input.appThread);
         // Set when ingestion ends or finalization settles the run's open items, which a later
         // streaming snapshot must not reopen.
         let idleFlushClosed = false;
@@ -1544,8 +1543,6 @@ export const layer: Layer.Layer<
           }
           return { event, accepted };
         });
-        const lessonThread =
-          input.appThread.lesson !== undefined || isSideChatThread(input.appThread);
         // Per-event ingestion avoids adding a span for every provider snapshot.
         const ingestDelivered = Effect.fnUntraced(function* (
           event: ProviderAdapter.ProviderAdapterV2Event,
@@ -1581,7 +1578,7 @@ export const layer: Layer.Layer<
             threadId: input.run.threadId,
             runId: input.run.id,
             nodeId: input.rootNode.id,
-            event: lessonThread ? withoutLessonSecrets(deliveredEvent) : deliveredEvent,
+            event: deliveredEvent,
             ...(isRootProviderThreadUpdate
               ? rootTerminalAlreadySeen
                 ? {
@@ -1662,13 +1659,15 @@ export const layer: Layer.Layer<
           yield* scheduleIdleFlush;
         });
         const ingestEvent = Effect.fnUntraced(function* ({
-          event,
+          event: providerEvent,
           accepted,
         }: {
           event: ProviderAdapter.ProviderAdapterV2Event;
           accepted: boolean;
         }) {
           if (!accepted) return;
+          // Redacted before anything keeps it: the stream filter, child tracking, every write.
+          const event = lessonThread ? withoutLessonSecrets(providerEvent) : providerEvent;
           if (
             event.type === "provider_turn.updated" &&
             event.providerTurn.runAttemptId === input.attempt.id &&

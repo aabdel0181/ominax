@@ -14,12 +14,13 @@ import {
   SIDE_CHAT_SUMMARY_HANDOFF_TITLE,
   SIDE_CHAT_OPENING_WAIT_CAP_MS,
   type ThreadId,
-  type TurnItemId,
+  TurnItemId,
 } from "@t3tools/contracts";
 import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { openLessonCard } from "@t3tools/shared/toolOutput";
+import { openLessonCardItemId } from "@t3tools/shared/quizCard";
+import { lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
 
 import type { PendingOrchestrationEffectV2 } from "../EffectOutbox.ts";
 import type * as ProjectionStore from "../ProjectionStore.ts";
@@ -235,16 +236,17 @@ export function buildSideChatLateSummary(input: {
  * from, if any.
  */
 export const loadSideChatOpeningSources = Effect.fn("loadSideChatOpeningSources")(function* (
-  projectionStore: Pick<ProjectionStore.ProjectionStoreV2Shape, "getThreadRecords">,
+  projectionStore: Pick<ProjectionStore.ProjectionStoreV2Shape, "getThreadRecords" | "getTurnItem">,
   sideChat: OrchestrationV2SideChat,
 ) {
-  // Finding the first request reads every user message of the lesson, so only without a summary.
+  // The open card needs every message of the lesson; the first request comes from the same read.
+  const { messages } = yield* projectionStore.getThreadRecords(sideChat.lessonThreadId, [
+    "messages",
+  ]);
   const lessonTopic =
     readySideChatSummary(sideChat.opening) !== null
       ? null
-      : ((yield* projectionStore.getThreadRecords(sideChat.lessonThreadId, ["messages"], {
-          messageRoles: ["user"],
-        })).messages[0]?.text ?? null);
+      : (messages.find((message) => message.role === "user")?.text ?? null);
   const activeRuns = yield* projectionStore.getThreadRecords(sideChat.lessonThreadId, ["runs"], {
     runStatuses: ["preparing", "starting", "running", "waiting"],
   });
@@ -260,12 +262,15 @@ export const loadSideChatOpeningSources = Effect.fn("loadSideChatOpeningSources"
       ? null
       : ((yield* projectionStore.getThreadRecords(sideChat.anchor.threadId, [])).thread.sideChat
           ?.opening.text ?? null);
-  const cardRecords = yield* projectionStore.getThreadRecords(
-    sideChat.lessonThreadId,
-    ["messages", "turnItems"],
-    { turnItemTypes: ["dynamic_tool"] },
-  );
-  const openCard = openLessonCard(cardRecords.messages, cardRecords.turnItems) ?? null;
+  const cardItemId = openLessonCardItemId(messages);
+  const cardItem =
+    cardItemId === undefined
+      ? null
+      : yield* projectionStore.getTurnItem({
+          threadId: sideChat.lessonThreadId,
+          itemId: TurnItemId.make(cardItemId),
+        });
+  const openCard = cardItem?.type === "dynamic_tool" ? lessonCardFromToolItem(cardItem) : undefined;
   return {
     lessonTopic,
     parentOpeningText,

@@ -10,8 +10,6 @@ import {
   courseOutlineFromToolItem,
   courseOutlineMessageId,
   lessonCardFromToolItem,
-  openLessonCard,
-  spoilsOpenCard,
   toolOutputIndicatesFailure,
 } from "./toolOutput.ts";
 
@@ -199,29 +197,6 @@ it("keeps valid quiz cards and drops invalid cards", () => {
       output: { questionCard: { question: "___", blanks: [{ answers: ["x"] }] } },
     }),
   ).toEqual({ question: "___", blanks: [{ answers: ["x"] }] });
-});
-
-it("finds the open lesson card and spots a picture that states its answer", () => {
-  const card = {
-    id: "card",
-    type: "dynamic_tool",
-    toolName: "question_card",
-    output: { questionCard: { question: "Ratio?", number: { answer: 20.09, tolerance: 0.01 } } },
-  };
-  const reply = { id: "card:reply", role: "assistant", createdAt: "2026-11-16T15:00:02Z" };
-  const open = openLessonCard(
-    [{ id: "ask", role: "user", createdAt: "2026-11-16T15:00:00Z" }, reply],
-    [card],
-  );
-  expect(open).toEqual({ question: "Ratio?", answers: ["20.09"] });
-  const answered = { id: "answer", role: "user", createdAt: "2026-11-16T15:00:05Z" };
-  expect(openLessonCard([reply, answered], [card])).toBeUndefined();
-  // A number card with a unit: the bare number in the picture still counts.
-  expect(spoilsOpenCard("<text>about 20.09 times</text>", open!.answers)).toBe(true);
-  expect(spoilsOpenCard("<text>about 120.09 times</text>", open!.answers)).toBe(false);
-  expect(spoilsOpenCard("<text>0.01 to 0.25</text>", ["0.01 to 0.25"])).toBe(true);
-  // Too short to tell from ordinary text.
-  expect(spoilsOpenCard("<text>F = ma</text>", ["F"])).toBe(false);
 });
 
 describe("courseOutlineFromToolItem", () => {

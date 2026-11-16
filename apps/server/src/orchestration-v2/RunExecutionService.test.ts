@@ -13,6 +13,7 @@ import {
   type OrchestrationV2ProviderThread,
   type OrchestrationV2ProviderTurn,
   type OrchestrationV2Run,
+  type OrchestrationV2SideChat,
   type OrchestrationV2RunAttempt,
   type OrchestrationV2StoredEvent,
   type OrchestrationV2Subagent,
@@ -4358,6 +4359,7 @@ function runBackgroundItemScenario(
       events: ReadonlyArray<OrchestrationV2DomainEvent>,
     ) => Effect.Effect<void>;
     readonly lesson?: boolean;
+    readonly sideChat?: boolean;
   },
 ) {
   return Effect.gen(function* () {
@@ -4456,6 +4458,8 @@ function runBackgroundItemScenario(
           ...(options?.lesson === true
             ? { lesson: { topic: "forces", depth: "working", purpose: "outcome" } as const }
             : {}),
+          // Only its presence matters to the run.
+          ...(options?.sideChat === true ? { sideChat: {} as OrchestrationV2SideChat } : {}),
         },
         providerSessionId: ProviderSessionId.make(`session:${key}`),
         session: {
@@ -4888,6 +4892,38 @@ it.effect("settles a child message only an idle flush wrote when the root is int
     assert.equal(settled[0]?.status, "interrupted");
     assert.equal("text" in settled[0]! ? settled[0].text : null, heldChildText);
     assert.isFalse("streaming" in settled[0]! && settled[0].streaming);
+  }),
+);
+
+it.effect("settles a lesson subagent's open thought without its text", () =>
+  Effect.gen(function* () {
+    const ids = backgroundScenarioIds("lesson-child-thought");
+    const finalized = yield* Ref.make<ReadonlyArray<OrchestrationV2DomainEvent>>([]);
+    yield* runBackgroundItemScenario(
+      "lesson-child-thought",
+      (ids) => [
+        childThreadCreatedEvent(ids),
+        {
+          type: "turn_item.updated",
+          driver,
+          turnItem: {
+            ...makeLinkedChildTurnItemFixture({ ids, driver, type: "reasoning" }),
+            text: "Card answer: 30 N",
+            streaming: false,
+          },
+        } as ProviderAdapter.ProviderAdapterV2Event,
+        linkedSubagentEvent(ids, "running"),
+        rootTerminalEvent(ids, "interrupted"),
+      ],
+      { sideChat: true, onFinalized: (written) => Ref.set(finalized, written) },
+    );
+    const settled = (yield* Ref.get(finalized)).flatMap((event) =>
+      event.type === "turn-item.updated" && event.payload.id === ids.childItemId
+        ? [event.payload]
+        : [],
+    );
+    assert.equal(settled.length, 1);
+    assert.equal("text" in settled[0]! ? settled[0].text : null, "");
   }),
 );
 

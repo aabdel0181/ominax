@@ -28,21 +28,28 @@ export function cardReplyProblem(input: {
   if (input.shownBefore === 0 && POINTS_BACK.test(input.reply))
     return "Your reply points back to something, but nothing has been taught visibly since the learner's last message, and they never see your thinking or tool output. Write those facts out in reply, defining each term, then call the card again.";
   const visible = `${input.reply}\n${input.shownText ?? ""}`;
-  const normalized = (value: string) => value.trim().replace(/\s+/gu, " ");
-  const meaningful = (answer: string) => answer.length >= 3 && answer !== "0" && answer !== "1";
-  const answer = input.answer === undefined ? undefined : normalized(input.answer);
   const answerAppears =
-    answer !== undefined &&
-    meaningful(answer) &&
-    /\d/u.test(answer) &&
-    new RegExp(
-      `(?<![\\p{L}\\p{N}_])${answer.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?![\\p{L}\\p{N}_])`,
-      "iu",
-    ).test(normalized(visible));
+    input.answer !== undefined && /\d/u.test(input.answer) && statesAnswer(visible, input.answer);
   if (answerAppears)
     return "The answer is stated just above; pose a new case that needs one more step.";
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
+}
+
+const collapse = (value: string) => value.trim().replace(/\s+/gu, " ");
+
+/** Whether `text` (HTML markup, scripts and styles ignored) states `answer` as a whole word or number. */
+export function statesAnswer(text: string, answer: string): boolean {
+  const wanted = collapse(answer);
+  if (wanted.length < 3) return false;
+  const plain = text
+    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/giu, " ")
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/&nbsp;|&#160;/giu, " ");
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}_])${wanted.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?![\\p{L}\\p{N}_])`,
+    "iu",
+  ).test(collapse(plain));
 }
 
 export function explainBackClaimsProblem(
@@ -489,4 +496,36 @@ export function answeredCardAnswers(
     if (id !== undefined && !answers.has(id)) answers.set(id, CARD_SKIPPED);
   }
   return answers;
+}
+
+/** The item id of the newest card the learner has not answered, as the lesson shows it open. */
+export function openLessonCardItemId(
+  messages: ReadonlyArray<{
+    readonly role: string;
+    readonly text: string;
+    readonly id?: string;
+    readonly createdAt?: unknown;
+  }>,
+): string | undefined {
+  const answered = answeredCardAnswers(messages);
+  const newest = messages
+    .filter((message) => message.role === "assistant" && message.id?.endsWith(":reply") === true)
+    .reduce<(typeof messages)[number] | undefined>(
+      (latest, message) =>
+        latest === undefined || epochMillis(message.createdAt) >= epochMillis(latest.createdAt)
+          ? message
+          : latest,
+      undefined,
+    );
+  const id = newest?.id?.slice(0, -":reply".length);
+  return id === undefined || answered.has(id) ? undefined : id;
+}
+
+/** What would give a card away: a quiz's right option, a number card's number, a blank's answers. */
+export function lessonCardAnswers(card: LessonCard): ReadonlyArray<string> {
+  if ("answer" in card) return [card.answer];
+  return [
+    ...(card.number === undefined ? [] : [String(card.number.answer)]),
+    ...(card.blanks ?? []).flatMap((blank) => blank.answers),
+  ];
 }

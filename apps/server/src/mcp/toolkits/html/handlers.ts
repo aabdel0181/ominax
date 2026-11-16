@@ -1,6 +1,7 @@
-import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import { OrchestratorMcpFailure, TurnItemId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { openLessonCard, spoilsOpenCard } from "@t3tools/shared/toolOutput";
+import { lessonCardAnswers, openLessonCardItemId, statesAnswer } from "@t3tools/shared/quizCard";
+import { lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -55,15 +56,21 @@ const refuseOpenCardSpoiler = Effect.fn("HtmlToolkit.refuseOpenCardSpoiler")(fun
   const { caller, threads } = yield* loadCaller();
   const lessonThreadId = caller?.sideChat?.lessonThreadId;
   if (caller === undefined || lessonThreadId === undefined) return;
-  const records = yield* threads
-    .getProjectThreadRecords(
+  const card = yield* Effect.gen(function* () {
+    const { messages } = yield* threads.getProjectThreadRecords(
       { projectId: caller.projectId, threadId: lessonThreadId },
-      ["messages", "turnItems"],
-      { turnItemTypes: ["dynamic_tool"] },
-    )
-    .pipe(Effect.orElseSucceed(() => undefined));
-  const card = records && openLessonCard(records.messages, records.turnItems);
-  if (card === undefined || !spoilsOpenCard(html, card.answers)) return;
+      ["messages"],
+    );
+    const itemId = openLessonCardItemId(messages);
+    if (itemId === undefined) return undefined;
+    const { item } = yield* threads.getTurnItem({
+      threadId: lessonThreadId,
+      itemId: TurnItemId.make(itemId),
+    });
+    return item?.type === "dynamic_tool" ? lessonCardFromToolItem(item) : undefined;
+  }).pipe(Effect.orElseSucceed(() => undefined));
+  if (card === undefined || !lessonCardAnswers(card).some((answer) => statesAnswer(html, answer)))
+    return;
   return yield* new OrchestratorMcpFailure({
     code: "invalid_request",
     message:
