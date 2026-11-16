@@ -4880,6 +4880,61 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
   );
 
+  it.effect("keeps a lesson's final commitment line out of the result-text fallback", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeWakeHarness;
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make("final-commitment"),
+          text: "Teach me",
+          attachments: [],
+          lesson: true,
+        }),
+      );
+      const text = "My own answer, for grading: 20 N.";
+      yield* Queue.offer(
+        harness.sdkMessages,
+        claudeSdkFrame({
+          type: "assistant",
+          uuid: "final-commitment-text",
+          session_id: WAKE_NATIVE_SESSION,
+          parent_tool_use_id: null,
+          message: {
+            id: "final-commitment-text",
+            model: "claude-sonnet-5-5",
+            content: [{ type: "text", text }],
+          },
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        makeResultFrame({ uuid: "final-commitment-result", result: text }),
+      );
+      yield* harness.awaitTerminal(1);
+      assert.deepEqual(
+        harness.events.flatMap((event) =>
+          event.type === "turn_item.updated" && event.turnItem.type === "assistant_message"
+            ? [event.turnItem.text]
+            : [],
+        ),
+        [],
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          IdAllocator.layer,
+          McpProviderSessions.layer,
+          NodeServices.layer,
+          NodeCrypto.layer,
+        ),
+      ),
+    ),
+  );
+
   it.effect.each([
     {
       text: "Your answer holds up on the basics. Before I say what's missing, I'll check the code that runs, so I teach what it does and not what the notes say.",

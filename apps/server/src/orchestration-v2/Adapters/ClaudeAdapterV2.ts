@@ -9171,8 +9171,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             const text = isLessonTurn(context.input)
               ? withoutLessonCommitment(item.text)
               : item.text;
-            if (text === "") yield* emitHeldAssistantTextItemAsReasoning(context, item);
-            else yield* emitAssistantTextArtifacts({ context, ...item, text });
+            if (text !== "") {
+              yield* emitAssistantTextArtifacts({ context, ...item, text });
+              continue;
+            }
+            yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            // The result frame repeats this text; it must not come back as the fallback message.
+            context.assistant.fallbackText = "";
           }
           context.assistant.heldText = [];
         });

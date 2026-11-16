@@ -1441,7 +1441,11 @@ function hideLessonThoughts<T extends ThreadFeedEntry>(entry: T): T {
     const hiddenItem = { ...item, text: "", title: null };
     return {
       ...activity,
+      summary: "Thinking",
       detail: null,
+      canExpand: false,
+      getFullDetail: () => null,
+      getCopyText: () => "Thinking",
       workEntry: { ...workEntry, label: "Thinking", structuredPayload: hiddenItem },
       projectedItem: { ...activity.projectedItem, item: hiddenItem },
     };

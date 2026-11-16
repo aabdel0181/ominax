@@ -2496,6 +2496,7 @@ it("shows no thought text in a lesson, live or settled", () => {
     type: "reasoning",
     status: "running",
     completedAt: null,
+    title: "Friction at 30 N",
     text: "Next card: friction at 30 N.",
     streaming: true,
   };
@@ -2519,8 +2520,10 @@ it("shows no thought text in a lesson, live or settled", () => {
         undefined,
         lesson,
       ),
+      // Long-press copies getCopyText, so it must not leak either.
+      (key, value) => (key === "getCopyText" ? value() : value),
     );
-  expect(rows(false, false)).toContain("friction at 30 N");
-  expect(rows(true, false)).not.toContain("friction at 30 N");
-  expect(rows(true, true)).not.toContain("friction at 30 N");
+  expect(rows(false, false)).toMatch(/friction at 30 N/i);
+  expect(rows(true, false)).not.toMatch(/friction at 30 N/i);
+  expect(rows(true, true)).not.toMatch(/friction at 30 N/i);
 });
