@@ -141,11 +141,12 @@ it.effect("folds source into both returned card replies", () =>
         reply: "x".repeat(250),
         source: "",
         purpose: "opening-check",
+        verdict: "Right.",
         question: "Why?",
       })
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(questionResult.at(-1)?.result).toMatchObject({
-      questionCard: { reply: "x".repeat(250) },
+      questionCard: { reply: `Right.\n\n${"x".repeat(250)}` },
     });
   }).pipe(
     Effect.provide(
@@ -167,9 +168,13 @@ it.effect("folds source into both returned card replies", () =>
             const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
             return Effect.succeed(shell);
           },
+          // The learner just answered a card and no verdict is visible, so `verdict` is required.
           getProjectThreadRecords: () => {
             const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
-            return Effect.succeed(McpToolAccessTestkit.idleThreadProjection(shell));
+            return Effect.succeed({
+              ...McpToolAccessTestkit.idleThreadProjection(shell),
+              messages: [at(26, "user", "A\n\n(card card-1)")],
+            } as unknown as OrchestrationV2ThreadProjection);
           },
         }),
       ),

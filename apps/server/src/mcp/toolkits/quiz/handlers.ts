@@ -74,7 +74,7 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
   readonly reply: string;
   readonly purpose: CardPurpose | undefined;
   readonly answer?: string;
-  readonly verdict?: string;
+  readonly verdict: string | undefined;
 }) {
   const shownBefore = yield* readShownTutor;
   const problem =
@@ -86,7 +86,6 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
           shownText: shownBefore.text,
           answeredCard: shownBefore.answeredCard,
           visibleSinceAnswer: shownBefore.visibleSinceAnswer,
-          ...(input.verdict === undefined ? {} : { verdict: input.verdict }),
         });
   if (problem !== undefined) {
     return yield* new OrchestratorMcpFailure({ code: "invalid_request", message: problem });
@@ -111,6 +110,7 @@ const handlers = {
       yield* refuseCardProblem({
         reply: input.reply,
         purpose: input.purpose,
+        verdict: input.verdict,
         answer: input.answer,
       });
       return {
@@ -133,6 +133,7 @@ const handlers = {
       yield* refuseCardProblem({
         reply: input.reply,
         purpose: input.purpose,
+        verdict: input.verdict,
         ...(input.number?.unit === undefined
           ? {}
           : { answer: `${input.number.answer} ${input.number.unit}` }),

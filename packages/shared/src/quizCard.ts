@@ -17,7 +17,7 @@ export function cardReplyProblem(input: {
   readonly shownText?: string;
   readonly answeredCard?: boolean;
   readonly visibleSinceAnswer?: boolean;
-  readonly verdict?: string;
+  readonly verdict?: string | undefined;
   /** A quiz answer, or a number card's "<answer> <unit>"; checked only when it holds a digit. */
   readonly answer?: string;
 }): string | undefined {
