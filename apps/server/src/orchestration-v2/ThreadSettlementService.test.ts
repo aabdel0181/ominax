@@ -160,13 +160,24 @@ describe("isAutoSettlementCandidate", () => {
     ).toBe(false);
   });
 
-  it("never auto-settles a lesson", () => {
+  it("never auto-settles a lesson, but its subagents still settle with it", () => {
+    const lesson = { topic: "Newton's laws", depth: "working", purpose: "outcome" } as const;
+    expect(ThreadSettlementService.isAutoSettlementCandidate(shell({ lesson }), NOW_MS)).toBe(
+      false,
+    );
     expect(
       ThreadSettlementService.isAutoSettlementCandidate(
-        shell({ lesson: { topic: "Newton's laws", depth: "working", purpose: "outcome" } }),
+        shell({
+          lesson,
+          lineage: {
+            rootThreadId: ThreadId.make("lesson-1"),
+            parentThreadId: ThreadId.make("lesson-1"),
+            relationshipToParent: "subagent",
+          },
+        }),
         NOW_MS,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("never settles, or keeps snoozed, a thread whose guest is waiting on the owner", () => {
