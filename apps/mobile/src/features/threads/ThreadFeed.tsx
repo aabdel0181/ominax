@@ -1800,6 +1800,7 @@ function renderFeedEntry(
     | "onEditPendingMessage"
     | "threadId"
     | "workspaceRoot"
+    | "lesson"
   > & {
     readonly answeredCardAnswers: ReadonlyMap<string, string>;
     readonly formatMessageTime: (input: string) => string;
@@ -2101,7 +2102,10 @@ function renderFeedEntry(
     const { message } = entry;
     const isUser = message.role === "user";
     const presentation = resolveUserMessagePresentation(message);
-    const renderedText = renderAssistantCitationsAsText(presentation.text);
+    // A learner's "4*4 - 3*2" is maths, not emphasis.
+    const renderedText = renderAssistantCitationsAsText(
+      isUser && props.lesson ? presentation.text.replaceAll("*", "\\*") : presentation.text,
+    );
     const styles = isUser ? markdownStyles.user : markdownStyles.assistant;
     const timestampLabel = props.formatMessageTime(isUser ? message.createdAt : message.updatedAt);
     const attachments = message.attachments ?? [];
@@ -4005,6 +4009,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             threadTitle: props.threadTitle,
             skills: props.skills,
             workspaceRoot: props.workspaceRoot,
+            lesson: props.lesson,
             workflowOpening,
           })}
           {props.worktreeSetup && info.index === setupAnchorIndex ? (

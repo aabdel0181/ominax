@@ -159,11 +159,11 @@ const NO_RUNNABLE_CLAUDE = [
 describe("NewLessonDialog", () => {
   it.each([
     [
-      "uses the default model when nothing is remembered",
+      "uses Sonnet 5.5 on the pool when nothing is remembered",
       null,
       ALL,
       "full-access",
-      PROJECT_DEFAULT,
+      LESSON_SELECTION,
       "auto",
     ],
     [
@@ -179,7 +179,7 @@ describe("NewLessonDialog", () => {
       { ...LESSON_SELECTION, instanceId: ProviderInstanceId.make("missing") },
       ALL,
       "full-access",
-      PROJECT_DEFAULT,
+      LESSON_SELECTION,
       "auto",
     ],
     [
@@ -187,7 +187,7 @@ describe("NewLessonDialog", () => {
       { ...LESSON_SELECTION, model: "claude-retired-4" },
       ALL,
       "full-access",
-      PROJECT_DEFAULT,
+      LESSON_SELECTION,
       "auto",
     ],
     [
@@ -203,7 +203,7 @@ describe("NewLessonDialog", () => {
       null,
       ALL,
       "approval-required",
-      PROJECT_DEFAULT,
+      LESSON_SELECTION,
       "approval-required",
     ],
   ] as const)(

@@ -44,6 +44,8 @@ export interface TurnItemSource {
 }
 
 export interface TimelineRowSharedState {
+  /** A lesson or side chat: the learner's own messages show as typed (APP-125). */
+  lesson: boolean;
   pendingApprovals: ReadonlyMap<RuntimeRequestId, PendingApproval>;
   respondingRequestIds: ReadonlyArray<RuntimeRequestId>;
   canOperateThread: boolean;

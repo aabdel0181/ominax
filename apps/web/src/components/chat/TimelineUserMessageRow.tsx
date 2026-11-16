@@ -1223,7 +1223,8 @@ const UserMessageBody = memo(function UserMessageBody(props: {
   }
   return (
     <ChatMarkdown
-      text={props.text}
+      // A learner's "4*4 - 3*2" is maths, not emphasis.
+      text={ctx.lesson ? props.text.replaceAll("*", "\\*") : props.text}
       cwd={props.markdownCwd}
       threadRef={ctx.threadRef ?? undefined}
       skills={props.skills}
