@@ -1039,7 +1039,7 @@ export const make = Effect.gen(function* () {
     const state = yield* Ref.get(updateStateRef);
     if (!settings.autoUpdate || state.status !== "available") return;
     const changes = yield* PubSub.subscribe(stateChanges);
-    const { completed } = yield* downloadAvailableUpdate;
+    const { completed } = yield* downloadAvailableUpdate(false);
     if (reason !== "startup" || !completed) return;
     // update-downloaded is handled asynchronously, so it can land after downloadUpdate resolves.
     let current = yield* Ref.get(updateStateRef);
