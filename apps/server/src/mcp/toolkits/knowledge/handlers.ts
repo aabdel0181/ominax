@@ -41,12 +41,12 @@ const handlers = {
       });
       const items = projection.turnItems
         .toSorted((a, b) => a.ordinal - b.ordinal)
-        .flatMap((item) => {
+        .flatMap((item): ReadonlyArray<Parameters<typeof explainBackRetestProblem>[0][number]> => {
           if (item.type !== "dynamic_tool") return [];
           const tool = resolveT3McpToolId(item.toolName);
           if (tool === "knowledge_map_mark_done")
             return item.status === "completed" && !compactDynamicToolOutput(item.output)?.isError
-              ? [{ id: item.id, kind: "save" as const }]
+              ? [{ id: item.id, kind: "save" }]
               : [];
           const card = lessonCardFromToolItem(item);
           if (card === undefined) return [];
@@ -54,7 +54,7 @@ const handlers = {
           return [
             {
               id: item.id,
-              kind: purpose === "explain-back" ? ("explain-back" as const) : ("card" as const),
+              kind: purpose === "explain-back" ? "explain-back" : "card",
             },
           ];
         });
