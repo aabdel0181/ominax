@@ -5,7 +5,7 @@ import {
   toolOutputImages,
 } from "@t3tools/shared/toolOutput";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
-import { LESSON_TOOL_DENIAL_REASON, lessonToolPolicy } from "./lessonToolPolicy.ts";
+import { lessonToolPolicy } from "./lessonToolPolicy.ts";
 import { claudeTaskOutputRoot, tailClaudeTaskOutput } from "./ClaudeTaskOutputTail.ts";
 import {
   dynamicToolTitle,
@@ -2270,7 +2270,7 @@ export function makeClaudeQueryOptions(input: {
       hookSpecificOutput: {
         hookEventName: "PreToolUse" as const,
         permissionDecision: "deny" as const,
-        permissionDecisionReason: LESSON_TOOL_DENIAL_REASON,
+        permissionDecisionReason: result.reason,
       },
     });
   };
@@ -2350,7 +2350,7 @@ export function makeClaudeQueryOptions(input: {
               ? {
                   PreToolUse: [
                     {
-                      matcher: "Bash|Edit|Write|NotebookEdit",
+                      matcher: "Bash|Edit|Write|NotebookEdit|Monitor",
                       hooks: [lessonToolGuard],
                       onFailure: "block" as const,
                     },

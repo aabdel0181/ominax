@@ -5,108 +5,52 @@ import * as NodePath from "node:path";
 export const LESSON_TOOL_DENIAL_REASON =
   "Lessons can read anywhere but can only write inside this project, with no network or git fetch/pull/push/clone.";
 
-const PATH_READ_TOOLS = new Set(["Read", "Grep", "Glob"]);
 const PATH_WRITE_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const WRITE_COMMANDS = new Set([
   "chmod",
   "chown",
   "cp",
   "install",
+  "ln",
   "mkdir",
   "mv",
   "rm",
   "rmdir",
   "tee",
   "touch",
-]);
-const READ_COMMANDS = new Set([
-  "awk",
-  "cat",
-  "cut",
-  "diff",
-  "du",
-  "echo",
-  "find",
-  "git",
-  "grep",
-  "head",
-  "jq",
-  "less",
-  "ls",
-  "nl",
-  "printf",
-  "pwd",
-  "rg",
-  "sed",
-  "sort",
-  "tail",
-  "tr",
-  "true",
-  "uniq",
-  "wc",
-]);
-const NETWORK_COMMANDS = new Set(["curl", "wget", "ssh", "scp", "sftp", "nc", "rsync"]);
-const GIT_NETWORK_VERBS = new Set([
-  "fetch",
-  "pull",
-  "push",
-  "clone",
-  "ls-remote",
-  "remote update",
-  "submodule update",
+  "truncate",
 ]);
 const SHELL_WRAPPERS = new Set([
+  "bash",
   "command",
   "env",
   "exec",
   "nice",
   "nohup",
   "setsid",
+  "sh",
   "sudo",
   "timeout",
 ]);
-const GIT_WRITE_VERBS = new Set([
-  "add",
-  "apply",
-  "branch",
-  "checkout",
-  "clean",
-  "commit",
-  "config",
-  "init",
-  "merge",
-  "mv",
-  "rebase",
-  "reset",
-  "restore",
-  "rm",
-  "stash",
-  "tag",
-  "worktree",
-]);
-const GIT_READ_VERBS = new Set([
-  "blame",
-  "cat-file",
-  "check-ignore",
-  "count-objects",
-  "describe",
-  "diff",
-  "log",
-  "ls-files",
-  "rev-parse",
-  "shortlog",
-  "show",
-  "status",
-]);
 const SEGMENT_SEPARATORS = new Set(["&&", "||", ";", "|"]);
+const GIT_NETWORK_VERB =
+  /\bgit\s+(?:(?:-[A-Za-z-]+(?:=|\s+)[^\s;&|]+|--[\w-]+(?:=|\s+)[^\s;&|]+|-[^\s;&|]+)\s+)*(?:fetch|pull|push|clone|ls-remote)\b/iu;
+const GIT_REMOTE_UPDATE =
+  /\bgit\s+(?:(?:-[A-Za-z-]+(?:=|\s+)[^\s;&|]+|--[\w-]+(?:=|\s+)[^\s;&|]+|-[^\s;&|]+)\s+)*(?:remote\s+update|submodule\s+update)\b/iu;
+const GIT_SUBMODULE_FOREACH_NETWORK =
+  /\bgit\s+(?:(?:-[A-Za-z-]+(?:=|\s+)[^\s;&|]+|--[\w-]+(?:=|\s+)[^\s;&|]+|-[^\s;&|]+)\s+)*submodule\s+foreach\b[\s\S]*\b(?:git\s+)?(?:pull|fetch)\b/iu;
+const NETWORK_COMMAND =
+  /(?:^|[;&|()\s])(?:curl|wget|ssh|scp|sftp|nc|ncat|telnet|ftp)(?:$|[\s;&|()])/iu;
+const REMOTE_RSYNC = /\brsync\b[\s\S]*\b(?:[\w.-]+@)?[\w.-]+:\S+/iu;
+const PACKAGE_INSTALL =
+  /(?:^|[;&|()\s])(?:pip3?|npm|pnpm|yarn|uv|cargo|apt|brew)\s+(?:[^;&|\n]*?\s+)?(?:install|add)\b|(?:^|[;&|()\s])(?:npx|uvx)\b|(?:^|[;&|()\s])pnpm\s+dlx\b/iu;
 const ONE_LINER_BLOCKED_MARKERS =
-  /\b(?:requests|urllib|socket|subprocess|shutil|fetch|https?|axios|dns)\b|\bos\.(?:remove|rename)\b|(?:writeFile|unlink|rename|mkdir|rmSync)\s*\(|open\s*\([^)]*['"][wa+][^'"]*['"]/iu;
+  /\b(?:requests|urllib|socket|subprocess|shutil|fetch|https?|axios|dns)\b|\bos\.(?:remove|rename|makedirs|system)\b|(?:writeFile|write_text|write_bytes|unlink|rename|mkdir|rmSync|fs\.[A-Za-z]+Sync|require\s*\(\s*['"](?:net|http|https)['"]|__import__\s*\(\s*['"](?:net|http|https)['"]|open\s*\([^)]*['"][wa+][^'"]*['"])/iu;
 
 export interface LessonToolPolicyInput {
   readonly toolName: string;
   readonly toolInput: unknown;
   readonly projectRoot: string;
-  readonly allowedExtraRoots?: ReadonlyArray<string>;
   readonly homeDir?: string | undefined;
 }
 
@@ -116,14 +60,8 @@ export type LessonToolPolicyResult =
 
 const deny = (): LessonToolPolicyResult => ({ allow: false, reason: LESSON_TOOL_DENIAL_REASON });
 
-function allowedRoots(input: LessonToolPolicyInput): ReadonlyArray<string> {
-  return [input.projectRoot, ...(input.allowedExtraRoots ?? [])].map((root) =>
-    NodePath.resolve(root),
-  );
-}
-
-function isWithinRoot(candidate: string, roots: ReadonlyArray<string>): boolean {
-  return roots.some((root) => candidate === root || candidate.startsWith(`${root}${NodePath.sep}`));
+function isWithinRoot(candidate: string, root: string): boolean {
+  return candidate === root || candidate.startsWith(`${root}${NodePath.sep}`);
 }
 
 function resolvePath(
@@ -132,7 +70,7 @@ function resolvePath(
   input: LessonToolPolicyInput,
 ): string | undefined {
   const trimmed = value.trim().replace(/^['"]|['"]$/gu, "");
-  if (trimmed.length === 0 || /[$*?{}[\]]/u.test(trimmed)) return undefined;
+  if (trimmed.length === 0) return undefined;
   const expanded =
     trimmed === "~" || trimmed.startsWith("~/")
       ? input.homeDir === undefined
@@ -142,21 +80,18 @@ function resolvePath(
   return expanded === undefined ? undefined : NodePath.resolve(baseDir, expanded);
 }
 
-function pathAllowed(value: string, baseDir: string, input: LessonToolPolicyInput): boolean {
-  const resolved = resolvePath(value, baseDir, input);
-  return resolved !== undefined && isWithinRoot(resolved, allowedRoots(input));
-}
-
 function writablePathAllowed(
   value: string,
   baseDir: string,
   input: LessonToolPolicyInput,
 ): boolean {
-  const resolved = resolvePath(value, baseDir, input);
+  const prefix = value.search(/[*?{[\]]/u);
+  const candidate = prefix < 0 ? value : value.slice(0, prefix).replace(/[/\\]$/u, "");
+  const resolved = resolvePath(candidate, baseDir, input);
+  if (resolved === undefined) return false;
   return (
-    resolved !== undefined &&
-    (isWithinRoot(resolved, allowedRoots(input)) ||
-      isWithinRoot(resolved, [NodePath.resolve(NodeOS.tmpdir())]))
+    isWithinRoot(resolved, NodePath.resolve(input.projectRoot)) ||
+    isWithinRoot(resolved, NodePath.resolve(NodeOS.tmpdir()))
   );
 }
 
@@ -168,8 +103,9 @@ function shellTokens(command: string): ReadonlyArray<string> {
     if (current.length > 0) tokens.push(current);
     current = "";
   };
-  for (let index = 0; index < command.length; index += 1) {
-    const character = command[index]!;
+  const normalized = command.replace(/\\\r?\n/gu, " ");
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index]!;
     if (quote !== undefined) {
       current += character;
       if (character === quote) quote = undefined;
@@ -180,8 +116,8 @@ function shellTokens(command: string): ReadonlyArray<string> {
       current += character;
       continue;
     }
-    if (character === "\\" && command[index + 1] !== undefined) {
-      current += command[index + 1]!;
+    if (character === "\\" && normalized[index + 1] !== undefined) {
+      current += normalized[index + 1]!;
       index += 1;
       continue;
     }
@@ -189,7 +125,7 @@ function shellTokens(command: string): ReadonlyArray<string> {
       flush();
       continue;
     }
-    const operator = command.slice(index).match(/^(?:&&|\|\||>>|<<|&>|[;&|>])/u)?.[0];
+    const operator = normalized.slice(index).match(/^(?:&&|\|\||>>|<<|&>|>&|[;&|>])/u)?.[0];
     if (operator !== undefined) {
       flush();
       tokens.push(operator);
@@ -209,7 +145,7 @@ function cleanToken(token: string): string {
 function commandIndex(tokens: ReadonlyArray<string>): number | undefined {
   for (let index = 0; index < tokens.length; index += 1) {
     const token = cleanToken(tokens[index]!);
-    if (token === "" || token.startsWith("-") || token === "env" || /^\w+=/u.test(token)) continue;
+    if (token === "" || token.startsWith("-") || /^\w+=/u.test(token)) continue;
     if (SHELL_WRAPPERS.has(token)) continue;
     return index;
   }
@@ -221,44 +157,287 @@ function commandName(tokens: ReadonlyArray<string>): string | undefined {
   return index === undefined ? undefined : cleanToken(tokens[index]!).split("/").at(-1);
 }
 
-function hasGitNetworkVerb(tokens: ReadonlyArray<string>): boolean {
+function pathFromToken(value: string, baseDir: string, input: LessonToolPolicyInput): boolean {
+  const clean = cleanToken(value);
+  return clean === "/dev/null" || writablePathAllowed(clean, baseDir, input);
+}
+
+function hasOutsideRedirection(
+  tokens: ReadonlyArray<string>,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
   for (let index = 0; index < tokens.length; index += 1) {
-    if (cleanToken(tokens[index]!) !== "git") continue;
-    for (let next = index + 1; next < tokens.length; next += 1) {
-      const token = cleanToken(tokens[next]!);
-      if (SEGMENT_SEPARATORS.has(token)) break;
-      if (token === "-C" || token === "-c") {
-        next += 1;
-        continue;
-      }
-      if (token.startsWith("-")) continue;
-      const compound = `${token} ${cleanToken(tokens[next + 1] ?? "")}`;
-      if (GIT_NETWORK_VERBS.has(token) || GIT_NETWORK_VERBS.has(compound)) return true;
-      break;
+    const token = cleanToken(tokens[index]!);
+    if (token === ">" || token === ">>" || token === "&>") {
+      const target = tokens[index + 1];
+      if (target === undefined || !pathFromToken(target, currentDir, input)) return true;
+      index += 1;
+    } else if (token === ">&") {
+      index += 1;
     }
   }
   return false;
 }
 
-function isNetworkCommand(tokens: ReadonlyArray<string>): boolean {
-  const name = commandName(tokens);
-  if (name === undefined) return false;
-  if (NETWORK_COMMANDS.has(name)) return true;
-  if (name === "pip" || name === "python" || name === "python3") {
-    return tokens.some((token) => ["install", "sync"].includes(cleanToken(token)));
+function hasOutsideTextRedirection(
+  text: string,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  const redirection = /(?:^|[\s;|])(?:\d+)?(>>?)(?!&)\s*([^\s;&|]+)/gu;
+  for (const match of text.matchAll(redirection)) {
+    if (!pathFromToken(match[2]!, currentDir, input)) return true;
   }
-  return (
-    ["npm", "pnpm", "yarn"].includes(name) &&
-    tokens.some((token) => ["install", "ci", "add"].includes(cleanToken(token)))
-  );
+  return false;
 }
 
-function isSafeOneLiner(tokens: ReadonlyArray<string>, name: string): boolean {
-  if (name !== "node" && name !== "python" && name !== "python3") return false;
+function hasOutsideTextWrite(
+  text: string,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  const nestedWrite =
+    /\b(?:rm|rmdir|mv|cp|install|ln|touch|mkdir|chmod|chown|tee|truncate)\s+(?:-[^\s]+\s+)*([^\s;&|()]+)/giu;
+  for (const match of text.matchAll(nestedWrite)) {
+    const target = match[1]!;
+    if (!writablePathAllowed(target, currentDir, input)) return true;
+  }
+  const nestedRunner = /\b(?:python3?|node|bash|sh|pytest|make)\s+((?:~|\.\.?|\/)[^\s;&|()]+)/giu;
+  for (const match of text.matchAll(nestedRunner)) {
+    if (!writablePathAllowed(match[1]!, currentDir, input)) return true;
+  }
+  const commandPattern =
+    /(?:^|[\s;&|()]\s*)(?:rm|rmdir|mv|cp|install|ln|touch|mkdir|chmod|chown|tee|truncate|sed|sort|dd|find)\b([^;&|()]*)/giu;
+  for (const match of text.matchAll(commandPattern)) {
+    const tokens = shellTokens(match[0]!.replace(/^[;&|()\s]+/u, ""));
+    if (tokens.length === 0) continue;
+    const name = commandName(tokens);
+    const index = commandIndex(tokens);
+    if (name === undefined || index === undefined) continue;
+    if (
+      name === "sed" &&
+      tokens.some((token) => /^(?:--in-place|-i(?:$|[^A-Za-z]))/u.test(cleanToken(token)))
+    ) {
+      const args = positional(tokens, index + 1);
+      if (args.length > 0 && !writablePathAllowed(args.at(-1)!, currentDir, input)) return true;
+    } else if (name === "sort") {
+      const outputIndex = tokens.findIndex((token) =>
+        ["-o", "--output"].includes(cleanToken(token)),
+      );
+      if (
+        outputIndex >= 0 &&
+        (tokens[outputIndex + 1] === undefined ||
+          !writablePathAllowed(tokens[outputIndex + 1]!, currentDir, input))
+      )
+        return true;
+    } else if (name === "dd") {
+      if (
+        tokens.some(
+          (token) =>
+            cleanToken(token).startsWith("of=") &&
+            !writablePathAllowed(cleanToken(token).slice(3), currentDir, input),
+        )
+      )
+        return true;
+    } else if (name === "find") {
+      if (findWriteOutside(tokens, currentDir, input)) return true;
+    } else if (
+      WRITE_COMMANDS.has(name) &&
+      writeCommandOutside(name, tokens, index, currentDir, input)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function positional(tokens: ReadonlyArray<string>, start: number): ReadonlyArray<string> {
+  return tokens.slice(start).filter((token) => {
+    const clean = cleanToken(token);
+    return !clean.startsWith("-") && !/^\d+$/u.test(clean);
+  });
+}
+
+function writeCommandOutside(
+  name: string,
+  tokens: ReadonlyArray<string>,
+  index: number,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  const args = positional(tokens, index + 1);
+  if (name === "cp" || name === "install" || name === "mv") {
+    if (args.length < 1) return false;
+    if (name === "mv" && args.some((arg) => !writablePathAllowed(arg, currentDir, input)))
+      return true;
+    const targetIndex = tokens.findIndex((token) => cleanToken(token) === "-t");
+    if (targetIndex >= 0 && tokens[targetIndex + 1] !== undefined) {
+      return !writablePathAllowed(tokens[targetIndex + 1]!, currentDir, input);
+    }
+    return !writablePathAllowed(args.at(-1)!, currentDir, input);
+  }
+  if (name === "ln") {
+    const targetIndex = tokens.findIndex((token) => cleanToken(token) === "-t");
+    if (targetIndex >= 0 && tokens[targetIndex + 1] !== undefined) {
+      return !writablePathAllowed(tokens[targetIndex + 1]!, currentDir, input);
+    }
+    return args.length > 0 && !writablePathAllowed(args.at(-1)!, currentDir, input);
+  }
+  if (["tee", "touch", "mkdir", "rm", "rmdir", "chmod", "chown", "truncate"].includes(name)) {
+    return args.some((arg) => !writablePathAllowed(arg, currentDir, input));
+  }
+  return false;
+}
+
+function codeRunnerOutside(
+  name: string,
+  tokens: ReadonlyArray<string>,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  const project = NodePath.resolve(input.projectRoot);
+  const temp = NodePath.resolve(NodeOS.tmpdir());
+  if (isWithinRoot(currentDir, project) || isWithinRoot(currentDir, temp)) return false;
+  if (["python", "python3", "node"].includes(name)) {
+    const index = commandIndex(tokens)!;
+    const flag = cleanToken(tokens[index + 1] ?? "");
+    if ((name === "python" || name === "python3") && flag === "-c") return false;
+    if (name === "node" && flag === "-e") return false;
+  }
+  return ["bash", "sh", "python", "python3", "node", "make", "pytest", "uv"].includes(name);
+}
+
+function gitRepoRoot(
+  tokens: ReadonlyArray<string>,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): string {
+  let repo = currentDir;
+  for (const token of tokens) {
+    const clean = cleanToken(token);
+    if (clean.startsWith("GIT_DIR=") || clean.startsWith("GIT_WORK_TREE=")) {
+      const resolved = resolvePath(clean.slice(clean.indexOf("=") + 1), currentDir, input);
+      if (resolved !== undefined) repo = resolved.replace(/[/\\]\.git$/u, "");
+    }
+  }
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = cleanToken(tokens[index]!);
+    if (token === "-C" || token === "--git-dir" || token === "--work-tree") {
+      const value = tokens[index + 1];
+      if (value !== undefined) {
+        const resolved = resolvePath(value, currentDir, input);
+        if (resolved !== undefined) repo = resolved.replace(/[/\\]\.git$/u, "");
+        index += 1;
+      }
+    } else if (token.startsWith("--git-dir=") || token.startsWith("--work-tree=")) {
+      const resolved = resolvePath(token.slice(token.indexOf("=") + 1), currentDir, input);
+      if (resolved !== undefined) repo = resolved.replace(/[/\\]\.git$/u, "");
+    } else if (token === "-c") {
+      index += 1;
+    } else if (!token.startsWith("-") && token !== "git") {
+      break;
+    }
+  }
+  return repo;
+}
+
+function gitWriteOutside(
+  tokens: ReadonlyArray<string>,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  const index = commandIndex(tokens);
+  if (index === undefined || commandName(tokens) !== "git") return false;
+  let verb: string | undefined;
+  for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
+    const token = cleanToken(tokens[cursor]!);
+    if (["-C", "--git-dir", "--work-tree", "-c"].includes(token)) {
+      cursor += 1;
+      continue;
+    }
+    if (token.startsWith("-") || /^\w+=/u.test(token)) continue;
+    verb = token;
+    break;
+  }
+  if (verb === undefined) return false;
+  const writes = new Set([
+    "add",
+    "apply",
+    "checkout",
+    "switch",
+    "reset",
+    "commit",
+    "merge",
+    "rebase",
+    "cherry-pick",
+    "revert",
+    "clean",
+    "restore",
+    "rm",
+    "mv",
+    "am",
+    "init",
+    "config",
+    "worktree",
+  ]);
+  const stashWrites = verb === "stash";
+  const tagBranchWrite =
+    ["tag", "branch"].includes(verb) &&
+    !tokens.some((token) =>
+      ["-l", "--list", "--show-current", "-a", "--all"].includes(cleanToken(token)),
+    );
+  const repoOutside = !isWithinRoot(
+    NodePath.resolve(gitRepoRoot(tokens, currentDir, input)),
+    NodePath.resolve(input.projectRoot),
+  );
+  if ((writes.has(verb) || stashWrites || tagBranchWrite) && repoOutside) return true;
+  for (let cursor = 0; cursor < tokens.length; cursor += 1) {
+    const token = cleanToken(tokens[cursor]!);
+    if (
+      (token === "--output" || token === "-o") &&
+      tokens[cursor + 1] !== undefined &&
+      !pathFromToken(tokens[cursor + 1]!, currentDir, input)
+    )
+      return true;
+    if (token.startsWith("--output=") && !pathFromToken(token.slice(9), currentDir, input))
+      return true;
+  }
+  return false;
+}
+
+function findWriteOutside(
+  tokens: ReadonlyArray<string>,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  const index = commandIndex(tokens);
+  if (index === undefined || commandName(tokens) !== "find") return false;
+  const roots: string[] = [];
+  for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
+    const token = cleanToken(tokens[cursor]!);
+    if (token.startsWith("-")) break;
+    roots.push(token);
+  }
+  const actions = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fls"]);
+  if (!tokens.some((token) => actions.has(cleanToken(token)))) return false;
+  if (roots.some((root) => !writablePathAllowed(root || ".", currentDir, input))) return true;
+  for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
+    const token = cleanToken(tokens[cursor]!);
+    if (["-fprint", "-fls"].includes(token) && tokens[cursor + 1] !== undefined) {
+      if (!writablePathAllowed(tokens[cursor + 1]!, currentDir, input)) return true;
+      cursor += 1;
+    }
+  }
+  return false;
+}
+
+function oneLinerIsSafe(tokens: ReadonlyArray<string>, name: string): boolean {
   const index = commandIndex(tokens);
   if (index === undefined) return false;
   const flag = cleanToken(tokens[index + 1] ?? "");
-  if ((name === "node" && flag !== "-e") || (name !== "node" && flag !== "-c")) return false;
+  if ((name === "python" || name === "python3") && flag !== "-c") return false;
+  if (name === "node" && flag !== "-e") return false;
   return !ONE_LINER_BLOCKED_MARKERS.test(
     tokens
       .slice(index + 2)
@@ -267,103 +446,7 @@ function isSafeOneLiner(tokens: ReadonlyArray<string>, name: string): boolean {
   );
 }
 
-function positionalTokens(tokens: ReadonlyArray<string>, start: number): ReadonlyArray<string> {
-  return tokens.slice(start).filter((token) => {
-    const clean = cleanToken(token);
-    return !clean.startsWith("-") && !/^\d/.test(clean);
-  });
-}
-
-function writeTargetsAllowed(
-  name: string,
-  tokens: ReadonlyArray<string>,
-  start: number,
-  currentDir: string,
-  input: LessonToolPolicyInput,
-): boolean {
-  const paths = positionalTokens(tokens, start);
-  if (paths.length === 0) return false;
-  const targets = name === "cp" || name === "mv" || name === "install" ? paths.slice(-1) : paths;
-  return targets.every((path) => writablePathAllowed(path, currentDir, input));
-}
-
-function isAllowedRedirectTarget(
-  value: string,
-  currentDir: string,
-  input: LessonToolPolicyInput,
-): boolean {
-  const target = cleanToken(value);
-  return target === "/dev/null" || writablePathAllowed(target, currentDir, input);
-}
-
-function isCdSegment(
-  tokens: ReadonlyArray<string>,
-  index: number,
-  currentDir: string,
-  input: LessonToolPolicyInput,
-): boolean {
-  if (tokens[index + 1] === undefined) return false;
-  for (let tokenIndex = index + 2; tokenIndex < tokens.length; tokenIndex += 1) {
-    const token = cleanToken(tokens[tokenIndex]!);
-    if (
-      /^\d+$/u.test(token) &&
-      [">", ">>", "&>"].includes(cleanToken(tokens[tokenIndex + 1] ?? "")) &&
-      tokens[tokenIndex + 2] !== undefined
-    ) {
-      if (!isAllowedRedirectTarget(tokens[tokenIndex + 2]!, currentDir, input)) return false;
-      tokenIndex += 2;
-      continue;
-    }
-    if (token === ">" || token === ">>" || token === "&>") {
-      if (
-        tokens[tokenIndex + 1] === undefined ||
-        !isAllowedRedirectTarget(tokens[tokenIndex + 1]!, currentDir, input)
-      )
-        return false;
-      tokenIndex += 1;
-      continue;
-    }
-    return false;
-  }
-  return true;
-}
-
-function gitWriteAllowed(
-  tokens: ReadonlyArray<string>,
-  currentDir: string,
-  input: LessonToolPolicyInput,
-): boolean {
-  let gitDir = currentDir;
-  let command: string | undefined;
-  let commandStart = 1;
-  for (let index = 1; index < tokens.length; index += 1) {
-    const token = cleanToken(tokens[index]!);
-    if (token === "-C" && tokens[index + 1] !== undefined) {
-      const resolved = resolvePath(tokens[index + 1]!, currentDir, input);
-      if (resolved === undefined) return false;
-      gitDir = resolved;
-      index += 1;
-      commandStart = index + 1;
-      continue;
-    }
-    if (token.startsWith("-")) continue;
-    command = token;
-    commandStart = index + 1;
-    break;
-  }
-  if (command === undefined) return false;
-  if (GIT_READ_VERBS.has(command)) return true;
-  if (!GIT_WRITE_VERBS.has(command)) return false;
-  if (!isWithinRoot(gitDir, [NodePath.resolve(input.projectRoot)])) return false;
-  if (
-    command === "config" &&
-    tokens.some((token) => ["--global", "--system", "--file"].includes(cleanToken(token)))
-  )
-    return false;
-  return positionalTokens(tokens, commandStart).every((path) => pathAllowed(path, gitDir, input));
-}
-
-function bashSegmentAllowed(
+function segmentAllowed(
   tokens: ReadonlyArray<string>,
   currentDir: string,
   input: LessonToolPolicyInput,
@@ -371,61 +454,103 @@ function bashSegmentAllowed(
   if (tokens.length === 0) return true;
   const index = commandIndex(tokens);
   const name = index === undefined ? undefined : commandName(tokens);
-  const oneLiner = index !== undefined && name !== undefined && isSafeOneLiner(tokens, name);
-  if (index === undefined || name === undefined || (!oneLiner && isNetworkCommand(tokens)))
+  if (index === undefined || name === undefined) return true;
+  const first = cleanToken(tokens[0]!);
+  if (["bash", "sh"].includes(first)) {
+    const project = NodePath.resolve(input.projectRoot);
+    const temp = NodePath.resolve(NodeOS.tmpdir());
+    if (!isWithinRoot(currentDir, project) && !isWithinRoot(currentDir, temp)) return false;
+    const nested = tokens.join(" ");
+    if (
+      hasOutsideRedirection(tokens, currentDir, input) ||
+      hasOutsideTextRedirection(nested, currentDir, input) ||
+      hasOutsideTextWrite(nested, currentDir, input)
+    )
+      return false;
+  }
+  if (name === "cd") {
+    return (
+      cleanToken(tokens[index + 1] ?? "") !== "-" &&
+      !hasOutsideRedirection(tokens, currentDir, input)
+    );
+  }
+  if (
+    hasOutsideRedirection(tokens, currentDir, input) ||
+    hasOutsideTextRedirection(tokens.join(" "), currentDir, input) ||
+    hasOutsideTextWrite(tokens.join(" "), currentDir, input)
+  )
     return false;
-  if (name === "cd") return isCdSegment(tokens, index, currentDir, input);
-  if (name === "git" && !gitWriteAllowed(tokens, currentDir, input)) return false;
-  const isWrite =
-    WRITE_COMMANDS.has(name) ||
-    (name === "sed" && tokens.some((token) => /^(?:-[^-]*)i/u.test(cleanToken(token))));
-  if (!isWrite && name !== "git" && !READ_COMMANDS.has(name) && !oneLiner) return false;
-  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
-    const token = cleanToken(tokens[tokenIndex]!);
-    if (token === ">" || token === ">>" || token === "&>") {
-      const target = tokens[tokenIndex + 1];
-      if (target === undefined || !isAllowedRedirectTarget(target, currentDir, input)) return false;
-      tokenIndex += 1;
-    } else if (/^\d?>>/.test(token) || /^\d?>/.test(token)) {
-      const target = token.replace(/^\d?>>?/, "");
-      if (target === "" || !isAllowedRedirectTarget(target, currentDir, input)) return false;
+  if (name === "sort") {
+    const outputIndex = tokens.findIndex((token) => ["-o", "--output"].includes(cleanToken(token)));
+    if (
+      outputIndex >= 0 &&
+      (tokens[outputIndex + 1] === undefined ||
+        !writablePathAllowed(tokens[outputIndex + 1]!, currentDir, input))
+    )
+      return false;
+    const inlineOutput = tokens.find((token) => cleanToken(token).startsWith("--output="));
+    if (
+      inlineOutput !== undefined &&
+      !writablePathAllowed(cleanToken(inlineOutput).slice(9), currentDir, input)
+    )
+      return false;
+  }
+  if (name === "dd") {
+    for (const token of tokens.map(cleanToken)) {
+      if (token.startsWith("of=") && !writablePathAllowed(token.slice(3), currentDir, input))
+        return false;
     }
   }
-  if (!isWrite) return true;
-  return writeTargetsAllowed(name, tokens, index + 1, currentDir, input);
+  if (gitWriteOutside(tokens, currentDir, input) || findWriteOutside(tokens, currentDir, input))
+    return false;
+  if (WRITE_COMMANDS.has(name) && writeCommandOutside(name, tokens, index, currentDir, input))
+    return false;
+  if (["python", "python3", "node"].includes(name)) {
+    const flag = cleanToken(tokens[index + 1] ?? "");
+    if ((name === "node" && flag === "-e") || (name !== "node" && flag === "-c")) {
+      return oneLinerIsSafe(tokens, name);
+    }
+  }
+  if (
+    name === "sed" &&
+    tokens.some((token) => /^(?:--in-place|-i(?:$|[^A-Za-z]))/u.test(cleanToken(token)))
+  ) {
+    const args = positional(tokens, index + 1);
+    if (args.length > 0 && !writablePathAllowed(args.at(-1)!, currentDir, input)) return false;
+  }
+  return !codeRunnerOutside(name, tokens, currentDir, input);
+}
+
+function dangerousText(command: string): boolean {
+  return (
+    GIT_NETWORK_VERB.test(command) ||
+    GIT_REMOTE_UPDATE.test(command) ||
+    GIT_SUBMODULE_FOREACH_NETWORK.test(command) ||
+    NETWORK_COMMAND.test(command) ||
+    REMOTE_RSYNC.test(command) ||
+    PACKAGE_INSTALL.test(command)
+  );
 }
 
 function bashAllowed(command: string, input: LessonToolPolicyInput): boolean {
-  const heredoc = /<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1(?:\r?\n|$)/u.exec(command);
-  if (heredoc !== null) {
-    const firstNewline = command.indexOf("\n");
-    const terminator = new RegExp(`^${heredoc[2]}\\r?$`, "mu");
-    if (firstNewline < 0 || !terminator.test(command.slice(firstNewline + 1))) return false;
-    const bodyEnd = command.search(terminator);
-    if (
-      bodyEnd < 0 ||
-      command
-        .slice(bodyEnd)
-        .split(/\r?\n/u)
-        .slice(1)
-        .some((line) => line.trim() !== "")
-    )
-      return false;
-    command = command.slice(0, firstNewline);
-  }
-  if (/[$`\n\r]|>&|(^|\s)&(\s|$)/u.test(command)) {
-    return false;
-  }
-  const tokens = shellTokens(command);
-  if (tokens.length === 0 || hasGitNetworkVerb(tokens)) return false;
+  const heredocBodies = [
+    ...command.matchAll(/<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1\r?\n([\s\S]*?)^\2\r?$/gmu),
+  ];
+  const unquotedBody = heredocBodies
+    .filter((match) => match[1] === "")
+    .map((match) => match[3] ?? "")
+    .join("\n");
+  const header = command.replace(/\r?\n[\s\S]*$/u, "");
+  if (dangerousText(`${header}\n${unquotedBody}`)) return false;
+  const tokens = shellTokens(header);
   let currentDir = NodePath.resolve(input.projectRoot);
   let segment: string[] = [];
   for (const token of [...tokens, ";"]) {
     if (SEGMENT_SEPARATORS.has(token)) {
-      if (!bashSegmentAllowed(segment, currentDir, input)) return false;
+      if (!segmentAllowed(segment, currentDir, input)) return false;
       const index = commandIndex(segment);
       if (index !== undefined && commandName(segment) === "cd") {
-        const resolved = resolvePath(segment[index + 1]!, currentDir, input);
+        const resolved = resolvePath(segment[index + 1] ?? "", currentDir, input);
         if (resolved === undefined) return false;
         currentDir = resolved;
       }
@@ -436,7 +561,6 @@ function bashAllowed(command: string, input: LessonToolPolicyInput): boolean {
 }
 
 function toolPath(toolName: string, toolInput: unknown): string | undefined {
-  if (typeof toolInput === "string") return toolInput;
   if (toolInput === null || typeof toolInput !== "object" || Array.isArray(toolInput))
     return undefined;
   const record = toolInput as Record<string, unknown>;
@@ -449,20 +573,21 @@ function toolPath(toolName: string, toolInput: unknown): string | undefined {
 }
 
 export function lessonToolPolicy(input: LessonToolPolicyInput): LessonToolPolicyResult {
-  if (PATH_READ_TOOLS.has(input.toolName)) return { allow: true };
+  if (input.toolName === "Read" || input.toolName === "Grep" || input.toolName === "Glob")
+    return { allow: true };
   if (PATH_WRITE_TOOLS.has(input.toolName)) {
     const value = toolPath(input.toolName, input.toolInput);
     return value !== undefined && writablePathAllowed(value, input.projectRoot, input)
       ? { allow: true }
       : deny();
   }
-  if (input.toolName === "Bash") {
+  if (input.toolName === "Bash" || input.toolName === "Monitor") {
     const command =
-      typeof input.toolInput === "string"
-        ? input.toolInput
-        : typeof input.toolInput === "object" && input.toolInput !== null
-          ? (input.toolInput as { readonly command?: unknown }).command
-          : undefined;
+      typeof input.toolInput === "object" &&
+      input.toolInput !== null &&
+      !Array.isArray(input.toolInput)
+        ? (input.toolInput as { readonly command?: unknown }).command
+        : undefined;
     return typeof command === "string" && bashAllowed(command, input) ? { allow: true } : deny();
   }
   return { allow: true };
