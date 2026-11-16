@@ -164,6 +164,11 @@ export function isAutoSettlementCandidate(
 ): boolean {
   if (thread.archivedAt !== null || thread.settledOverride !== null) return false;
   if (thread.pinnedAt != null || thread.autoSettleDisabledAt != null) return false;
+  // A lesson stays in the list: a learner comes back to it days later (APP-127).
+  // Its subagents can carry the lesson too; they are never listed and settle with the parent.
+  if (thread.lesson !== undefined && thread.lineage.relationshipToParent !== "subagent") {
+    return false;
+  }
   if (thread.pendingRuntimeRequest !== null) return false;
   // A guest is waiting on the owner; settling would hide the Request.
   if ((thread.pendingGuestMessageCount ?? 0) > 0) return false;
