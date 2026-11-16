@@ -4,6 +4,7 @@ import { ComposerContextId, GuestMessageId, ScheduledTaskId } from "@t3tools/con
 import { ATTACHMENT_ONLY_BOOTSTRAP_PROMPT } from "@t3tools/shared/composerContextReferences";
 
 import {
+  escapeUserMessageAsterisks,
   resolveUserMessageFileCards,
   resolveUserMessageGrouping,
   resolveUserMessagePresentation,
@@ -247,5 +248,16 @@ describe("resolveUserMessagePresentation", () => {
         scheduledTaskId: "task:daily-audit",
       });
     }
+  });
+});
+
+describe("escapeUserMessageAsterisks", () => {
+  it.each([
+    ["4*4 - 3*2", "4\\*4 - 3\\*2"],
+    ["use `x**2` or\n```py\nprint(2**8)\n```", "use `x**2` or\n```py\nprint(2**8)\n```"],
+    ["$4*4$ and $$F = m*a$$", "$4*4$ and $$F = m*a$$"],
+    ["already \\*escaped\\*", "already \\*escaped\\*"],
+  ])("%j", (text, expected) => {
+    expect(escapeUserMessageAsterisks(text)).toBe(expected);
   });
 });

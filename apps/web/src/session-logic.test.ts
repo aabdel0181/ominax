@@ -1441,7 +1441,7 @@ describe("HTML renders in the timeline", () => {
       toolName: "course_add",
       input: {},
       // Wire shape: the server sends only the formatted outline (WireProjection).
-      output: { courseOutline: "**Circuits**: 2 units\n\n- Foundations: units 0–1" },
+      output: { courseOutline: "**Circuits**: 2 units\n\n- Foundations: units 1–2" },
     };
     const entries = deriveTimelineEntriesFromVisibleTurnItems({
       visibleTurnItems: [visible(item)],
@@ -1453,7 +1453,7 @@ describe("HTML renders in the timeline", () => {
         id: courseOutlineMessageId(item.id),
         message: expect.objectContaining({
           role: "assistant",
-          text: "**Circuits**: 2 units\n\n- Foundations: units 0–1",
+          text: "**Circuits**: 2 units\n\n- Foundations: units 1–2",
         }),
       }),
     );

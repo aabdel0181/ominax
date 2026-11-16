@@ -215,7 +215,7 @@ describe("courseOutlineFromToolItem", () => {
     };
 
     expect(courseOutlineFromToolItem({ toolName: "mcp__t3-code__course_add", output })).toBe(
-      "**8.01SC Classical Mechanics**: 4 units\n\n- Syllabus: unit 0\n- Review: Vectors: units 1–2\n- Week 1: Kinematics: unit 3\n\nMIT OpenCourseWare, 8.01SC Classical Mechanics, CC BY-NC-SA 4.0",
+      "**8.01SC Classical Mechanics**: 4 units\n\n- Syllabus: unit 1\n- Review: Vectors: units 2–3\n- Week 1: Kinematics: unit 4\n\nMIT OpenCourseWare, 8.01SC Classical Mechanics, CC BY-NC-SA 4.0",
     );
     expect(courseOutlineMessageId("turn-item:course")).toBe("turn-item:course:outline");
   });

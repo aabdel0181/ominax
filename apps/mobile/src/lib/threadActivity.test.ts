@@ -139,7 +139,7 @@ it("keeps a completed quiz card as its own feed entry", () => {
     toolName: "course_add",
     input: {},
     // Wire shape: the server sends only the formatted outline (WireProjection).
-    output: { courseOutline: "**Circuits**: 2 units\n\n- Foundations: units 0–1" },
+    output: { courseOutline: "**Circuits**: 2 units\n\n- Foundations: units 1–2" },
   };
 
   const feed = buildThreadFeed([
@@ -159,7 +159,7 @@ it("keeps a completed quiz card as its own feed entry", () => {
       id: "course-item:outline",
       message: expect.objectContaining({
         role: "assistant",
-        text: "**Circuits**: 2 units\n\n- Foundations: units 0–1",
+        text: "**Circuits**: 2 units\n\n- Foundations: units 1–2",
       }),
     }),
   );

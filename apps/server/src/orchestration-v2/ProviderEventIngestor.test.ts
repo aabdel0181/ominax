@@ -1820,7 +1820,7 @@ layer("ProviderEventIngestorV2", (it) => {
           {
             id: courseOutlineMessageId("turn-item:course"),
             role: "assistant",
-            text: "**Course**: 1 units\n\n- Syllabus: unit 0",
+            text: "**Course**: 1 units\n\n- Syllabus: unit 1",
             streaming: false,
           },
         ],
