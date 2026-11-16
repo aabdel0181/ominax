@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off -- this pure policy resolves paths without an Effect service.
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 export const LESSON_TOOL_DENIAL_REASON =
@@ -98,6 +99,8 @@ const GIT_READ_VERBS = new Set([
   "status",
 ]);
 const SEGMENT_SEPARATORS = new Set(["&&", "||", ";", "|"]);
+const ONE_LINER_BLOCKED_MARKERS =
+  /\b(?:requests|urllib|socket|subprocess|shutil|fetch|https?|axios|dns)\b|\bos\.(?:remove|rename)\b|(?:writeFile|unlink|rename|mkdir|rmSync)\s*\(|open\s*\([^)]*['"][wa+][^'"]*['"]/iu;
 
 export interface LessonToolPolicyInput {
   readonly toolName: string;
@@ -144,8 +147,59 @@ function pathAllowed(value: string, baseDir: string, input: LessonToolPolicyInpu
   return resolved !== undefined && isWithinRoot(resolved, allowedRoots(input));
 }
 
+function writablePathAllowed(
+  value: string,
+  baseDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  const resolved = resolvePath(value, baseDir, input);
+  return (
+    resolved !== undefined &&
+    (isWithinRoot(resolved, allowedRoots(input)) ||
+      isWithinRoot(resolved, [NodePath.resolve(NodeOS.tmpdir())]))
+  );
+}
+
 function shellTokens(command: string): ReadonlyArray<string> {
-  return command.match(/>>|>|&&|\|\||[;&|]|(?:[^\s"']|"[^"]*"|'[^']*')+/gu) ?? [];
+  const tokens: Array<string> = [];
+  let current = "";
+  let quote: string | undefined;
+  const flush = () => {
+    if (current.length > 0) tokens.push(current);
+    current = "";
+  };
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index]!;
+    if (quote !== undefined) {
+      current += character;
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      current += character;
+      continue;
+    }
+    if (character === "\\" && command[index + 1] !== undefined) {
+      current += command[index + 1]!;
+      index += 1;
+      continue;
+    }
+    if (/\s/u.test(character)) {
+      flush();
+      continue;
+    }
+    const operator = command.slice(index).match(/^(?:&&|\|\||>>|<<|&>|[;&|>])/u)?.[0];
+    if (operator !== undefined) {
+      flush();
+      tokens.push(operator);
+      index += operator.length - 1;
+      continue;
+    }
+    current += character;
+  }
+  flush();
+  return tokens;
 }
 
 function cleanToken(token: string): string {
@@ -199,6 +253,20 @@ function isNetworkCommand(tokens: ReadonlyArray<string>): boolean {
   );
 }
 
+function isSafeOneLiner(tokens: ReadonlyArray<string>, name: string): boolean {
+  if (name !== "node" && name !== "python" && name !== "python3") return false;
+  const index = commandIndex(tokens);
+  if (index === undefined) return false;
+  const flag = cleanToken(tokens[index + 1] ?? "");
+  if ((name === "node" && flag !== "-e") || (name !== "node" && flag !== "-c")) return false;
+  return !ONE_LINER_BLOCKED_MARKERS.test(
+    tokens
+      .slice(index + 2)
+      .map(cleanToken)
+      .join(" "),
+  );
+}
+
 function positionalTokens(tokens: ReadonlyArray<string>, start: number): ReadonlyArray<string> {
   return tokens.slice(start).filter((token) => {
     const clean = cleanToken(token);
@@ -216,7 +284,48 @@ function writeTargetsAllowed(
   const paths = positionalTokens(tokens, start);
   if (paths.length === 0) return false;
   const targets = name === "cp" || name === "mv" || name === "install" ? paths.slice(-1) : paths;
-  return targets.every((path) => pathAllowed(path, currentDir, input));
+  return targets.every((path) => writablePathAllowed(path, currentDir, input));
+}
+
+function isAllowedRedirectTarget(
+  value: string,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  const target = cleanToken(value);
+  return target === "/dev/null" || writablePathAllowed(target, currentDir, input);
+}
+
+function isCdSegment(
+  tokens: ReadonlyArray<string>,
+  index: number,
+  currentDir: string,
+  input: LessonToolPolicyInput,
+): boolean {
+  if (tokens[index + 1] === undefined) return false;
+  for (let tokenIndex = index + 2; tokenIndex < tokens.length; tokenIndex += 1) {
+    const token = cleanToken(tokens[tokenIndex]!);
+    if (
+      /^\d+$/u.test(token) &&
+      [">", ">>", "&>"].includes(cleanToken(tokens[tokenIndex + 1] ?? "")) &&
+      tokens[tokenIndex + 2] !== undefined
+    ) {
+      if (!isAllowedRedirectTarget(tokens[tokenIndex + 2]!, currentDir, input)) return false;
+      tokenIndex += 2;
+      continue;
+    }
+    if (token === ">" || token === ">>" || token === "&>") {
+      if (
+        tokens[tokenIndex + 1] === undefined ||
+        !isAllowedRedirectTarget(tokens[tokenIndex + 1]!, currentDir, input)
+      )
+        return false;
+      tokenIndex += 1;
+      continue;
+    }
+    return false;
+  }
+  return true;
 }
 
 function gitWriteAllowed(
@@ -262,22 +371,24 @@ function bashSegmentAllowed(
   if (tokens.length === 0) return true;
   const index = commandIndex(tokens);
   const name = index === undefined ? undefined : commandName(tokens);
-  if (index === undefined || name === undefined || isNetworkCommand(tokens)) return false;
-  if (name === "cd") return tokens.length === index + 2;
+  const oneLiner = index !== undefined && name !== undefined && isSafeOneLiner(tokens, name);
+  if (index === undefined || name === undefined || (!oneLiner && isNetworkCommand(tokens)))
+    return false;
+  if (name === "cd") return isCdSegment(tokens, index, currentDir, input);
   if (name === "git" && !gitWriteAllowed(tokens, currentDir, input)) return false;
   const isWrite =
     WRITE_COMMANDS.has(name) ||
     (name === "sed" && tokens.some((token) => /^(?:-[^-]*)i/u.test(cleanToken(token))));
-  if (!isWrite && name !== "git" && !READ_COMMANDS.has(name)) return false;
+  if (!isWrite && name !== "git" && !READ_COMMANDS.has(name) && !oneLiner) return false;
   for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
     const token = cleanToken(tokens[tokenIndex]!);
-    if (token === ">" || token === ">>") {
+    if (token === ">" || token === ">>" || token === "&>") {
       const target = tokens[tokenIndex + 1];
-      if (target === undefined || !pathAllowed(target, currentDir, input)) return false;
+      if (target === undefined || !isAllowedRedirectTarget(target, currentDir, input)) return false;
       tokenIndex += 1;
     } else if (/^\d?>>/.test(token) || /^\d?>/.test(token)) {
       const target = token.replace(/^\d?>>?/, "");
-      if (target === "" || !pathAllowed(target, currentDir, input)) return false;
+      if (target === "" || !isAllowedRedirectTarget(target, currentDir, input)) return false;
     }
   }
   if (!isWrite) return true;
@@ -285,7 +396,26 @@ function bashSegmentAllowed(
 }
 
 function bashAllowed(command: string, input: LessonToolPolicyInput): boolean {
-  if (/[$`\\\n\r]|>&|(^|\s)&(\s|$)/u.test(command)) return false;
+  const heredoc = /<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1(?:\r?\n|$)/u.exec(command);
+  if (heredoc !== null) {
+    const firstNewline = command.indexOf("\n");
+    const terminator = new RegExp(`^${heredoc[2]}\\r?$`, "mu");
+    if (firstNewline < 0 || !terminator.test(command.slice(firstNewline + 1))) return false;
+    const bodyEnd = command.search(terminator);
+    if (
+      bodyEnd < 0 ||
+      command
+        .slice(bodyEnd)
+        .split(/\r?\n/u)
+        .slice(1)
+        .some((line) => line.trim() !== "")
+    )
+      return false;
+    command = command.slice(0, firstNewline);
+  }
+  if (/[$`\n\r]|>&|(^|\s)&(\s|$)/u.test(command)) {
+    return false;
+  }
   const tokens = shellTokens(command);
   if (tokens.length === 0 || hasGitNetworkVerb(tokens)) return false;
   let currentDir = NodePath.resolve(input.projectRoot);
@@ -322,7 +452,7 @@ export function lessonToolPolicy(input: LessonToolPolicyInput): LessonToolPolicy
   if (PATH_READ_TOOLS.has(input.toolName)) return { allow: true };
   if (PATH_WRITE_TOOLS.has(input.toolName)) {
     const value = toolPath(input.toolName, input.toolInput);
-    return value !== undefined && pathAllowed(value, input.projectRoot, input)
+    return value !== undefined && writablePathAllowed(value, input.projectRoot, input)
       ? { allow: true }
       : deny();
   }
