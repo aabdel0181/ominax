@@ -26,19 +26,23 @@ jobs:
   # open: if the diff cannot be resolved, everything runs.
   changes:
     name: Changes
+    permissions:
+      contents: read
+      actions: read
     runs-on: ominax-linux-x64
     timeout-minutes: 5
     outputs:
-      typecheck: ${{ steps.detect.outputs.typecheck }}
-      build: ${{ steps.detect.outputs.build }}
-      desktop_launch: ${{ steps.detect.outputs.desktop_launch }}
-      test: ${{ steps.detect.outputs.test }}
-      test_packages: ${{ steps.detect.outputs.test_packages }}
-      test_web: ${{ steps.detect.outputs.test_web }}
-      test_server: ${{ steps.detect.outputs.test_server }}
-      rust: ${{ steps.detect.outputs.rust }}
-      release_smoke: ${{ steps.detect.outputs.release_smoke }}
-      mobile_native: ${{ steps.detect.outputs.mobile_native }}
+      lint: ${{ steps.tested.outputs.lint }}
+      typecheck: ${{ steps.detect.outputs.typecheck || steps.tested.outputs.typecheck }}
+      build: ${{ steps.detect.outputs.build || steps.tested.outputs.build }}
+      desktop_launch: ${{ steps.detect.outputs.desktop_launch || steps.tested.outputs.desktop_launch }}
+      test: ${{ steps.detect.outputs.test || steps.tested.outputs.test }}
+      test_packages: ${{ steps.detect.outputs.test_packages || steps.tested.outputs.test_packages }}
+      test_web: ${{ steps.detect.outputs.test_web || steps.tested.outputs.test_web }}
+      test_server: ${{ steps.detect.outputs.test_server || steps.tested.outputs.test_server }}
+      rust: ${{ steps.detect.outputs.rust || steps.tested.outputs.rust }}
+      release_smoke: ${{ steps.detect.outputs.release_smoke || steps.tested.outputs.release_smoke }}
+      mobile_native: ${{ steps.detect.outputs.mobile_native || steps.tested.outputs.mobile_native }}
     steps:
       # Only the package manifests the script reads to build the dependency graph.
       # Depth 2 brings the base commit the change is diffed against.
@@ -55,8 +59,39 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Record the tested tree
+        id: tree
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}' | tee "$RUNNER_TEMP/tree")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the tested tree
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ominax-tested-tree-${{ steps.tree.outputs.tree }}
+          path: ${{ runner.temp }}/tree
+          retention-days: 30
+          overwrite: true
+
+      - name: Reuse a passing PR run of this tree
+        id: tested
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TREE: ${{ steps.tree.outputs.tree }}
+        run: |
+          for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=ominax-tested-tree-$TREE" -q '.artifacts[].workflow_run.id' | sort -u); do
+            url="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" -q 'select(.path == ".github/workflows/ominax-ci.yml" and .event == "pull_request" and .head_repository.full_name == .repository.full_name and .conclusion == "success") | .html_url' || true)"
+            if [ -n "$url" ]; then
+              echo "$url passed this exact tree; skipping every job."
+              { echo "run=$url"; echo lint=false; node .github/scripts/ci-changes.cjs --paths /dev/null; } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "No passing PR run tested tree $TREE; running every job."
+
       - name: Detect affected jobs
         id: detect
+        if: steps.tested.outputs.run == ''
         uses: ./.github/actions/ci-changes
 
   # Lint and the desktop build each get a runner so they run side by side.
@@ -68,6 +103,8 @@ jobs:
       contents: read
       id-token: write
     name: Lint
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.lint != 'false' }}
     runs-on: ominax-linux-x64
     timeout-minutes: 10
     steps:
@@ -446,6 +483,8 @@ jobs:
       contents: read
       id-token: write
     name: Test Server ${{ matrix.shard }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.test_server != 'false' }}
     runs-on: ominax-linux-x64
     # Shards take 2-5 minutes. When the shared task cache throttles reads, each
     # failed fetch stalls vp for 15-90s, which pushed shards past 10 minutes.

@@ -454,6 +454,7 @@ export function buildSideChatOpeningSummaryText(input: {
   readonly lessonTopic: string | null;
   readonly parentOpeningText: string | null;
   readonly runningTurnItems?: ReadonlyArray<OrchestrationV2TurnItem> | null;
+  readonly openCardQuestion?: string | null;
   readonly sideChatInstructions?: string;
 }): string {
   const {
@@ -482,6 +483,11 @@ export function buildSideChatOpeningSummaryText(input: {
     if (lines.length > 0) {
       sections.push([BUSY_LESSON_HEADER, ...(omitted ? [truncated] : []), ...lines].join("\n"));
     }
+  }
+  if (input.openCardQuestion) {
+    sections.push(
+      `${referenceBlock("A card the learner has not answered yet is open in the lesson", input.openCardQuestion)}\nDon't give its answer away, in words or pictures, until they answer it in the lesson.`,
+    );
   }
   sections.push(
     referenceBlock(
