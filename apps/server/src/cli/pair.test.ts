@@ -683,7 +683,10 @@ describe("t3 pair", () => {
             if (String(input) === "http://127.0.0.1:3773/.well-known/t3/environment") {
               return Response.json(testDescriptor);
             }
-            assert.equal(String(input), "https://pair-test.tail.ts.net/.well-known/t3/environment");
+            assert.equal(
+              String(input),
+              "https://pair-test.tail.ts.net:8443/.well-known/t3/environment",
+            );
             return new Response(null, { status: 503 });
           }),
           Effect.flip,
