@@ -1,4 +1,4 @@
-import { OrchestratorMcpFailure, type ThreadId } from "@t3tools/contracts";
+import { type Course, OrchestratorMcpFailure, type ThreadId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,7 +17,7 @@ import { COURSE_PROGRESS_NOTE } from "./tools.ts";
 import { loadCaller } from "../../threadAccess.ts";
 import { CourseReferenceToolkit, CourseToolkit } from "./tools.ts";
 
-const PREP_BRIEF = `You are a course preparation thread. Work only on the requested units for course {{courseId}} (units: {{units}}). For each unit, call course_read with courseId and its unit number. Write 2–3 likely sticking points, ranked by what the unit needs that knowledge_map_read lacks, what the learner asked before, the transcript, and common misconceptions. Write a four-question quiz with answers first. Save both with course_update using courseId. Do not message, wake, or delegate into the lesson thread; this is background preparation.{{solutionLeads}}`;
+const PREP_BRIEF = `You are a course preparation thread. Work only on the requested units for course {{courseId}} (units: {{units}}). For each unit, call course_read with courseId and its unit number. Write 2–3 likely sticking points, ranked by what the unit needs that knowledge_map_read lacks, what the learner asked before, the transcript, and common misconceptions. Write a four-question quiz with answers first. Save both with course_update using courseId. Use only the T3 course and reference tools; never run shell commands or read files. Do not message, wake, or delegate into the lesson thread; this is background preparation.{{solutionLeads}}`;
 const isCourseIngestError = Schema.is(CourseIngestError);
 const isCourseReferenceFetchError = Schema.is(CourseReferenceFetchError);
 const fail = (e: { readonly message: string }) =>
@@ -51,6 +51,34 @@ const normalizeSolutionLeads = (raw: ReadonlyArray<string>): ReadonlyArray<strin
   }
   return leads;
 };
+// The tutor gets numbers and titles, not the stored record (a 200-unit course is ~40 KB).
+const unitLine = (course: Course, index: number) => {
+  const unit = course.units[index]!;
+  const section =
+    unit.section !== undefined && unit.section !== course.units[index - 1]?.section
+      ? ` [${unit.section}]`
+      : "";
+  const prepared = unit.prepared.plan || unit.prepared.quiz ? " (prepared)" : "";
+  return `${index + 1}. ${unit.title}${section}${prepared}`;
+};
+const courseOutline = (course: Course) => ({
+  courseId: course.id,
+  title: course.title,
+  ...(course.attribution ? { attribution: course.attribution } : {}),
+  ...(course.position ? { position: course.position } : {}),
+  units: course.units.map((_, index) => unitLine(course, index)),
+  ...(course.problemSets
+    ? {
+        problemSets: course.problemSets.map((pset, index) => ({
+          pset: index + 1,
+          title: pset.title,
+          ...(pset.section ? { section: pset.section } : {}),
+          hasSolution: pset.hasSolution,
+          ...(pset.references ? { referencesSaved: pset.references.length } : {}),
+        })),
+      }
+    : {}),
+});
 const getOwnedCourse = Effect.fn("course.getOwnedCourse")(function* (
   service: CourseService.CourseService["Service"],
   threadId: ThreadId,
@@ -154,7 +182,7 @@ const handlers = {
       const service = yield* CourseService.CourseService;
       const course = yield* getOwnedCourse(service, thread.threadId, input.courseId);
       const cachedConcepts = yield* service.cachedConcepts.pipe(Effect.mapError(fail));
-      if (input.unit === undefined) return { ...course, cachedConcepts };
+      if (input.unit === undefined) return { ...courseOutline(course), cachedConcepts };
       const at = atSeconds(input.at);
       if (input.at !== undefined && at === undefined)
         return yield* new OrchestratorMcpFailure({
@@ -164,8 +192,16 @@ const handlers = {
       const unit = yield* service
         .readUnit({ courseId: course.id, unit: input.unit, ...(at === undefined ? {} : { at }) })
         .pipe(Effect.mapError(fail));
+      const { course: current, index, unit: details, ...read } = unit;
       // The clip decision happens on this read ("L4 23:10"), so it needs the cache too.
-      return { ...unit, cachedConcepts };
+      return {
+        courseId: current.id,
+        ...(current.position ? { position: current.position } : {}),
+        unit: unitLine(current, index),
+        ...(details.youtubeId ? { youtubeId: details.youtubeId } : {}),
+        ...read,
+        cachedConcepts,
+      };
     }),
   ),
   course_update: McpToolAccess.actsAsCaller((input) =>
@@ -180,21 +216,36 @@ const handlers = {
           code: "invalid_request",
           message: "unit is required with plan, quiz or transcript",
         });
+      // A bare unit is the tutor moving on, so it saves the position.
+      const position =
+        input.position ??
+        (input.unit !== undefined &&
+        input.plan === undefined &&
+        input.quiz === undefined &&
+        input.transcript === undefined
+          ? { unit: input.unit }
+          : undefined);
       const service = yield* CourseService.CourseService;
       const course = yield* getOwnedCourse(service, thread.threadId, input.courseId);
+      const updated = yield* service
+        .update({
+          courseId: course.id,
+          ...(position ? { position } : {}),
+          ...(input.unit === undefined ? {} : { unit: input.unit }),
+          ...(input.plan === undefined ? {} : { plan: input.plan }),
+          ...(input.quiz === undefined ? {} : { quiz: input.quiz }),
+          ...(input.transcript === undefined ? {} : { transcript: input.transcript }),
+          ...(input.pset === undefined ? {} : { pset: input.pset }),
+          ...(input.references === undefined ? {} : { references: input.references }),
+        })
+        .pipe(Effect.mapError(fail));
       return {
-        ...(yield* service
-          .update({
-            courseId: course.id,
-            ...(input.position ? { position: input.position } : {}),
-            ...(input.unit === undefined ? {} : { unit: input.unit }),
-            ...(input.plan === undefined ? {} : { plan: input.plan }),
-            ...(input.quiz === undefined ? {} : { quiz: input.quiz }),
-            ...(input.transcript === undefined ? {} : { transcript: input.transcript }),
-            ...(input.pset === undefined ? {} : { pset: input.pset }),
-            ...(input.references === undefined ? {} : { references: input.references }),
-          })
-          .pipe(Effect.mapError(fail))),
+        courseId: updated.id,
+        ...(updated.position ? { position: updated.position } : {}),
+        ...(input.unit === undefined ? {} : { unit: unitLine(updated, input.unit - 1) }),
+        ...(input.pset === undefined
+          ? {}
+          : { pset: input.pset, referencesSaved: input.references?.length ?? 0 }),
         message: COURSE_PROGRESS_NOTE,
       };
     }),
@@ -264,7 +315,8 @@ const handlers = {
       yield* (yield* OrchestratorMcpService.OrchestratorMcpService)
         .createThreads(scope, {
           clientRequestId,
-          threads: [{ title, prompt, runtimeMode: "approval-required" }],
+          // No runtimeMode: the prep thread runs unattended in the lesson's mode, since approval prompts stall it.
+          threads: [{ title, prompt }],
         })
         .pipe(Effect.mapError(fail));
       return { started: true, units, message: COURSE_PROGRESS_NOTE };

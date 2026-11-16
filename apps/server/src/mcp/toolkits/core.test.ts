@@ -1674,11 +1674,22 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
           {
             title: "Prep: Signals L1–2",
             prompt: expect.stringContaining(course.id),
-            runtimeMode: "approval-required",
           },
         ],
       },
     ]);
+    // Unattended: an approval prompt nobody sees stalls the prep thread.
+    expect(requests[0]).not.toHaveProperty("threads.0.runtimeMode");
+    // A bare unit saves the position, and the tutor gets a slim result, not the stored course.
+    const moved = yield* callAs("course_update", { unit: 2 });
+    expect(moved.isError).not.toBe(true);
+    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 2 });
+    expect(JSON.stringify(moved.content)).not.toContain("prepThreadIds");
+    expect(JSON.stringify(moved.content)).toContain("2. Two");
+    expect((yield* callAs("course_update", { unit: 9 })).isError).toBe(true);
+    const outline = JSON.stringify((yield* callAs("course_read", {})).content);
+    expect(outline).toContain("1. One");
+    expect(outline).not.toContain("prepThreadIds");
     // The prep turn may call course_read at once, so its id is recorded before it starts.
     expect(recordedAtCreate).toEqual([(yield* service.get({ id: course.id })).prepThreadIds]);
     expect(recordedAtCreate[0]).toHaveLength(1);

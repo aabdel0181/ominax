@@ -156,9 +156,18 @@ describe("CourseService", () => {
             problemSets: [{ title: "Pset", section: "Week", text: "Problem" }],
           },
         });
+        // A search in flight: grading says so instead of passing as "no reference".
+        yield* service.update({ courseId: course.id, solutionSearchedAt: "2026-11-16T15:29:00Z" });
+        const loading = yield* service.problems({ courseId: course.id, pset: 1 });
+        assert.strictEqual(loading.problemSets[0]?.cite, "Reference still loading.");
+        assert.include(
+          loading.problemSets[0]?.note ?? "",
+          "call course_problems with this pset again",
+        );
         yield* service.update({ courseId: course.id, pset: 1, references: [] });
         const result = yield* service.problems({ courseId: course.id, pset: 1, reveal: true });
         assert.include(result.problemSets[0]?.note ?? "", "No published solution was found online");
+        assert.notInclude(result.problemSets[0]?.note ?? "", "still looking");
       }),
     ),
   );

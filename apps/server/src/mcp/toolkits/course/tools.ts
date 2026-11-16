@@ -70,7 +70,7 @@ const CourseReadTool = Tool.make("course_read", {
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 const CourseUpdateTool = Tool.make("course_update", {
   description:
-    "Update course position, a unit's plan, quiz, or pasted transcript; save published problem-set references with pset and references.",
+    "Update course position (a bare unit saves it), a unit's plan, quiz, or pasted transcript; save published problem-set references with pset and references.",
   parameters: Schema.Struct({
     position: Schema.optional(
       Schema.Struct({ unit: Schema.Int, at: Schema.optional(Schema.Number) }),
@@ -87,7 +87,7 @@ const CourseUpdateTool = Tool.make("course_update", {
     ),
     courseId: Schema.optional(CourseId),
   }),
-  success: CourseToolResult,
+  success: Schema.Unknown,
   failure: OrchestratorMcpFailure,
   dependencies: [
     McpInvocationContext.McpInvocationContext,
