@@ -40,6 +40,8 @@ export const shownTutorText = (
   const texts: string[] = [];
   let verdictPending =
     lastUser !== -1 && withoutCardAnswerTag(ordered[lastUser]!.text) !== ordered[lastUser]!.text;
+  const answeredCard = verdictPending;
+  let visibleSinceAnswer = false;
   let count = 0;
   for (const message of ordered.slice(lastUser + 1)) {
     if (
@@ -48,6 +50,8 @@ export const shownTutorText = (
       message.id.endsWith(":outline")
     )
       continue;
+    if (answeredCard && !/:reply$/u.test(message.id) && message.text.trim() !== "")
+      visibleSinceAnswer = true;
     let text = message.text;
     if (verdictPending && !/:reply$/u.test(message.id)) {
       text = text.slice(cardAnswerVerdictLength(text));
@@ -56,7 +60,7 @@ export const shownTutorText = (
     texts.push(text);
     count += text.length;
   }
-  return { text: texts.join("\n"), count };
+  return { text: texts.join("\n"), count, answeredCard, visibleSinceAnswer };
 };
 
 const readShownTutor = readThread(undefined, ["messages"]).pipe(
@@ -70,6 +74,7 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
   readonly reply: string;
   readonly purpose: CardPurpose | undefined;
   readonly answer?: string;
+  readonly verdict?: string;
 }) {
   const shownBefore = yield* readShownTutor;
   const problem =
@@ -79,6 +84,9 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
           ...input,
           shownBefore: shownBefore.count,
           shownText: shownBefore.text,
+          answeredCard: shownBefore.answeredCard,
+          visibleSinceAnswer: shownBefore.visibleSinceAnswer,
+          ...(input.verdict === undefined ? {} : { verdict: input.verdict }),
         });
   if (problem !== undefined) {
     return yield* new OrchestratorMcpFailure({ code: "invalid_request", message: problem });
@@ -88,7 +96,7 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
 const handlers = {
   quiz_card: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
-      const reply = foldCardReply(input.reply, input.source);
+      const reply = foldCardReply(input.reply, input.source, input.verdict);
       const card = readQuizCard({ ...input, reply });
       const problem =
         card === undefined
@@ -113,7 +121,7 @@ const handlers = {
   ),
   question_card: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
-      const reply = foldCardReply(input.reply, input.source);
+      const reply = foldCardReply(input.reply, input.source, input.verdict);
       const card = readQuestionCard({ ...input, reply });
       if (card === undefined) {
         return yield* new OrchestratorMcpFailure({

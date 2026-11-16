@@ -1,5 +1,6 @@
 import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import { explainBackClaimsProblem } from "@t3tools/shared/quizCard";
 
 import * as KnowledgeMap from "../../../knowledgeMap.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -20,13 +21,21 @@ const handlers = {
   ),
   knowledge_map_mark_done: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
+      const { claims, ...markDoneInput } = input;
+      const claimsProblem = explainBackClaimsProblem(claims);
+      if (claimsProblem !== undefined) {
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: claimsProblem,
+        });
+      }
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const { thread } = yield* McpInvocationContext.requireThreadScope(
         scope,
         "knowledge_map_mark_done",
       );
       const entry = yield* (yield* KnowledgeMap.KnowledgeMap)
-        .markDone({ ...input, threadId: thread.threadId })
+        .markDone({ ...markDoneInput, threadId: thread.threadId })
         .pipe(Effect.mapError(toFailure));
       return { saved: entry.topic };
     }),

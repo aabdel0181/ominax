@@ -56,6 +56,7 @@ import {
   type CardPurpose,
   cardAnswerVerdictLength,
   cardReplyProblem,
+  explainBackClaimsProblem,
   foldCardReply,
   replyCoverage,
   quizCardProblem,
@@ -1486,7 +1487,11 @@ export const t3Default = (
       return {
         quizCard: {
           ...input,
-          reply: foldCardReply(valueText(input.reply), valueText(input.source)),
+          reply: foldCardReply(
+            valueText(input.reply),
+            valueText(input.source),
+            valueText(input.verdict),
+          ),
         },
         message: QUIZ_CARD_SHOWN,
       };
@@ -1494,7 +1499,11 @@ export const t3Default = (
       return {
         questionCard: {
           ...input,
-          reply: foldCardReply(valueText(input.reply), valueText(input.source)),
+          reply: foldCardReply(
+            valueText(input.reply),
+            valueText(input.source),
+            valueText(input.verdict),
+          ),
         },
         message: QUESTION_CARD_SHOWN,
       };
@@ -1833,6 +1842,10 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
     const previewError = previewFailure(mock);
     if (previewError !== undefined) return failed(previewError.message);
   }
+  if (isT3Name(call.name) && name === "knowledge_map_mark_done" && Array.isArray(input.claims)) {
+    const claimsProblem = explainBackClaimsProblem(input.claims);
+    if (claimsProblem !== undefined) return failed(claimsProblem);
+  }
   // T3 answers device calls from the world. A mock that is a T3 device error fails inside T3.
   const failure = deviceFailure(mock);
   const fromWorld = mock === undefined || mock === "default" || failure !== undefined;
@@ -1866,7 +1879,7 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
         return failed(
           `Invalid parameters for tool '${name}': source is longer than 500 characters`,
         );
-      const shownReply = foldCardReply(reply, input.source);
+      const shownReply = foldCardReply(reply, input.source, valueText(input.verdict));
       const shown = { ...input, reply: shownReply };
       const quiz = name === "quiz_card" ? readQuizCard(shown) : undefined;
       const question = name === "question_card" ? readQuestionCard(shown) : undefined;
@@ -1884,6 +1897,9 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
         purpose: CARD_PURPOSES.find((purpose) => isRecord(input) && input.purpose === purpose),
         shownBefore: sample.shownSinceLastUser,
         shownText: sample.shownTextSinceLastUser,
+        answeredCard: withoutCardAnswerTag(testCase.prompt) !== testCase.prompt,
+        visibleSinceAnswer: sample.shownSinceLastUser > 0,
+        ...(typeof input.verdict === "string" ? { verdict: input.verdict } : {}),
         ...(quiz === undefined ? {} : { answer: quiz.answer }),
         ...(question?.number?.unit === undefined
           ? {}
@@ -2613,7 +2629,13 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
         call.failed !== true &&
         isRecord(call.input) &&
         typeof call.input.reply === "string"
-          ? [foldCardReply(call.input.reply, valueText(call.input.source))]
+          ? [
+              foldCardReply(
+                call.input.reply,
+                valueText(call.input.source),
+                valueText(call.input.verdict),
+              ),
+            ]
           : [],
       );
       finalText = [...replies, ...texts].join("\n\n");

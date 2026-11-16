@@ -11,9 +11,15 @@ export function cardReplyProblem(input: {
   readonly purpose?: CardPurpose | undefined;
   readonly shownBefore: number;
   readonly shownText?: string;
+  readonly answeredCard?: boolean;
+  readonly visibleSinceAnswer?: boolean;
+  readonly verdict?: string;
   /** A quiz answer, or a number card's "<answer> <unit>"; checked only when it holds a digit. */
   readonly answer?: string;
 }): string | undefined {
+  if (input.answeredCard && !input.visibleSinceAnswer && !input.verdict?.trim()) {
+    return "The learner's last message answered a card, and no verdict on it is visible; they never see your thinking. Put your verdict on that answer (right or wrong, and why, in a line or two) in verdict, then call the card again.";
+  }
   if (input.purpose !== undefined) return undefined;
   const visible = `${input.reply}\n${input.shownText ?? ""}`;
   const normalized = (value: string) => value.trim().replace(/\s+/gu, " ");
@@ -33,9 +39,19 @@ export function cardReplyProblem(input: {
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
 }
 
+export function explainBackClaimsProblem(
+  claims: ReadonlyArray<{ readonly claim: string; readonly holds: boolean }>,
+): string | undefined {
+  const wrong = claims.filter((claim) => !claim.holds).map((claim) => claim.claim.trim());
+  return wrong.length === 0
+    ? undefined
+    : `Not saved: these claims don't hold: ${wrong.join("; ")}. Tell the learner plainly what is wrong, fix it briefly, and ask once more through question_card.`;
+}
+
 export interface QuestionCard {
   /** The tutor's reply to the learner's last answer, shown as its message text before the card. */
   readonly reply?: string;
+  readonly verdict?: string;
   readonly question: string;
   readonly blanks?: ReadonlyArray<{ readonly answers: ReadonlyArray<string> }>;
   readonly number?: { readonly answer: number; readonly tolerance: number; readonly unit?: string };
@@ -45,6 +61,7 @@ export type QuizLevel = "remember" | "understand" | "apply" | "analyse";
 
 export interface QuizCard {
   readonly reply?: string;
+  readonly verdict?: string;
   readonly answer: string;
   readonly explanation: string;
   readonly level: QuizLevel;
@@ -56,7 +73,7 @@ export type LessonCard = QuizCard | QuestionCard;
 
 const MAX_ANSWER = 300;
 const MAX_QUESTION = 2000;
-const MAX_REPLY = 2510;
+const MAX_REPLY = 3200;
 const MAX_OPTION = 300;
 const MAX_WRONG_IDEA = 500;
 const MAX_EXPLANATION = 1500;
@@ -74,9 +91,10 @@ const boundedString = (value: unknown, max: number) =>
     ? value.trim()
     : undefined;
 
-export function foldCardReply(reply: string, source: string) {
+export function foldCardReply(reply: string, source: string, verdict?: string) {
+  const shownReply = verdict?.trim() ? `${verdict.trim()}\n\n${reply.trim()}` : reply.trim();
   const trimmedSource = source.trim();
-  return trimmedSource === "" ? reply.trim() : `${reply.trim()}\n\nSource: ${trimmedSource}`;
+  return trimmedSource === "" ? shownReply : `${shownReply}\n\nSource: ${trimmedSource}`;
 }
 
 export function replyCoverage(text: string, reply: string): number {
@@ -102,12 +120,19 @@ function readReply(record: Record<string, unknown>): { reply?: string } | undefi
   return reply === undefined ? undefined : { reply };
 }
 
+function readVerdict(record: Record<string, unknown>): { verdict?: string } | undefined {
+  if (record.verdict === undefined) return {};
+  const verdict = boundedString(record.verdict, 600);
+  return verdict === undefined ? undefined : { verdict };
+}
+
 export function readQuestionCard(value: unknown): QuestionCard | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const record = value as Record<string, unknown>;
   const question = boundedString(record.question, MAX_QUESTION);
   const reply = readReply(record);
-  if (question === undefined || reply === undefined) return undefined;
+  const verdict = readVerdict(record);
+  if (question === undefined || reply === undefined || verdict === undefined) return undefined;
   const hasBlanks = Object.hasOwn(record, "blanks");
   const hasNumber = Object.hasOwn(record, "number");
   if (hasBlanks && hasNumber) return undefined;
@@ -133,7 +158,7 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
       blanks.push({ answers: parsed });
     }
     if ((question.match(/_{3,}/g) ?? []).length !== blanks.length) return undefined;
-    const card = { ...reply, question, blanks };
+    const card = { ...reply, ...verdict, question, blanks };
     return fitsCardBytes(card) ? card : undefined;
   }
   if (hasNumber) {
@@ -158,12 +183,13 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
     }
     const card = {
       ...reply,
+      ...verdict,
       question,
       number: { answer: number.answer, tolerance: number.tolerance, ...(unit ? { unit } : {}) },
     };
     return fitsCardBytes(card) ? card : undefined;
   }
-  const card = { ...reply, question };
+  const card = { ...reply, ...verdict, question };
   return fitsCardBytes(card) ? card : undefined;
 }
 
@@ -216,11 +242,13 @@ export function readQuizCard(value: unknown): QuizCard | undefined {
   const explanation = boundedString(record.explanation, MAX_EXPLANATION);
   const question = boundedString(record.question, MAX_QUESTION);
   const reply = readReply(record);
+  const verdict = readVerdict(record);
   const level = record.level;
   const wrongOptions = record.wrongOptions;
   if (
     answer === undefined ||
     reply === undefined ||
+    verdict === undefined ||
     explanation === undefined ||
     question === undefined ||
     typeof level !== "string" ||
@@ -241,6 +269,7 @@ export function readQuizCard(value: unknown): QuizCard | undefined {
   if (parsed.some((entry) => entry === undefined)) return undefined;
   return {
     ...reply,
+    ...verdict,
     answer,
     explanation,
     level: level as QuizLevel,

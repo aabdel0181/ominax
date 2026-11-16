@@ -46,13 +46,27 @@ describe("quiz card reply visibility", () => {
       "message:provider:claudeAgent:native-item:msg_011CgpYTQZCUAf5iyjZ9S6jP%3Athinking%3A1",
     );
     const outline = at(40, "assistant", "o".repeat(400), "toolu_2:outline");
-    expect(shownTutorText([at(26, "user", "answer"), thinking, outline]).count).toBe(0);
+    expect(shownTutorText([at(26, "user", "answer"), thinking, outline])).toMatchObject({
+      count: 0,
+      visibleSinceAnswer: false,
+    });
   });
 
   it("does not count a verdict paragraph after a card answer", () => {
     const verdict = "v".repeat(198);
     const answer = "The water beads on wax.\n\n(card card-1)";
-    expect(shownTutorText([at(26, "user", answer), at(36, "assistant", verdict)]).count).toBe(0);
+    expect(shownTutorText([at(26, "user", answer), at(36, "assistant", verdict)])).toMatchObject({
+      count: 0,
+      answeredCard: true,
+      visibleSinceAnswer: true,
+    });
+  });
+
+  it("does not count a card reply as visible text after an answer", () => {
+    const answer = "The water beads on wax.\n\n(card card-1)";
+    expect(
+      shownTutorText([at(26, "user", answer), at(30, "assistant", "teaching", "card-1:reply")]),
+    ).toMatchObject({ count: "teaching".length, visibleSinceAnswer: false });
   });
 
   it("counts teaching after the verdict paragraph", () => {
@@ -106,6 +120,7 @@ it.effect("folds source into both returned card replies", () =>
         reply: "x".repeat(1990),
         source: "grader/bank/compose.py; docs/grading.md is out of date",
         purpose: "opening-check",
+        verdict: "That is right because the units match.",
         answer: "A",
         explanation: "Because",
         level: "apply",
@@ -118,7 +133,7 @@ it.effect("folds source into both returned card replies", () =>
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(quizResult.at(-1)?.result).toMatchObject({
       quizCard: {
-        reply: `${"x".repeat(1990)}\n\nSource: grader/bank/compose.py; docs/grading.md is out of date`,
+        reply: `That is right because the units match.\n\n${"x".repeat(1990)}\n\nSource: grader/bank/compose.py; docs/grading.md is out of date`,
       },
     });
     const questionResult = yield* toolkit

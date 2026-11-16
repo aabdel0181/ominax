@@ -27,8 +27,21 @@ const KnowledgeMapReadTool = Tool.make("knowledge_map_read", {
 
 const KnowledgeMapMarkDoneTool = Tool.make("knowledge_map_mark_done", {
   description:
-    "Save a topic to the learner's 'What you know' map. Only after the learner explained it back in their own words and you graded it as correct; pass their words as `explanation`. Marking a topic again replaces it.",
-  parameters: KnowledgeMapMarkDoneInput,
+    "Save a topic to the learner's 'What you know' map. Only after the learner explained it back in their own words and every claim holds; pass their words as `explanation`. It is refused if any claim does not hold. Marking a topic again replaces it.",
+  parameters: Schema.Struct({
+    ...KnowledgeMapMarkDoneInput.fields,
+    claims: Schema.Array(
+      Schema.Struct({
+        claim: Schema.String.pipe(Schema.check(Schema.isMaxLength(300))),
+        holds: Schema.Boolean,
+      }),
+    )
+      .check(Schema.isMinLength(1), Schema.isMaxLength(12))
+      .annotate({
+        description:
+          "Each separate claim in the learner's explain-back, in their words, and whether it holds against your own explanation and the source you taught from. List every claim, including ones made in passing.",
+      }),
+  }),
   success: Schema.Struct({ saved: Schema.String }),
   failure: OrchestratorMcpFailure,
   dependencies: [
