@@ -161,14 +161,19 @@ export function formatServiceChange(
   return `Service ${result.previouslyInstalled ? "updated" : "installed"} · t3@${packageJson.version}\nLog: ${result.plan.logPath}`;
 }
 
+const MEMORY_CONTROLLER_DISABLED =
+  "the kernel's memory cgroup controller is disabled. Add `cgroup_enable=memory` to the kernel command line and reboot.";
+
 function formatProtection(
   protection: ServiceProtection.ServiceProtectionState | undefined,
 ): ReadonlyArray<string> {
   if (protection === undefined) return [];
   return [
-    protection.unprotected === undefined
-      ? `  Memory protection: on${protection.setByProtect ? ` (${T3_LEARN_COMMAND} service protect)` : ""}`
-      : `  Memory protection: off, ${protection.unprotected} grants none. Run \`${T3_LEARN_COMMAND} service protect\`.`,
+    !protection.memoryControllerAvailable
+      ? `  Memory protection: unavailable, ${MEMORY_CONTROLLER_DISABLED}`
+      : protection.unprotected === undefined
+        ? `  Memory protection: on${protection.setByProtect ? ` (${T3_LEARN_COMMAND} service protect)` : ""}`
+        : `  Memory protection: off, ${protection.unprotected} grants none. Run \`${T3_LEARN_COMMAND} service protect\`.`,
     ...(protection.oomScoreAdj === undefined ? [] : [`  OOM score: ${protection.oomScoreAdj}`]),
   ];
 }
@@ -477,10 +482,16 @@ const serviceProtectCommand = Command.make("protect", {
               ...formatDropIns([plan.managerDefaults, ...plan.user]),
             ].join("\n"),
           );
+          const memoryController = yield* ServiceProtection.memoryControllerAvailable;
+          if (!memoryController) {
+            yield* Console.log(`Only the OOM scores can apply: ${MEMORY_CONTROLLER_DISABLED}`);
+          }
           if (!(yield* confirm(flags.yes, "Apply these settings?"))) return;
           yield* ServiceProtection.applyProtection(plan);
           yield* Console.log(
-            `Protected ${T3_LEARN_PRODUCT_NAME}. Memory protection applies now; the server takes its OOM score after \`${T3_LEARN_COMMAND} service restart\`. Undo with \`${T3_LEARN_COMMAND} service protect --undo\`.`,
+            memoryController
+              ? `Protected ${T3_LEARN_PRODUCT_NAME}. Memory protection applies now; the server takes its OOM score after \`${T3_LEARN_COMMAND} service restart\`. Undo with \`${T3_LEARN_COMMAND} service protect --undo\`.`
+              : `Protected ${T3_LEARN_PRODUCT_NAME}'s OOM score; the server takes it after \`${T3_LEARN_COMMAND} service restart\`. Memory protection applies once the kernel's memory controller is enabled. Undo with \`${T3_LEARN_COMMAND} service protect --undo\`.`,
           );
         }).pipe(Effect.provide(ProcessRunner.layer)),
       );
