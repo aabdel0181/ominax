@@ -77,6 +77,7 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pinned-archive-" });
+      const checksums = yield* validChecksums;
       const requests: string[] = [];
       const commands: string[] = [];
       const paths = yield* ensurePinnedRuntimeInstalled({
@@ -87,8 +88,30 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
         path,
         platform: "linux",
         arch: "x64",
-        httpClient: releaseHttpClient(yield* validChecksums, requests),
-        releaseBaseUrl: "https://releases.example/download",
+        httpClient: HttpClient.make((request) => {
+          requests.push(request.url);
+          const isChecksums = request.url.endsWith("/SHA256SUMS");
+          if (
+            !isChecksums &&
+            request.url === `http://127.0.0.1/download/v${version}/${archiveName}`
+          )
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                new Response(null, {
+                  status: 302,
+                  headers: { location: `http://127.0.0.2/asset/${archiveName}` },
+                }),
+              ),
+            );
+          return Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              new Response(isChecksums ? checksums : archiveBytes),
+            ),
+          );
+        }),
+        releaseBaseUrl: "http://127.0.0.1/download",
         runner: extractingRunner(fs, path, commands),
         validate: (staging) =>
           fs.exists(staging.entryPath).pipe(
@@ -99,8 +122,9 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
       assert.equal(paths.entryPath, path.join(paths.versionDir, "t3"));
       assert.deepEqual(pinnedRuntimeCommand(paths), { command: paths.entryPath, args: [] });
       assert.deepEqual(requests, [
-        `https://releases.example/download/v${version}/SHA256SUMS`,
-        `https://releases.example/download/v${version}/${archiveName}`,
+        `http://127.0.0.1/download/v${version}/SHA256SUMS`,
+        `http://127.0.0.1/download/v${version}/${archiveName}`,
+        `http://127.0.0.2/asset/${archiveName}`,
       ]);
       assert.deepEqual(commands, ["tar"]);
       assert.equal(yield* fs.readFileString(paths.sentinelPath), `${version}\n`);
@@ -111,17 +135,39 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
       ))
         .split("\n")
         .filter((line) => line.includes(archiveName))
-        .map((line) => JSON.parse(line) as { url: string; sha256?: string })[0]!;
-      assert.equal(audit.url, `https://releases.example/download/v${version}/${archiveName}`);
+        .map(
+          (line) =>
+            JSON.parse(line) as { url: string; kind: string; sha256?: string; hops: unknown[] },
+        )[0]!;
+      assert.equal(audit.url, `http://127.0.0.1/download/v${version}/${archiveName}`);
+      assert.equal(audit.kind, "runtime");
+      assert.deepEqual(audit.hops, [
+        {
+          url: `http://127.0.0.1/download/v${version}/${archiveName}`,
+          status: 302,
+          ips: ["127.0.0.1"],
+        },
+        { url: `http://127.0.0.2/asset/${archiveName}`, status: 200, ips: ["127.0.0.2"] },
+      ]);
       assert.equal(audit.sha256, yield* archiveHex(archiveBytes));
-      const checksumUrl = `https://releases.example/download/v${version}/SHA256SUMS`;
       const checksumAudit = (yield* fs.readFileString(
         path.join(baseDir, "userdata", "audit", auditFiles[0]!),
       ))
         .split("\n")
         .filter((line) => line.includes("SHA256SUMS"))
-        .map((line) => JSON.parse(line) as { url: string; sha256?: string })[0]!;
-      assert.equal(checksumAudit.url, checksumUrl);
+        .map(
+          (line) =>
+            JSON.parse(line) as { url: string; kind: string; sha256?: string; hops: unknown[] },
+        )[0]!;
+      assert.equal(checksumAudit.url, `http://127.0.0.1/download/v${version}/SHA256SUMS`);
+      assert.equal(checksumAudit.kind, "runtime");
+      assert.deepEqual(checksumAudit.hops, [
+        {
+          url: `http://127.0.0.1/download/v${version}/SHA256SUMS`,
+          status: 200,
+          ips: ["127.0.0.1"],
+        },
+      ]);
       assert.equal(
         checksumAudit.sha256,
         yield* archiveHex(new TextEncoder().encode(yield* validChecksums)),
@@ -218,7 +264,8 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
       const checksumFailureBaseDir = yield* fs.makeTempDirectoryScoped({
         prefix: "t3-pinned-checksums-failed-",
       });
-      yield* ensurePinnedRuntimeInstalled({
+      const checksumRequested = yield* Deferred.make<void>();
+      const checksumFailure = yield* ensurePinnedRuntimeInstalled({
         baseDir: checksumFailureBaseDir,
         stateDir: path.join(checksumFailureBaseDir, "userdata"),
         version,
@@ -226,12 +273,19 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
         path,
         platform: "linux",
         arch: "x64",
-        httpClient: HttpClient.make((request) =>
-          Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 403 }))),
-        ),
+        httpClient: HttpClient.make((request) => {
+          Deferred.doneUnsafe(checksumRequested, Effect.void);
+          return Effect.succeed(
+            HttpClientResponse.fromWeb(request, new Response("", { status: 503 })),
+          );
+        }),
+        releaseBaseUrl: "http://127.0.0.1/download",
         runner: extractingRunner(fs, path),
         validate: () => Effect.die("must not validate a failed checksum download"),
-      }).pipe(Effect.flip);
+      }).pipe(Effect.flip, Effect.forkScoped);
+      yield* Deferred.await(checksumRequested);
+      yield* TestClock.adjust(Duration.seconds(14));
+      yield* Fiber.join(checksumFailure);
       const auditFiles = yield* fs.readDirectory(
         path.join(checksumFailureBaseDir, "userdata", "audit"),
       );
@@ -240,10 +294,18 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
       ))
         .split("\n")
         .filter(Boolean)
-        .map((line) => JSON.parse(line) as { url: string; error?: string })
+        .map((line) => JSON.parse(line) as { url: string; error?: string; hops: unknown[] })
         .find((line) => line.url.includes("SHA256SUMS"));
       assert.isDefined(checksumAudit);
       assert.isString(checksumAudit.error);
+      // The last attempt's hop survives the exhausted retries.
+      assert.deepEqual(checksumAudit.hops, [
+        {
+          url: `http://127.0.0.1/download/v${version}/SHA256SUMS`,
+          status: 503,
+          ips: ["127.0.0.1"],
+        },
+      ]);
     }),
   );
 
@@ -279,6 +341,7 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
             ),
           );
         }),
+        releaseBaseUrl: "http://127.0.0.1/download",
         runner: extractingRunner(fs, path),
         validate: () => Effect.void,
       }).pipe(Effect.forkScoped);
@@ -329,6 +392,7 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
             ),
           );
         }),
+        releaseBaseUrl: "http://127.0.0.1/download",
         runner: extractingRunner(fs, path),
         validate: () => Effect.void,
       }).pipe(Effect.forkScoped);

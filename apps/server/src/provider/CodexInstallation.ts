@@ -29,7 +29,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as NodeCrypto from "node:crypto";
 import * as ServerConfig from "../config.ts";
-import { auditDownload } from "../course/downloadAudit.ts";
+import { auditDownload, withAuditHops, type DownloadAuditHop } from "../course/downloadAudit.ts";
 import { selectManagedRelease } from "./managedRelease.ts";
 import * as ModelManifest from "./ModelManifest.ts";
 import { resolveProviderCompatibility } from "./providerCompatibility.ts";
@@ -632,9 +632,10 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
       const hash = NodeCrypto.createHash("sha256");
       const maxArchiveBytes = release.archiveBytes ?? UPSTREAM_MAX_ARCHIVE_BYTES;
       let downloadedBytes = 0;
+      const hops: DownloadAuditHop[] = [];
       let lastProgressAt = yield* Clock.currentTimeMillis;
       yield* Effect.gen(function* () {
-        const response = yield* http
+        const response = yield* withAuditHops(http, hops)
           .execute(HttpClientRequest.get(release.url))
           .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
         yield* response.stream.pipe(
@@ -673,6 +674,8 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
             { stateDir: options.stateDir },
             {
               url: release.url,
+              kind: "provider",
+              hops,
               status: response.status,
               bytes: downloadedBytes,
               contentType: response.headers["content-type"] ?? null,
@@ -695,7 +698,13 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
           Effect.promise(() =>
             auditDownload(
               { stateDir: options.stateDir },
-              { url: release.url, bytes: downloadedBytes, error: Cause.pretty(cause) },
+              {
+                url: release.url,
+                kind: "provider",
+                hops,
+                bytes: downloadedBytes,
+                error: Cause.pretty(cause),
+              },
             ),
           ),
         ),

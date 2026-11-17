@@ -26,7 +26,7 @@ import {
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as ProcessRunner from "../processRunner.ts";
-import { auditDownload } from "../course/downloadAudit.ts";
+import { auditDownload, withAuditHops, type DownloadAuditHop } from "../course/downloadAudit.ts";
 import { isExactServiceVersion, parseServiceState, SERVICE_STATE_FILE } from "./serviceProtocol.ts";
 
 const PINNED_RUNTIME_DIR = "runtime";
@@ -141,11 +141,15 @@ const fetchReleaseAsset = Effect.fn("cloud.pinned_runtime.fetch_release_asset")(
   httpClient: HttpClient.HttpClient,
   url: string,
   step: string,
+  hops: Array<DownloadAuditHop>,
   onProgress?: (progress: PinnedRuntimeProgress) => void,
 ) {
   // Bound stalls while holding the install lock, but allow transfers that keep
   // receiving bytes to finish regardless of their total duration.
-  return yield* httpClient.execute(HttpClientRequest.get(url)).pipe(
+  return yield* Effect.suspend(() => {
+    hops.length = 0;
+    return withAuditHops(httpClient, hops).execute(HttpClientRequest.get(url));
+  }).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.timeout(PINNED_RUNTIME_DOWNLOAD_STALL_TIMEOUT),
     Effect.flatMap(
@@ -216,12 +220,14 @@ const installFromArchive = Effect.fn("cloud.pinned_runtime.install_archive")(fun
   input.onProgress?.({ stage: "download", received: 0, total: undefined });
   const { fileName, expected } = yield* publishedArchive(input, platformKey);
   const archiveUrl = cliReleaseAssetUrl(input.version, fileName, input.releaseBaseUrl);
+  const archiveHops: DownloadAuditHop[] = [];
   let archiveBytes = 0;
   const archiveResult = yield* Effect.gen(function* () {
     const result = yield* fetchReleaseAsset(
       httpClient,
       archiveUrl,
       "downloading the t3 release archive",
+      archiveHops,
       (progress) => {
         if (progress.stage === "download") archiveBytes = progress.received;
         input.onProgress?.(progress);
@@ -243,6 +249,8 @@ const installFromArchive = Effect.fn("cloud.pinned_runtime.install_archive")(fun
         { stateDir: input.stateDir },
         {
           url: archiveUrl,
+          kind: "runtime",
+          hops: archiveHops,
           status: result.status,
           bytes: result.bytes.byteLength,
           contentType: result.contentType,
@@ -256,7 +264,13 @@ const installFromArchive = Effect.fn("cloud.pinned_runtime.install_archive")(fun
       Effect.promise(() =>
         auditDownload(
           { stateDir: input.stateDir },
-          { url: archiveUrl, bytes: archiveBytes, error: Cause.pretty(cause) },
+          {
+            url: archiveUrl,
+            kind: "runtime",
+            hops: archiveHops,
+            bytes: archiveBytes,
+            error: Cause.pretty(cause),
+          },
         ),
       ),
     ),
@@ -307,11 +321,13 @@ const publishedArchive = Effect.fn("cloud.pinned_runtime.published_archive")(fun
     CLI_RELEASE_CHECKSUMS_FILE,
     input.releaseBaseUrl,
   );
+  const checksumsHops: DownloadAuditHop[] = [];
   const checksums = yield* Effect.gen(function* () {
     const result = yield* fetchReleaseAsset(
       input.httpClient,
       checksumsUrl,
       "downloading the t3 release checksums",
+      checksumsHops,
     );
     const checksums = parseChecksums(new TextDecoder().decode(result.bytes));
     yield* Effect.promise(() =>
@@ -319,6 +335,8 @@ const publishedArchive = Effect.fn("cloud.pinned_runtime.published_archive")(fun
         { stateDir: input.stateDir },
         {
           url: checksumsUrl,
+          kind: "runtime",
+          hops: checksumsHops,
           status: result.status,
           bytes: result.bytes.byteLength,
           contentType: result.contentType,
@@ -332,7 +350,7 @@ const publishedArchive = Effect.fn("cloud.pinned_runtime.published_archive")(fun
       Effect.promise(() =>
         auditDownload(
           { stateDir: input.stateDir },
-          { url: checksumsUrl, error: Cause.pretty(cause) },
+          { url: checksumsUrl, kind: "runtime", hops: checksumsHops, error: Cause.pretty(cause) },
         ),
       ),
     ),

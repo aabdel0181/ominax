@@ -623,6 +623,7 @@ const boundedDownload = (url: string, destination: string, audit?: DownloadAudit
         if (audit)
           await auditDownload(audit, {
             url,
+            kind: "course",
             hops: [{ url, status: response?.status ?? null, ips }],
             status: response?.status ?? null,
             bytes: total,
@@ -683,6 +684,7 @@ const ocwDownloadUrl = (source: string, audit?: DownloadAuditContext) => {
             auditWritten = true;
             await auditDownload(audit, {
               url: initial.toString(),
+              kind: "course",
               hops,
               status: finalResponse?.status ?? hops.at(-1)?.status ?? null,
               contentType: finalResponse?.headers.get("content-type") ?? null,
@@ -719,6 +721,7 @@ const ocwDownloadUrl = (source: string, audit?: DownloadAuditContext) => {
         ? Effect.promise(() =>
             auditDownload(audit, {
               url: source,
+              kind: "course",
               hops: auditHops,
               status: null,
               error: String(cause),
