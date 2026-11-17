@@ -9297,6 +9297,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             yield* flushHeldAssistantText(context);
             return;
           }
+          if (context.assistant.cardSeen) {
+            for (const item of context.assistant.heldText)
+              yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            context.assistant.heldText = [];
+            return;
+          }
           const held = context.assistant.heldText;
           context.assistant.heldText = [];
           const short = held.reduce((total, item) => total + item.text.length, 0) <= 300;

@@ -6,8 +6,10 @@ import {
   cardAnswerVerdictLength,
   cardAnswerId,
   cardReplyProblem,
+  coverageTokens,
   foldCardReply,
   parseCardAnswer,
+  replyCoverage,
   quizCardProblem,
   readQuestionCard,
   readQuizCard,
@@ -147,6 +149,11 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
   return shown;
 });
 
+const verdictCoveredByReply = (verdict: string | undefined, reply: string) => {
+  if (verdict === undefined || coverageTokens(verdict).length < 4) return false;
+  return replyCoverage(verdict, reply) >= 0.65;
+};
+
 // A verdict already shown as text isn't repeated on the card.
 const shownReply = (
   input: { readonly reply: string; readonly source: string; readonly verdict?: string | undefined },
@@ -155,7 +162,9 @@ const shownReply = (
   foldCardReply(
     withoutShownParagraphs(input.reply, shown?.text ?? ""),
     input.source,
-    shown?.visibleSinceAnswer ? undefined : input.verdict,
+    shown?.visibleSinceAnswer || verdictCoveredByReply(input.verdict, input.reply)
+      ? undefined
+      : input.verdict,
   );
 
 const handlers = {

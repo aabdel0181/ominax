@@ -232,6 +232,32 @@ export interface ProviderEventIngestorV2Shape {
   ) => Effect.Effect<ReadonlyArray<OrchestrationV2StoredEvent>, ProviderEventIngestorV2Error>;
 }
 
+function lessonCardCompletedBeforeMessage(
+  projection: Pick<OrchestrationV2ThreadProjection, "thread" | "turnItems"> | null,
+  message: {
+    readonly role: string;
+    readonly runId: RunId | null;
+    readonly createdAt: DateTime.Utc;
+  },
+): boolean {
+  if (
+    projection === null ||
+    projection.thread.lesson === undefined ||
+    message.role !== "assistant" ||
+    message.runId === null
+  )
+    return false;
+  const messageAt = DateTime.toEpochMillis(message.createdAt);
+  return projection.turnItems.some(
+    (item) =>
+      item.type === "dynamic_tool" &&
+      item.runId === message.runId &&
+      item.status === "completed" &&
+      lessonCardFromToolItem(item) !== undefined &&
+      DateTime.toEpochMillis(item.completedAt ?? item.updatedAt) <= messageAt,
+  );
+}
+
 export class ProviderEventIngestorV2 extends Context.Service<
   ProviderEventIngestorV2,
   ProviderEventIngestorV2Shape
@@ -575,6 +601,17 @@ export const layer: Layer.Layer<
                 }),
               ];
             case "message.updated":
+              if (
+                lessonCardCompletedBeforeMessage(
+                  yield* projections.getThreadProjection(input.event.message.threadId).pipe(
+                    Effect.catchTags({
+                      ProjectionStoreThreadNotFoundError: () => Effect.succeed(null),
+                    }),
+                  ),
+                  input.event.message,
+                )
+              )
+                return [];
               return [
                 yield* makeDomainEvent(input, {
                   type: "message.updated",

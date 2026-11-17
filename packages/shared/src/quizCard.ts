@@ -49,9 +49,77 @@ export function cardReplyProblem(input: {
   );
   if (answerAppears)
     return "The answer is stated just above; pose a new case that needs one more step.";
+  if ((input.answers ?? []).some((answer) => answerIsRestatedOrComputed(shown, answer)))
+    return "The answer is stated just above; pose a new case that needs one more step.";
   if (input.purpose !== undefined) return undefined;
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
+}
+
+const answerNumber = (answer: string) => {
+  const match = answer.replace(/[−–]/gu, "-").match(/-?(?:\d+(?:\.\d*)?|\.\d+)/u);
+  return match === null ? undefined : Number(match[0]);
+};
+
+const visibleNumbers = (text: string) =>
+  [...text.replace(/[−–]/gu, "-").matchAll(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu)].map((match) => ({
+    value: Number(match[0]),
+    index: match.index,
+  }));
+
+function computedAnswerAppears(text: string, answer: number): boolean {
+  if (
+    !/[=×*÷/+-]|\b(?:sin|cos|multiply|divid|times|component|average|velocity|force|weight)\b/iu.test(
+      text,
+    )
+  )
+    return false;
+  const numbers = visibleNumbers(text);
+  const trigonometry = /\b(?:sin|cos)\b/iu.test(text);
+  const close = (value: number) =>
+    Number.isFinite(value) && Math.abs(value - answer) <= Math.max(1e-6, Math.abs(answer) * 1e-6);
+  for (let index = 0; index < numbers.length; index += 1) {
+    const left = numbers[index]!.value;
+    const right = numbers[index + 1]?.value;
+    if (right === undefined) continue;
+    const between = text.slice(numbers[index]!.index, numbers[index + 1]!.index);
+    const near = between.length <= 32;
+    if (near && /×|\*/u.test(between) && close(left * right)) return true;
+    if (near && /÷|\//u.test(between) && right !== 0 && close(left / right)) return true;
+    if (near && /\+/u.test(between) && close(left + right)) return true;
+    if (near && /(?<![\d.])-(?![\d.])/u.test(between) && close(left - right)) return true;
+    if (trigonometry && right >= -1 && right <= 1 && close(left * right)) return true;
+  }
+  if (trigonometry) {
+    for (const left of numbers) {
+      for (const right of numbers) {
+        if (
+          left !== right &&
+          right.value >= -1 &&
+          right.value <= 1 &&
+          close(left.value * right.value)
+        )
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
+function answerIsRestatedOrComputed(text: string, answer: string): boolean {
+  const number = answerNumber(answer);
+  if (number !== undefined && computedAnswerAppears(text, number)) return true;
+  const wanted = new Set(coverageTokens(answer));
+  if (wanted.size < 4) return false;
+  return text.split(/(?<=[.!?])\s+|\n{2,}/u).some((sentence) => {
+    const tokens = coverageTokens(sentence);
+    if (tokens.length < 4) return false;
+    const overlap = tokens.filter((token) => wanted.has(token)).length / wanted.size;
+    return (
+      overlap >= 0.75 &&
+      overlap >= tokens.filter((token) => wanted.has(token)).length / tokens.length
+    );
+  });
 }
 
 const collapse = (value: string) => value.trim().replace(/\s+/gu, " ");
@@ -237,7 +305,11 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
     const card = {
       ...reply,
       question,
-      number: { answer: number.answer, tolerance: number.tolerance, ...(unit ? { unit } : {}) },
+      number: {
+        answer: number.answer,
+        tolerance: number.tolerance,
+        ...(unit ? { unit } : {}),
+      },
     };
     return fitsCardBytes(card) ? card : undefined;
   }
@@ -275,10 +347,12 @@ export function parseNumberAnswer(input: string): number | undefined {
 
 export function numberAnswerRight(number: NonNullable<QuestionCard["number"]>, input: string) {
   const parsed = parseNumberAnswer(input);
-  // Relative slack only absorbs float error such as 0.1 + 0.2.
+  // Keep rounded values from trig and similar calculations within one percent of the key.
+  const minimumRelativeTolerance = Math.abs(number.answer) * 0.01;
   return (
     parsed !== undefined &&
-    Math.abs(parsed - number.answer) <= number.tolerance + 1e-9 * Math.abs(number.answer)
+    Math.abs(parsed - number.answer) <=
+      Math.max(number.tolerance, minimumRelativeTolerance, 1e-9 * Math.abs(number.answer))
   );
 }
 
@@ -430,7 +504,7 @@ export function numberAnswerMessage(input: {
 /** The grade in a `quizAnswerMessage`, so analytics can count answers without their text. */
 export function quizAnswerGrade(text: string): "right" | "wrong" | "unknown" | undefined {
   if (text.startsWith("Quiz answer: I don't know.")) return "unknown";
-  // shortcut: an option whose own text holds `", right.` misgrades; quote answers if counts drift.
+  // Keep the answer quoted so punctuation inside an option cannot shift the grade match.
   const graded = /^Quiz answer: ".*?", (right|wrong)\./s.exec(text)?.[1];
   return graded === "right" || graded === "wrong" ? graded : undefined;
 }

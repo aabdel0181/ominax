@@ -238,6 +238,145 @@ function threadCreatedEvent(
 
 const layer = it.layer(layerTest);
 
+it.effect("drops assistant text after a lesson card in the same run, but keeps other threads", () =>
+  Effect.gen(function* () {
+    const now = yield* DateTime.now;
+    const eventSink = yield* EventSink.EventSinkV2;
+    const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+    const ingestor = yield* ProviderEventIngestor.ProviderEventIngestorV2;
+    const idAllocator = yield* IdAllocator.IdAllocatorV2;
+    const base = yield* threadCreatedEvent(now);
+    if (base.type !== "thread.created") throw new Error("Expected thread fixture");
+    const lessonThread: OrchestrationV2DomainEvent = {
+      id: yield* idAllocator.allocate.event({ threadId: base.threadId }),
+      type: "thread.metadata-updated",
+      threadId: base.threadId,
+      occurredAt: now,
+      payload: {
+        ...base.payload,
+        lesson: { topic: "topic", depth: "working", purpose: "outcome" },
+      },
+    };
+    const runId = RunId.make("run:lesson-card");
+    const providerSessionId = yield* idAllocator.allocate.providerSession({
+      providerInstanceId: modelSelection.instanceId,
+      threadId: lessonThread.threadId,
+    });
+    const card: OrchestrationV2TurnItem = {
+      id: TurnItemId.make("turn-item:lesson-card"),
+      threadId: lessonThread.threadId,
+      runId,
+      nodeId: null,
+      providerThreadId: null,
+      providerTurnId: null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal: 1,
+      status: "completed",
+      title: "question_card",
+      startedAt: now,
+      completedAt: now,
+      updatedAt: now,
+      type: "dynamic_tool",
+      toolName: "question_card",
+      input: {},
+      output: { questionCard: { question: "Why?", reply: "Teaching." } },
+    };
+    yield* eventSink.write({ events: [base, lessonThread] });
+    const beforeMessage = {
+      createdBy: "agent" as const,
+      creationSource: "provider" as const,
+      id: MessageId.make("message:lesson-before"),
+      threadId: lessonThread.threadId,
+      runId,
+      nodeId: null,
+      role: "assistant" as const,
+      text: "Before the card.",
+      attachments: [],
+      streaming: false,
+      createdAt: DateTime.add(now, { seconds: -1 }),
+      updatedAt: DateTime.add(now, { seconds: -1 }),
+    };
+    yield* ingestor.ingestNormalized({
+      providerSessionId,
+      providerInstanceId: modelSelection.instanceId,
+      threadId: lessonThread.threadId,
+      runId,
+      event: { type: "message.updated", driver: CODEX_DRIVER, message: beforeMessage },
+    });
+    yield* ingestor.ingestNormalized({
+      providerSessionId,
+      providerInstanceId: modelSelection.instanceId,
+      threadId: lessonThread.threadId,
+      runId,
+      event: { type: "turn_item.updated", driver: CODEX_DRIVER, turnItem: card },
+    });
+    const lateMessage = {
+      createdBy: "agent" as const,
+      creationSource: "provider" as const,
+      id: MessageId.make("message:lesson-recap"),
+      threadId: lessonThread.threadId,
+      runId,
+      nodeId: null,
+      role: "assistant" as const,
+      text: "The card above covers the idea.",
+      attachments: [],
+      streaming: false,
+      createdAt: DateTime.add(now, { seconds: 1 }),
+      updatedAt: DateTime.add(now, { seconds: 1 }),
+    };
+    assert.isEmpty(
+      yield* ingestor.normalize({
+        providerSessionId,
+        providerInstanceId: modelSelection.instanceId,
+        threadId: lessonThread.threadId,
+        runId,
+        event: { type: "message.updated", driver: CODEX_DRIVER, message: lateMessage },
+      }),
+    );
+    const messages = yield* projectionStore.getThreadRecords(lessonThread.threadId, ["messages"], {
+      messageRoles: ["assistant"],
+    });
+    assert.deepEqual(
+      messages.messages.map((message) => message.text),
+      ["Before the card.", "Teaching."],
+    );
+
+    const nonLessonThread = yield* threadCreatedEvent(now);
+    const nonLessonSessionId = yield* idAllocator.allocate.providerSession({
+      providerInstanceId: modelSelection.instanceId,
+      threadId: nonLessonThread.threadId,
+    });
+    yield* eventSink.write({ events: [nonLessonThread] });
+    const nonLessonMessage = {
+      ...lateMessage,
+      id: MessageId.make("message:non-lesson-recap"),
+      threadId: nonLessonThread.threadId,
+      runId: RunId.make("run:non-lesson"),
+      text: "A non-lesson thread keeps its assistant text.",
+    };
+    const kept = yield* ingestor.ingestNormalized({
+      providerSessionId: nonLessonSessionId,
+      providerInstanceId: modelSelection.instanceId,
+      threadId: nonLessonThread.threadId,
+      runId: nonLessonMessage.runId,
+      event: { type: "message.updated", driver: CODEX_DRIVER, message: nonLessonMessage },
+    });
+    assert.lengthOf(kept, 1);
+    const nonLessonMessages = yield* projectionStore.getThreadRecords(
+      nonLessonThread.threadId,
+      ["messages"],
+      {
+        messageRoles: ["assistant"],
+      },
+    );
+    assert.deepEqual(
+      nonLessonMessages.messages.map((message) => message.text),
+      ["A non-lesson thread keeps its assistant text."],
+    );
+  }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect("takes a hub's reset for an unreset usage_limit, then refreshes the snapshot", () =>
   Effect.gen(function* () {
     const refreshed = yield* Deferred.make<void>();
