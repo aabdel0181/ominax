@@ -24,12 +24,12 @@ output_file="$root/.github/workflows/ominax-ci.yml"
 # miss their 15s test and waitFor windows, so the fork splits Test Web across
 # four runners. Upstream's PDF reload test still takes 13-15s there, so tests
 # get 30s. vp run passes a `--` through, so the flags follow the script.
-# One CI VM runs at a time, so a newer run on the same ref (a PR, or main by
-# push or the sync's dispatch) cancels the older one; Release follows the newest.
+# A newer run on a PR cancels the older one. On main a running run finishes and
+# releases (REL-82); GitHub keeps only the newest pending run behind it.
 transform='
 s/^name: CI$/name: OminaX CI/
 s/^  group: ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.sha \}\}$/  group: ominax-ci-${{ github.ref }}/
-s/^  cancel-in-progress: \$\{\{ github\.event_name == '\''pull_request'\'' \}\}$/  cancel-in-progress: true/
+s/^  cancel-in-progress: \$\{\{ github\.event_name == '\''pull_request'\'' \}\}$/  cancel-in-progress: ${{ github.ref != '\''refs\/heads\/main'\'' }}/
 s/^( *)runs-on: blacksmith-[0-9]+vcpu-ubuntu-2404$/\1runs-on: ominax-linux-x64/
 s/^( *)runs-on: ubuntu-24.04$/\1runs-on: ominax-linux-x64/
 s/^( *)runs-on: blacksmith-[0-9]+vcpu-macos-[0-9]+$/\1runs-on: macos-26/
@@ -64,8 +64,9 @@ s/mobile_native_static_analysis: \["mobile_native"\]/mobile_native_static_analys
 # REL-81: a PR merged while up to date leaves main with the exact tree its PR
 # run tested. PR runs name an artifact after their tree; a push to main whose
 # tree has a passing PR run reuses it and skips every other job, Lint included.
-# Dispatched runs and any other tree run in full, so a green main run still
-# means this exact tree passed CI.
+# The sync dispatch asks for the same with reuse=true (REL-82). Plain
+# dispatches and any other tree run in full, so a green main run still means
+# this exact tree passed CI.
 /^  changes:$/,/^  [a-z_]+:$/{
   s/^    runs-on: /    permissions:\
       contents: read\
@@ -90,7 +91,7 @@ s/mobile_native_static_analysis: \["mobile_native"\]/mobile_native_static_analys
 \
       - name: Reuse a passing PR run of this tree\
         id: tested\
-        if: github.event_name == '\''push'\''\
+        if: github.event_name == '\''push'\'' || inputs.reuse\
         env:\
           GH_TOKEN: ${{ github.token }}\
           TREE: ${{ steps.tree.outputs.tree }}\
@@ -120,13 +121,19 @@ s/^    name: Test Server \$\{\{ matrix\.shard \}\}$/&\
         run: bash .github/scripts/ominax-ci.sh && git diff --exit-code -- .github/workflows/ominax-ci.yml\
 
 '
-# workflow_dispatch runs every job on demand: ci-changes has no base commit to
-# diff against and fails open. A second copy of the key would invalidate the
-# workflow, so add it only while upstream has none.
+# workflow_dispatch runs every job on demand (ci-changes has no base commit to
+# diff against and fails open) unless reuse=true finds a passing PR run of the
+# tree. A second copy of the key would invalidate the workflow, so add it only
+# while upstream has none.
 if ! grep -q '^  workflow_dispatch:' "$source_file"; then
   transform+='
 s/^on:$/on:\
-  workflow_dispatch:/
+  workflow_dispatch:\
+    inputs:\
+      reuse:\
+        description: Skip every job if a passing PR run tested this exact tree\
+        type: boolean\
+        default: false/
 '
 fi
 
@@ -146,9 +153,11 @@ fail() {
 }
 count() { grep -c "$1" <<<"$generated" || true; }
 [[ $(count '^name: OminaX CI$') -eq 1 ]] || fail "workflow name not rewritten"
-[[ $(count '^  group: ominax-ci-\${{ github.ref }}$') -eq 1 && $(count '^  cancel-in-progress: true$') -eq 1 ]] ||
+[[ $(count '^  group: ominax-ci-\${{ github.ref }}$') -eq 1 &&
+  $(count "^  cancel-in-progress: \${{ github.ref != 'refs/heads/main' }}$") -eq 1 ]] ||
   fail "concurrency not rewritten"
-[[ $(count '^  workflow_dispatch:') -eq 1 ]] || fail "expected exactly one workflow_dispatch trigger"
+[[ $(count '^  workflow_dispatch:') -eq 1 && $(count '^      reuse:$') -eq 1 ]] ||
+  fail "expected exactly one workflow_dispatch trigger, with a reuse input"
 [[ $(count '^    name: Check$') -eq 1 ]] || fail "aggregate Check job missing"
 [[ $(count '^      - name: Require ominax-ci.yml to match ci.yml$') -eq 1 ]] ||
   fail "drift guard not inserted into Lint"
