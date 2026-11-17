@@ -21,19 +21,22 @@ const PACKAGE_COMMANDS = new Set(
   ),
 );
 const SEPARATORS = new Set([";", "&&", "||", "|", "(", ")"]);
-// Inline-code flags per interpreter; `-` or no script means the code comes on stdin.
-const INLINE_CODE_FLAGS: ReadonlyArray<readonly [RegExp, ReadonlyArray<string>]> = [
-  [/^python(?:[23](?:\.\d+)?)?$/u, ["-c"]],
-  [/^(?:node|nodejs|bun)$/u, ["-e", "--eval", "-p", "--print", "-pe"]],
-  [/^(?:perl|ruby|Rscript|julia|lua)$/u, ["-e", "-E"]],
-  [/^php$/u, ["-r"]],
-  [/^deno$/u, ["eval"]],
+const PYTHON = /^python(?:[23](?:\.\d+)?)?$/u;
+// The flag that takes inline code, per interpreter; `-` or no script means stdin.
+const INLINE_CODE_FLAG: ReadonlyArray<readonly [RegExp, RegExp]> = [
+  [PYTHON, /^-[A-Za-z]*c$/u],
+  [/^(?:node|nodejs|bun)$/u, /^(?:-p?e|-p|--eval|--print)$/u],
+  [/^(?:perl|ruby)$/u, /^-[A-Za-z]*[eE]$/u],
+  [/^(?:Rscript|julia|lua)$/u, /^-e$/u],
+  [/^php$/u, /^-r$/u],
+  [/^deno$/u, /^eval$/u],
 ];
-// Code that may open a socket, run a process or write a file; plain maths and reads pass.
+const RUNNERS = new Set(["uv", "poetry", "pipenv", "conda"]);
+// Code that may reach the network, run a process or write a file; maths and reads pass.
 const UNSAFE_CODE = [
-  /\b(?:socket|urllib\d?|requests|https?|httpx|aiohttp|ftplib|smtplib|telnetlib|xmlrpc|websockets?|WebSocket|XMLHttpRequest|fetch|net|dgram|tls|undici|axios)\b/u,
-  /\b(?:subprocess|system|popen|spawn\w*|exec\w*|fork|child_process|ctypes|importlib|__import__|getattr|eval|compile|Deno|Bun)\b/u,
-  /(?<!(?:stdout|stderr)\.)\b(?:write\w*|append\w*|unlink\w*|remove\w*|rmdir|rmtree|rm|rmSync|rename\w*|mkdir\w*|makedirs|shutil|copy\w*|move|chmod|chown|symlink\w*|truncate|touch|utime)\b|\bos\.replace\b/u,
+  /\b(?:socket|urllib\d?|requests|https?|httpx|aiohttp|ftplib|smtplib|telnetlib|xmlrpc|websockets?|WebSocket|XMLHttpRequest|fetch|fetch_\w+|dgram|tls|undici|axios|Net::\w+|download|from_pretrained|load_dataset|install\.packages|Pkg\.add)\b/u,
+  /\b(?:subprocess|popen|spawn\w*|execSync|execFile\w*|fork|child_process|ctypes|importlib|__import__|getattr)\b|\b(?:os\.(?:system|exec\w*)|Deno\.|Bun\.)|(?<![.\w])(?:eval|exec|compile|system)\s*\(/u,
+  /\b(?:os|shutil|fs|FileUtils|File|IO|pathlib)\.\w*(?:write|remove|unlink|rename|replace|copy|move|mkdir|makedirs|rmtree|rmdir|rm|chmod|chown|symlink|truncate|utime|touch)\w*|\b(?:write_text|write_bytes|writeFile\w*|appendFile\w*|createWriteStream|shutil)\b/u,
   /\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?['"][^'"]*[wax+]|\bopen\s*\(?[^)]*['"]\s*\+?[>|]/u,
 ];
 export interface LessonToolPolicyInput {
@@ -99,10 +102,7 @@ function network(parts: ReadonlyArray<string>): boolean {
     return values.includes("api") || (values.includes("repo") && values.includes("clone"));
   }
   if (name === "docker") return parts.some((part) => clean(part) === "pull");
-  if (
-    /^python(?:3(?:\.\d+)?)?$/u.test(name) &&
-    values.some((value, i) => value === "-m" && values[i + 1] === "pip")
-  ) {
+  if (PYTHON.test(name) && values.some((value, i) => value === "-m" && values[i + 1] === "pip")) {
     return values.some((value) => ["install", "download"].includes(value));
   }
   if (!PACKAGE_COMMANDS.has(name)) return false;
@@ -137,22 +137,35 @@ function network(parts: ReadonlyArray<string>): boolean {
 function unsafeInlineCode(parts: ReadonlyArray<string>, command: string): boolean {
   const i = commandIndex(parts);
   const name = commandName(parts);
-  const flags = INLINE_CODE_FLAGS.find(
-    ([pattern]) => name !== undefined && pattern.test(name),
-  )?.[1];
-  if (i === undefined || flags === undefined) return false;
+  if (i === undefined || name === undefined) return false;
   const values = parts.slice(i + 1).map(clean);
+  if (RUNNERS.has(name) && values[0] === "run")
+    return unsafeInlineCode(parts.slice(i + 2), command);
+  const codeFlag = INLINE_CODE_FLAG.find(([pattern]) => pattern.test(name))?.[1];
+  if (codeFlag === undefined) return false;
   const unsafe = (code: string) => UNSAFE_CODE.some((pattern) => pattern.test(code));
-  // perl -pi and ruby -i edit files in place.
-  if (/^(?:perl|ruby)$/u.test(name!) && values.some((value) => /^-\w*i/u.test(value))) return true;
-  const flag = values.findIndex((value) => flags.includes(value));
-  if (flag >= 0) return unsafe(values[flag + 1] ?? "");
+  const inline = values.findIndex(
+    (value) => codeFlag.test(value) || /^--(?:eval|print)=/u.test(value),
+  );
+  // perl -pi and ruby -i edit files in place; -M, -I and -r load modules.
+  const options = values.slice(0, inline >= 0 ? inline + 1 : undefined);
+  if (/^(?:perl|ruby)$/u.test(name) && options.some((value) => /^-(?![MIr])\w*i/u.test(value)))
+    return true;
+  if (inline >= 0) {
+    const flag = values[inline]!;
+    return unsafe(
+      flag.includes("=") ? flag.slice(flag.indexOf("=") + 1) : (values[inline + 1] ?? ""),
+    );
+  }
   const module = values.indexOf("-m");
   if (module >= 0) return unsafe(values[module + 1] ?? "");
   const script = values.find(
     (value, k) => !/^[<>-]/u.test(value) && !/^[<>]/u.test(values[k - 1] ?? ""),
   );
-  return (script === undefined || values.includes("-")) && unsafe(command);
+  if (script !== undefined && !values.includes("-")) return false;
+  // shortcut: code piped in from another command is judged on the whole command text.
+  const heredoc = command.match(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/u);
+  return unsafe(heredoc?.[3] ?? command);
 }
 function writesOutside(
   parts: ReadonlyArray<string>,
