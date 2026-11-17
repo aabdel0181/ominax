@@ -2403,7 +2403,7 @@ export function makeClaudeQueryOptions(input: {
               ? {
                   PreToolUse: [
                     {
-                      matcher: "Bash|Edit|Write|NotebookEdit|Monitor",
+                      matcher: "Bash|Edit|Write|NotebookEdit|Monitor|WebFetch",
                       hooks: [lessonToolGuard],
                       onFailure: "block" as const,
                     },

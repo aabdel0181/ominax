@@ -21,6 +21,24 @@ const PACKAGE_COMMANDS = new Set(
   ),
 );
 const SEPARATORS = new Set([";", "&&", "||", "|", "(", ")"]);
+const PYTHON = /^python(?:[23](?:\.\d+)?)?$/u;
+// The flag that takes inline code, per interpreter; `-` or no script means stdin.
+const INLINE_CODE_FLAG: ReadonlyArray<readonly [RegExp, RegExp]> = [
+  [PYTHON, /^-[A-Za-z]*c$/u],
+  [/^(?:node|nodejs|bun)$/u, /^(?:-p?e|-p|--eval|--print)$/u],
+  [/^(?:perl|ruby)$/u, /^-[A-Za-z]*[eE]$/u],
+  [/^(?:Rscript|julia|lua)$/u, /^-e$/u],
+  [/^php$/u, /^-r$/u],
+  [/^deno$/u, /^eval$/u],
+];
+const RUNNERS = new Set(["uv", "poetry", "pipenv", "conda"]);
+// Code that may reach the network, run a process or write a file; maths and reads pass.
+const UNSAFE_CODE = [
+  /['"](?:node:)?(?:net|dgram|tls|https?)['"]|\b(?:socket|urllib\d?|requests|https?|httpx|aiohttp|ftplib|smtplib|telnetlib|xmlrpc|websockets?|WebSocket|XMLHttpRequest|fetch|fetch_\w+|dgram|tls|undici|axios|Net::\w+|download|from_pretrained|load_dataset|install\.packages|Pkg\.add)\b/u,
+  /\b(?:subprocess|popen|spawn\w*|execSync|execFile\w*|fork|child_process|ctypes|importlib|__import__|getattr)\b|\b(?:os\.(?:system|exec\w*)|Deno\.|Bun\.)|(?<![.\w])(?:eval|exec|compile|system)\s*\(/u,
+  /\b(?:os|shutil|fs|FileUtils|File|IO|pathlib)\.\w*(?:write|remove|unlink|rename|replace|copy|move|mkdir|makedirs|rmtree|rmdir|rm|chmod|chown|symlink|truncate|utime|touch)\w*|\b(?:write_text|write_bytes|writeFile\w*|appendFile\w*|createWriteStream|shutil)\b/u,
+  /\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?['"][^'"]*[wax+]|\bopen\s*\(?[^)]*['"]\s*\+?[>|]/u,
+];
 export interface LessonToolPolicyInput {
   readonly toolName: string;
   readonly toolInput: unknown;
@@ -84,10 +102,7 @@ function network(parts: ReadonlyArray<string>): boolean {
     return values.includes("api") || (values.includes("repo") && values.includes("clone"));
   }
   if (name === "docker") return parts.some((part) => clean(part) === "pull");
-  if (
-    /^python(?:3(?:\.\d+)?)?$/u.test(name) &&
-    values.some((value, i) => value === "-m" && values[i + 1] === "pip")
-  ) {
+  if (PYTHON.test(name) && values.some((value, i) => value === "-m" && values[i + 1] === "pip")) {
     return values.some((value) => ["install", "download"].includes(value));
   }
   if (!PACKAGE_COMMANDS.has(name)) return false;
@@ -118,6 +133,45 @@ function network(parts: ReadonlyArray<string>): boolean {
                           ? ["get", "install"].includes(value)
                           : ["install"].includes(value),
   );
+}
+function unsafeInlineCode(parts: ReadonlyArray<string>, command: string): boolean {
+  const i = commandIndex(parts);
+  const name = commandName(parts);
+  if (i === undefined || name === undefined) return false;
+  const values = parts.slice(i + 1).map(clean);
+  if (RUNNERS.has(name) && values[0] === "run")
+    return unsafeInlineCode(parts.slice(i + 2), command);
+  const codeFlag = INLINE_CODE_FLAG.find(([pattern]) => pattern.test(name))?.[1];
+  if (codeFlag === undefined) return false;
+  const unsafe = (code: string) => UNSAFE_CODE.some((pattern) => pattern.test(code));
+  const inline = values.findIndex(
+    (value) => codeFlag.test(value) || /^--(?:eval|print)=/u.test(value),
+  );
+  // perl -pi and ruby -i edit files in place; -M, -I and -r load modules.
+  const options = values.filter((_, k) => inline < 0 || k !== inline + 1);
+  if (/^(?:perl|ruby)$/u.test(name) && options.some((value) => /^-(?![MIr])\w*i/u.test(value)))
+    return true;
+  if (inline >= 0) {
+    const flag = values[inline]!;
+    return unsafe(
+      flag.includes("=") ? flag.slice(flag.indexOf("=") + 1) : (values[inline + 1] ?? ""),
+    );
+  }
+  const module = values.indexOf("-m");
+  if (module >= 0) return unsafe(values[module + 1] ?? "");
+  const script = values.find(
+    (value, k) => !/^[<>-]/u.test(value) && !/^[<>]/u.test(values[k - 1] ?? ""),
+  );
+  if (script !== undefined && !values.includes("-")) return false;
+  // shortcut: code piped in from another command is judged on the whole command text.
+  // Like bash: `<<` ends on the exact delimiter line, `<<-` also allows leading tabs.
+  const bodies = [
+    ...command.matchAll(/<<(?!-)\s*(['"]?)(\w+)\1(?=[\s;|&<>)])[^\n]*\n([\s\S]*?)\n\2(?:\n|$)/gu),
+    ...command.matchAll(/<<-\s*(['"]?)(\w+)\1(?=[\s;|&<>)])[^\n]*\n([\s\S]*?)\n\t*\2(?:\n|$)/gu),
+  ].map((match) => match[3]!);
+  // Any heredoc we couldn't parse means judging the whole command.
+  const openers = command.match(/<<(?!<)/gu)?.length ?? 0;
+  return (bodies.length === 0 || bodies.length < openers ? [command] : bodies).some(unsafe);
 }
 function writesOutside(
   parts: ReadonlyArray<string>,
@@ -232,6 +286,7 @@ function bashAllowed(command: string, input: LessonToolPolicyInput): boolean {
           return false;
       }
     }
+    if (unsafeInlineCode(segment, command)) return false;
     if (cwd === undefined)
       return (
         !network(segment) &&
@@ -252,6 +307,8 @@ function bashAllowed(command: string, input: LessonToolPolicyInput): boolean {
 }
 export function lessonToolPolicy(input: LessonToolPolicyInput): LessonToolPolicyResult {
   if (["Read", "Grep", "Glob"].includes(input.toolName)) return { allow: true };
+  // WebFetch connects from this machine; WebSearch runs on Anthropic's side (APP-138).
+  if (input.toolName === "WebFetch") return deny();
   if (WRITE_TOOLS.has(input.toolName)) {
     const path = directPath(input.toolName, input.toolInput);
     return path !== undefined && writable(path, input.projectRoot, input)
