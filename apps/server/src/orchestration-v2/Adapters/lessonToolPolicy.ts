@@ -169,7 +169,9 @@ function unsafeInlineCode(parts: ReadonlyArray<string>, command: string): boolea
     ...command.matchAll(/<<(?!-)\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\2(?:\n|$)/gu),
     ...command.matchAll(/<<-\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\t*\2(?:\n|$)/gu),
   ].map((match) => match[3]!);
-  return (bodies.length === 0 ? [command] : bodies).some(unsafe);
+  // Any heredoc we couldn't parse means judging the whole command.
+  const openers = command.match(/<<(?!<)/gu)?.length ?? 0;
+  return (bodies.length === 0 || bodies.length < openers ? [command] : bodies).some(unsafe);
 }
 function writesOutside(
   parts: ReadonlyArray<string>,
