@@ -151,6 +151,12 @@ it("decodes side-chat defaults and patches", () => {
   });
 });
 
+describe("ClientSettings terminal close confirmation", () => {
+  it("keeps confirmation enabled for settings without a saved preference", () => {
+    expect(decodeClientSettings({}).confirmTerminalClose).toBe(true);
+  });
+});
+
 describe("ServerSettings usage price overrides", () => {
   const prices = { inputCostPerMillionTokens: 2, outputCostPerMillionTokens: 8 };
 
@@ -558,6 +564,11 @@ describe("voice settings", () => {
       speechPostProcessingEnabled: true,
     };
     expect(decodeClientSettings({}).speechSilenceFiltering).toBe(true);
+    expect(decodeClientSettings({}).speechStreaming).toBe(true);
+    expect(decodeClientSettings({ speechStreaming: false }).speechStreaming).toBe(false);
+    expect(decodeClientSettingsPatch({ speechStreaming: false })).toEqual({
+      speechStreaming: false,
+    });
     expect(decodeClientSettingsPatch({ speechSilenceFiltering: false })).toEqual({
       speechSilenceFiltering: false,
     });
