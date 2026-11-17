@@ -148,8 +148,17 @@ it.effect("refuses a claim the lesson hedged until its source is read after the 
       ...lesson,
       ran(4, "sed -n 1,80p ~/cw/circuit-world/cw/verify/bank/compose.py"),
     ];
-    expect((yield* save(checked, "cw/verify/bank/compose.py")).at(-1)?.result).toMatchObject({
+    expect((yield* save(checked, "./cw/verify/bank/compose.py#L5")).at(-1)?.result).toMatchObject({
       saved: "Temperature",
     });
+    // Telling the learner what they missed is not the lesson hedging.
+    const verdict = [said(1, "Close, but you didn't check the pass mark on the failed check.")];
+    expect(
+      (yield* markDone(
+        [...verdict, card("eb1", 2, "explain-back")],
+        [answer("eb1")],
+        [{ claim, holds: true }],
+      )).at(-1)?.result,
+    ).toMatchObject({ saved: "Temperature" });
   }),
 );

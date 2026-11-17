@@ -17,8 +17,9 @@ import { KnowledgeToolkit } from "./tools.ts";
 const toFailure = (error: { readonly message: string }) =>
   new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message });
 
+// First person only: card verdicts tell the learner "you didn't check…" all the time.
 const HEDGE =
-  /\b(?:(?:have|has|did|could|can)(?:n['’]t| not)|cannot)\s+(?:yet\s+)?(?:check|trace|verif|confirm|read|look)\w*|\bnot (?:yet )?(?:checked|verified|confirmed|traced)\b|\bunverified\b|\bhypothetical\b|\bnot sure\b/iu;
+  /\bI\s+(?:have\s+not|haven['’]t|did\s+not|didn['’]t|cannot|can['’]t|could\s+not|couldn['’]t)\s+(?:yet\s+)?(?:check|trac|verif|confirm|read|look)\w*|\bI(?:['’]m|\s+am)\s+not\s+sure\b|\bunverified\b|\bnot\s+(?:yet\s+)?(?:checked|verified)\b/iu;
 const STOPWORDS = new Set(
   "that this with from have what when then than they them there their which would could should into only just each every does about your will been were also more most some such".split(
     " ",
@@ -32,11 +33,13 @@ const keyWords = (text: string) =>
   );
 const sourceKey = (source: string) =>
   source
-    .replace(/:[\d,-]+$/u, "")
+    .replace(/#.*$|:[\d,-]+$/u, "")
     .split("/")
-    .filter(Boolean)
+    .filter((segment) => segment !== "" && segment !== ".")
     .slice(-2)
     .join("/");
+const mentionsPath = (text: string, key: string) =>
+  new RegExp(`(?:^|[\\s/'"\`=(~])${RegExp.escape(key)}(?:$|[\\s'"\`:),;])`, "u").test(text);
 
 type LessonLine = { readonly kind: "said" | "read"; readonly text: string };
 
@@ -53,7 +56,9 @@ function uncheckedClaimProblem(
     const readAt = (from: number) =>
       key !== undefined &&
       key.length > 0 &&
-      lines.some((line, index) => index > from && line.kind === "read" && line.text.includes(key));
+      lines.some(
+        (line, index) => index > from && line.kind === "read" && mentionsPath(line.text, key),
+      );
     if (key !== undefined && !readAt(-1)) {
       return `Not saved: the claim "${claim}" cites ${source}, which this lesson never read. Read it, check the claim against it, and save again.`;
     }
