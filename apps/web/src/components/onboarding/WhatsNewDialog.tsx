@@ -136,10 +136,19 @@ function WhatsNewDialog({
         case "answer-types":
         case "lesson-pictures":
         case "course-psets":
-        case "course-outline": {
+        case "course-outline":
+        case "lesson-math": {
           const button = document.querySelector<HTMLButtonElement>('[aria-label="New lesson"]');
           if (button) button.click();
           else openCommandPalette({ query: "New lesson" });
+          break;
+        }
+        case "lessons-filter": {
+          const button = document.querySelector<HTMLButtonElement>(
+            '[aria-label^="Filter threads"]',
+          );
+          if (button) button.click();
+          else void navigate({ to: "/settings/threads" });
           break;
         }
         case "side-chats":
