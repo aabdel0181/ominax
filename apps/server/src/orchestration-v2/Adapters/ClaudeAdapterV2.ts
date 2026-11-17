@@ -5180,6 +5180,8 @@ interface ActiveClaudeTurnContext {
     fallbackNativeItemId: string;
     emittedNativeItemIds: Set<string>;
     cardSeen: boolean;
+    /** A card the guard accepted; `cardSeen` also counts refused calls. */
+    cardPosted: boolean;
     cardReplies: Array<string>;
     htmlPreviewSeen: boolean;
     heldText: Array<{ readonly nativeItemId: string; readonly text: string }>;
@@ -9227,7 +9229,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             Effect.map(
               (steered) =>
                 isLessonTurn(context.input) &&
-                context.assistant.cardSeen &&
+                context.assistant.cardPosted &&
                 !steered.has(context.providerTurnId),
             ),
           );
@@ -11960,6 +11962,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 (toolCall.toolName.startsWith("mcp__") ? withoutForgedMcpApp(output) : output),
               completedAt: yield* DateTime.now,
             });
+            if (isLessonCardTool(toolCall.toolName) && !isClaudeToolResultError(toolResult))
+              context.assistant.cardPosted = true;
             // Subagents write to the session's shared task store, so their
             // task tools update the parent turn's list. Failed or never-run
             // calls changed nothing.
@@ -12213,6 +12217,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 yield* flushHeldAssistantText(context);
               }
               context.assistant.cardSeen = false;
+              context.assistant.cardPosted = false;
               context.assistant.htmlPreviewSeen = false;
               context.assistant.cardReplies = [];
               context.steeredSegmentUsage.push(message.usage);
@@ -13620,6 +13625,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 fallbackNativeItemId: `assistant:${turnInput.runId}`,
                 emittedNativeItemIds: new Set(),
                 cardSeen: false,
+                cardPosted: false,
                 cardReplies: [],
                 htmlPreviewSeen: false,
                 heldText: [],

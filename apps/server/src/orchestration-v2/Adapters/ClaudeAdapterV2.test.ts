@@ -4613,6 +4613,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
   );
 
+  const CARD_RECAP =
+    "The card above covers the idea. The next check revisits the same teaching in a fresh setting, while keeping the learner's answer and the card's verdict separate. This long recap stands in for the physics walk's repeated paragraph rather than a compact verdict or a tool status line.";
   // Lessons: text Claude writes right before a card is often the teaching it tests, so it shows,
   // unless the card's reply already says it.
   it.effect.each([
@@ -4635,17 +4637,25 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       reply: "Try it.",
       lesson: true,
       afterCardTool: "Read",
-      afterCardText:
-        "The card above covers the idea. The next check revisits the same teaching in a fresh setting, while keeping the learner's answer and the card's verdict separate. This deliberately long recap exercises the adapter's post-card text path instead of the short verdict handling branch, and it includes enough ordinary explanatory prose to resemble the physics walk's repeated paragraph rather than a compact verdict or a tool status line.",
+      afterCardText: CARD_RECAP,
       expected: ["reasoning", "reasoning", "reasoning"],
     },
     {
       tool: "mcp__t3-code__question_card",
       reply: "Try it.",
       lesson: true,
-      afterCardText:
-        "The card above covers the idea. The next check revisits the same teaching in a fresh setting, while keeping the learner's answer and the card's verdict separate. This deliberately long recap exercises the adapter's post-card text path instead of the short verdict handling branch, and it includes enough ordinary explanatory prose to resemble the physics walk's repeated paragraph rather than a compact verdict or a tool status line.",
+      afterCardText: CARD_RECAP,
       expected: ["reasoning", "reasoning", "reasoning"],
+    },
+    // A refused card posted nothing, so the verdict written before the retry still shows.
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
+      cardRefused: true,
+      afterCardTool: "mcp__t3-code__question_card",
+      afterCardText: CARD_RECAP,
+      expected: ["reasoning", "reasoning", "assistant_message"],
     },
     {
       tool: "mcp__t3-code__question_card",
@@ -4810,6 +4820,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       shownText,
       afterCardTool,
       afterCardText,
+      cardRefused = false,
     }) =>
       Effect.gen(function* () {
         const harness = yield* makeWakeHarness;
@@ -4863,6 +4874,23 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           ...(afterCardText === undefined
             ? []
             : [
+                claudeSdkFrame({
+                  type: "user",
+                  uuid: "00000000-0000-4000-8000-000000000907",
+                  session_id: WAKE_NATIVE_SESSION,
+                  parent_tool_use_id: null,
+                  message: {
+                    role: "user",
+                    content: [
+                      {
+                        type: "tool_result",
+                        tool_use_id: "tool-1",
+                        content: cardRefused ? "Not shown: give the verdict as text." : "Shown.",
+                        is_error: cardRefused,
+                      },
+                    ],
+                  },
+                }),
                 snapshot("00000000-0000-4000-8000-000000000905", [
                   { type: "text", text: afterCardText },
                 ]),
@@ -4900,8 +4928,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
               ? [event.turnItem.text]
               : [],
           );
-          assert.include(reasoningText, afterCardText);
-          assert.notInclude(assistantText, afterCardText);
+          assert.include(cardRefused ? assistantText : reasoningText, afterCardText);
+          assert.notInclude(cardRefused ? reasoningText : assistantText, afterCardText);
         }
         if (shownText !== undefined) {
           const shown = new Map(
