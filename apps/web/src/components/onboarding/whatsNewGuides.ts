@@ -9,6 +9,8 @@ export type WhatsNewGuide = {
     | "lesson-pictures"
     | "course-psets"
     | "course-outline"
+    | "lessons-filter"
+    | "lesson-math"
     | "chat-sync"
     | "queued-follow-ups";
   readonly version: string;
@@ -103,6 +105,22 @@ export const whatsNewGuides: readonly WhatsNewGuide[] = [
     benefit:
       "Paste an MIT OpenCourseWare or YouTube course link into New lesson, and the course arrives in order, with its outline and credit on the first screen.",
     actionLabel: "Paste a course link",
+  },
+  {
+    id: "lessons-filter",
+    version: "0.1.9",
+    title: "Lessons, all in one place",
+    benefit:
+      "Keep your learning in one place: mark a project as a learning project and its chats stay put, then pick Lessons in the sidebar filter to see only lessons.",
+    actionLabel: "Open the filter",
+  },
+  {
+    id: "lesson-math",
+    version: "0.1.9",
+    title: "Formulas, typeset",
+    benefit:
+      "Lessons write formulas as real maths and say what every symbol means the first time it appears, in cards too.",
+    actionLabel: "Try a lesson",
   },
 ];
 

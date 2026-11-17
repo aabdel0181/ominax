@@ -36,6 +36,8 @@ describe("resolveWhatsNewGuides", () => {
       "lesson-pictures",
       "course-psets",
       "course-outline",
+      "lessons-filter",
+      "lesson-math",
     ]);
   });
 
@@ -43,7 +45,7 @@ describe("resolveWhatsNewGuides", () => {
     const result = resolveWhatsNewGuides({
       // A profile that dismissed every 0.1.7 guide, including the retired "courses".
       seen: [
-        ...allIds.filter((id) => !id.startsWith("course") && id !== "lesson-pictures"),
+        ...whatsNewGuides.filter((guide) => guide.version === "0.1.7").map((guide) => guide.id),
         "courses",
       ],
       legacySeen: [],
@@ -54,6 +56,8 @@ describe("resolveWhatsNewGuides", () => {
       "lesson-pictures",
       "course-psets",
       "course-outline",
+      "lessons-filter",
+      "lesson-math",
     ]);
   });
 
