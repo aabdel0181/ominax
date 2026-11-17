@@ -1,11 +1,11 @@
-import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import { type EnvironmentId, isSideChatThread, type ScopedThreadRef } from "@t3tools/contracts";
 import { resolveIssueLinkTarget } from "@t3tools/client-runtime/issue-links";
 import { useNavigate } from "@tanstack/react-router";
 import type { MouseEvent } from "react";
 
 import { readIssueListPreferences } from "../components/issue/issueListPreferences";
 import { ISSUES_PANEL_REF, PULL_REQUESTS_PANEL_REF, useRightPanelStore } from "../rightPanelStore";
-import { useProjects, useServerConfigs } from "../state/entities";
+import { readThreadShell, useProjects, useServerConfigs } from "../state/entities";
 
 /**
  * Opens an issue link beside the thread, and says whether it did. Anything else — a host no
@@ -33,6 +33,11 @@ export function useOpenIssueLink(
     // A list page's panel ref is a placeholder, not an environment; the link names its own.
     const environmentId = threadRef?.environmentId ?? targetEnvironmentId;
     if (resolvedPanelRef === undefined || environmentId === undefined) return false;
+    // A T3 Learn side chat's own panel never renders (its route opens the lesson's).
+    if (panelRef === undefined && threadRef !== undefined) {
+      const shell = readThreadShell(threadRef);
+      if (shell !== null && isSideChatThread(shell)) return false;
+    }
     if (serverConfigs.get(environmentId)?.environment.capabilities.issues !== true) return false;
     const target = resolveIssueLinkTarget({
       url: targetUrl,

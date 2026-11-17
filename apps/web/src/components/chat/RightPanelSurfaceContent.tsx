@@ -28,6 +28,7 @@ import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavail
 import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel";
 import { SideChatMapSurface } from "../sideChat/SideChatMap";
 import { SideChatPanel } from "../sideChat/SideChatPanel";
+import { APP_BASE_NAME } from "~/branding";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
@@ -187,7 +188,7 @@ export function RightPanelSurfaceContent(props: {
         return (
           <PullRequestsUnavailableState
             title="Issues unavailable"
-            error="Update this environment's T3 Code server to browse issues."
+            error={`Update this environment's ${APP_BASE_NAME} server to browse issues.`}
           />
         );
       }

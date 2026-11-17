@@ -51,6 +51,7 @@ import { issueListFiltersAtom } from "./issueListFilters";
 import { issueViewMatches } from "./issueSavedViews";
 import { SavedViewsMenu } from "../layout/workspace/SavedViewsMenu";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { T3_LEARN_PRODUCT_NAME } from "@t3tools/shared/t3LearnIdentity";
 
 const DEFAULT_ISSUE_LIST_INPUT = { state: "open", involvement: "all", limit: 50 } as const;
 const STATES = {
@@ -484,7 +485,7 @@ export function IssuesScreen(
                     : capable.length > 0
                       ? "Reconnect to load issues."
                       : environments.length > 0
-                        ? "Update the environment's T3 Code server to browse issues."
+                        ? `Update the environment's ${T3_LEARN_PRODUCT_NAME} server to browse issues.`
                         : "Add an environment in Settings to browse its issues.")
                 }
                 variant="plain"
