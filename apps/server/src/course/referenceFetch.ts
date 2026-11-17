@@ -314,6 +314,7 @@ export const fetchCourseReference = Effect.fn("course.fetchReference")(function*
         if (input.audit)
           await auditDownload(input.audit, {
             url: input.url,
+            kind: "reference",
             hops,
             status: response?.status ?? null,
             bytes: body?.byteLength ?? 0,

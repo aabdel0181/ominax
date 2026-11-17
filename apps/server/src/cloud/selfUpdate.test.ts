@@ -194,7 +194,7 @@ it.layer(NodeServices.layer)("server self update", (it) => {
             Deferred.doneUnsafe(downloadFailed, Effect.void);
             return Effect.succeed(
               HttpClientResponse.fromWeb(
-                HttpClientRequest.get("https://user:password@cdn.example/private?token=secret"),
+                HttpClientRequest.get("https://user:password@192.0.2.1/private?token=secret"),
                 new Response("private response body", { status }),
               ),
             );
@@ -205,11 +205,12 @@ it.layer(NodeServices.layer)("server self update", (it) => {
         .update({ targetVersion: "1.1.0" })
         .pipe(Effect.flip, Effect.forkScoped);
       yield* Deferred.await(downloadFailed);
+      // An IP-literal host keeps the audit hop synchronous, so one TestClock adjust reaches every retry.
       // A 5xx is retried after 2, 4, then 8 seconds before the update gives up.
       yield* TestClock.adjust("14 seconds");
       const error = yield* Fiber.join(failing);
       expect(error.reason).toBe(
-        `Could not prepare t3@1.1.0 while downloading the t3 release ${asset} (HTTP ${status} from cdn.example).`,
+        `Could not prepare t3@1.1.0 while downloading the t3 release ${asset} (HTTP ${status} from 192.0.2.1).`,
       );
       expect(order).toEqual([]);
       const fs = yield* FileSystem.FileSystem;

@@ -19,7 +19,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as NodeCrypto from "node:crypto";
 
 import * as ServerConfig from "../config.ts";
-import { auditDownload } from "../course/downloadAudit.ts";
+import { auditDownload, withAuditHops, type DownloadAuditHop } from "../course/downloadAudit.ts";
 import { openZipArchive } from "../zipArchive.ts";
 
 // Update the version, sizes and hashes from each chrome-headless-shell zip listed at
@@ -196,9 +196,11 @@ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
     );
   };
 
+  let auditHops: DownloadAuditHop[] = [];
   const download = Effect.fn("PreviewBrowser.download")(
     function* (release: PreviewBrowserRelease, archivePath: string) {
-      const response = yield* http
+      const hops = (auditHops = []);
+      const response = yield* withAuditHops(http, hops)
         .execute(HttpClientRequest.get(release.url))
         .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
       const contentLength = response.headers["content-length"];
@@ -240,6 +242,8 @@ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
           { stateDir: options.stateDir },
           {
             url: release.url,
+            kind: "browser",
+            hops,
             status: response.status,
             bytes: progress.downloadedBytes,
             contentType: response.headers["content-type"] ?? null,
@@ -255,7 +259,13 @@ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
           Effect.promise(() =>
             auditDownload(
               { stateDir: options.stateDir },
-              { url: release.url, bytes: progress.downloadedBytes, error: Cause.pretty(cause) },
+              {
+                url: release.url,
+                kind: "browser",
+                hops: auditHops,
+                bytes: progress.downloadedBytes,
+                error: Cause.pretty(cause),
+              },
             ),
           ),
         ),

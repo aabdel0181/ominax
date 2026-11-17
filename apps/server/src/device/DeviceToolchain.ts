@@ -191,7 +191,7 @@ const installTool = Effect.fn("DeviceToolchain.installTool")(function* (
         ),
       );
     yield* Effect.promise(() =>
-      auditDownload({ stateDir }, { url: `npm:${spec.name}@${spec.version}` }),
+      auditDownload({ stateDir }, { url: `npm:${spec.name}@${spec.version}`, kind: "device-tool" }),
     );
     return paths;
   }).pipe(
@@ -200,7 +200,11 @@ const installTool = Effect.fn("DeviceToolchain.installTool")(function* (
       Effect.promise(() =>
         auditDownload(
           { stateDir },
-          { url: `npm:${spec.name}@${spec.version}`, error: Cause.pretty(cause) },
+          {
+            url: `npm:${spec.name}@${spec.version}`,
+            kind: "device-tool",
+            error: Cause.pretty(cause),
+          },
         ),
       ),
     ),
