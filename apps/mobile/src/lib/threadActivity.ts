@@ -80,6 +80,7 @@ import {
   courseOutlineMessageId,
   htmlRenderFromToolItem,
   lessonCardFromToolItem,
+  courseProblemSkippedCardId,
   sentMessageFromToolItem,
   mcpAppFromToolItem,
 } from "@t3tools/shared/toolOutput";
@@ -1763,6 +1764,15 @@ export function deriveThreadFeedPresentation(
   const answeredCards = lesson
     ? answeredCardAnswers(
         sourceFeed.flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
+        sourceFeed.flatMap((entry) => {
+          if (entry.type !== "activity-group") return [];
+          return entry.activities.flatMap((activity) => {
+            const item = activity.projectedItem.item;
+            if (item.type !== "dynamic_tool" || item.status !== "completed") return [];
+            const id = courseProblemSkippedCardId(item);
+            return id === undefined ? [] : [id];
+          });
+        }),
       )
     : new Map<string, string>();
   const feedWithPictureState = lesson

@@ -14,10 +14,11 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import { COURSE_PROGRESS_NOTE } from "./tools.ts";
-import { loadCaller } from "../../threadAccess.ts";
+import { loadCaller, readThread } from "../../threadAccess.ts";
+import { openLessonCardItemId } from "@t3tools/shared/quizCard";
 import { CourseReferenceToolkit, CourseToolkit } from "./tools.ts";
 
-const PREP_BRIEF = `You are a course preparation thread. Work only on the requested units for course {{courseId}} (units: {{units}}). For each unit, call course_read with courseId and its unit number. Write 2–3 likely sticking points, ranked by what the unit needs that knowledge_map_read lacks, what the learner asked before, the transcript, and common misconceptions. Write a four-question quiz with answers first. Save both with course_update using courseId. Use only T3 tools; never run shell commands or read files. Do not message, wake, or delegate into the lesson thread; this is background preparation.{{solutionLeads}}`;
+const PREP_BRIEF = `You are a course preparation thread. Work only on the requested units for course {{courseId}} (units: {{units}}). For each unit, call course_read with courseId and its unit number. Write 2–3 likely sticking points, ranked by what the unit needs that knowledge_map_read lacks, what the learner asked before, the transcript, and common misconceptions. Write a four-question quiz with answers first and save both with course_update using courseId. Do not put quiz or problem-set answers in any visible message; save them only through course_update. End your visible response with exactly: Preparation complete. Use only T3 tools; never run shell commands or read files. Do not message, wake, or delegate into the lesson thread; this is background preparation.{{solutionLeads}}`;
 const isCourseIngestError = Schema.is(CourseIngestError);
 const isCourseReferenceFetchError = Schema.is(CourseReferenceFetchError);
 const fail = (e: { readonly message: string }) =>
@@ -194,7 +195,16 @@ const handlers = {
       const unit = yield* service
         .readUnit({ courseId: course.id, unit: input.unit, ...(at === undefined ? {} : { at }) })
         .pipe(Effect.mapError(fail));
-      const { course: current, index, unit: details, ...read } = unit;
+      const { course: readCourse, index, unit: details, ...read } = unit;
+      const current =
+        thread.threadId === readCourse.lessonThreadId
+          ? yield* service
+              .update({
+                courseId: readCourse.id,
+                position: { unit: input.unit, ...(at === undefined ? {} : { at }) },
+              })
+              .pipe(Effect.mapError(fail))
+          : readCourse;
       // The clip decision happens on this read ("L4 23:10"), so it needs the cache too.
       return {
         courseId: current.id,
@@ -358,7 +368,7 @@ const handlers = {
           code: "invalid_request",
           message: "unit must name a course unit",
         });
-      return yield* service
+      const result = yield* service
         .problems({
           courseId: course.id,
           ...(input.unit === undefined ? {} : { unit: input.unit }),
@@ -367,6 +377,20 @@ const handlers = {
           ...(input.skip === undefined ? {} : { skip: input.skip }),
         })
         .pipe(Effect.mapError(fail));
+      if (input.pset !== undefined && thread.threadId === course.lessonThreadId) {
+        const position = {
+          unit: course.position?.unit ?? 1,
+          pset: input.pset,
+          ...(input.problem === undefined ? {} : { problem: input.problem }),
+        };
+        yield* service.update({ courseId: course.id, position }).pipe(Effect.mapError(fail));
+      }
+      if (input.skip && thread.threadId === course.lessonThreadId) {
+        const projection = yield* readThread(undefined, ["messages"]).pipe(Effect.mapError(fail));
+        const closedCardItemId = openLessonCardItemId(projection.projection.messages);
+        return closedCardItemId === undefined ? result : { ...result, closedCardItemId };
+      }
+      return result;
     }),
   ),
 } satisfies McpToolAccess.Handlers<typeof CourseToolkit.tools>;

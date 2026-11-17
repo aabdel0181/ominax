@@ -556,6 +556,17 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
         if (input.position && !course.units[input.position.unit - 1])
           return yield* failure(`Unit ${input.position.unit} was not found.`);
         if (
+          input.position?.pset !== undefined &&
+          (!course.problemSets || !course.problemSets[input.position.pset - 1])
+        )
+          return yield* failure(`Problem set ${input.position.pset} was not found.`);
+        if (
+          input.position?.problem !== undefined &&
+          ((typeof input.position.problem === "number" && input.position.problem < 1) ||
+            (typeof input.position.problem === "string" && input.position.problem.trim() === ""))
+        )
+          return yield* failure("Problem must be non-empty.");
+        if (
           input.pset !== undefined &&
           (!course.problemSets || !course.problemSets[input.pset - 1])
         )

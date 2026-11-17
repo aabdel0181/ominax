@@ -137,6 +137,49 @@ describe("quiz card reply visibility", () => {
   });
 });
 
+it.effect("tells the tutor when a free message supersedes the open card", () => {
+  const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
+  const projection = McpToolAccessTestkit.idleThreadProjection(shell);
+  return Effect.gen(function* () {
+    const toolkit = yield* QuizToolkit;
+    const result = yield* toolkit
+      .handle("question_card", { reply: "x".repeat(250), source: "", question: "What?" })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(result.at(-1)?.result).toMatchObject({
+      message: expect.stringContaining("closed as skipped"),
+    });
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        McpToolAccess.HandlersLayer.layer(QuizHandlers.layer),
+        Layer.succeed(McpInvocationContext.McpInvocationContext, {
+          environmentId: EnvironmentId.make("quiz-handler-environment"),
+          requestNamespace: "quiz-handler-provider-session",
+          thread: {
+            threadId: ThreadId.make("quiz-handler-test"),
+            providerSessionId: "quiz-handler-provider-session",
+            providerInstanceId: ProviderInstanceId.make("codex"),
+          },
+          client: undefined,
+          capabilities: new Set(["orchestration" as const]),
+          issuedAt: 0,
+        }),
+        Layer.mock(ThreadManagement.ThreadManagementService)({
+          getThreadShell: () => Effect.succeed(shell),
+          getProjectThreadRecords: () =>
+            Effect.succeed({
+              ...projection,
+              messages: [
+                at(10, "assistant", "old", "old:reply"),
+                at(20, "user", "I have another question"),
+              ],
+            } as unknown as OrchestrationV2ThreadProjection),
+        }),
+      ),
+    ),
+  );
+});
+
 it.effect("folds source into both returned card replies", () =>
   Effect.gen(function* () {
     const toolkit = yield* QuizToolkit.pipe(

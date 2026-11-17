@@ -38,6 +38,8 @@ export type CourseProblemReference = typeof CourseProblemReference.Type;
 export const CoursePosition = Schema.Struct({
   unit: Schema.Int,
   at: Schema.optional(Schema.Number),
+  pset: Schema.optional(Schema.Int),
+  problem: Schema.optional(Schema.Union([Schema.Int, Schema.String])),
 });
 export type CoursePosition = typeof CoursePosition.Type;
 

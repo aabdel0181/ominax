@@ -1682,6 +1682,9 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
         ],
       },
     ]);
+    expect(requests[0]).toMatchObject({
+      threads: [{ prompt: expect.stringContaining("Preparation complete.") }],
+    });
     // A bare unit saves the position, and the tutor gets a slim result, not the stored course.
     const moved = yield* callAs("course_update", { unit: 2 });
     expect(moved.isError).not.toBe(true);
@@ -1692,6 +1695,8 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     const outline = JSON.stringify((yield* callAs("course_read", {})).content);
     expect(outline).toContain("1. One");
     expect(outline).not.toContain("prepThreadIds");
+    yield* callAs("course_read", { unit: 1 });
+    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 1 });
     // The prep turn may call course_read at once, so its id is recorded before it starts.
     expect(recordedAtCreate).toEqual([(yield* service.get({ id: course.id })).prepThreadIds]);
     expect(recordedAtCreate[0]).toHaveLength(1);
@@ -1715,6 +1720,17 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
           { title: "Pset 2", section: "Different section", text: "Problem 2", solution: "Answer" },
         ],
       },
+    });
+    const part = yield* callAs("course_problems", {
+      courseId: course.id,
+      pset: 1,
+      problem: "1(a)",
+    });
+    expect(part.isError).not.toBe(true);
+    expect((yield* service.get({ id: course.id })).position).toMatchObject({
+      unit: 1,
+      pset: 1,
+      problem: "1(a)",
     });
     const beforeSearch = yield* callAs("course_problems", { courseId: course.id });
     expect(JSON.stringify(beforeSearch.content)).toContain("one web search");

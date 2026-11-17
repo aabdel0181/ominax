@@ -534,6 +534,7 @@ export function answeredCardAnswers(
     readonly id?: string;
     readonly createdAt?: unknown;
   }>,
+  closedCardIds: Iterable<string> = [],
 ): ReadonlyMap<string, string> {
   // Card replies are appended to the projection last, so restore time order.
   const chronological = [...messages]
@@ -556,6 +557,7 @@ export function answeredCardAnswers(
     const id = isCardReply(message) ? message.id!.slice(0, -":reply".length) : undefined;
     if (id !== undefined && !answers.has(id)) answers.set(id, CARD_SKIPPED);
   }
+  for (const id of closedCardIds) answers.set(id, CARD_SKIPPED);
   return answers;
 }
 
