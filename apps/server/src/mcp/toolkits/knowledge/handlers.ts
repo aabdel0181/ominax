@@ -1,10 +1,17 @@
 import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { explainBackClaimsProblem } from "@t3tools/shared/quizCard";
+import {
+  cardAnswerId,
+  explainBackClaimsProblem,
+  explainBackRetestProblem,
+} from "@t3tools/shared/quizCard";
+import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
+import { compactDynamicToolOutput, lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
 
 import * as KnowledgeMap from "../../../knowledgeMap.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
+import { readThread } from "../../threadAccess.ts";
 import { KnowledgeToolkit } from "./tools.ts";
 
 const toFailure = (error: { readonly message: string }) =>
@@ -27,6 +34,43 @@ const handlers = {
         return yield* new OrchestratorMcpFailure({
           code: "invalid_request",
           message: claimsProblem,
+        });
+      }
+      const { projection } = yield* readThread(undefined, ["messages", "turnItems"], {
+        turnItemTypes: ["dynamic_tool"],
+      });
+      const items = projection.turnItems
+        .toSorted((a, b) => a.ordinal - b.ordinal)
+        .flatMap((item): ReadonlyArray<Parameters<typeof explainBackRetestProblem>[0][number]> => {
+          if (item.type !== "dynamic_tool") return [];
+          const tool = resolveT3McpToolId(item.toolName);
+          if (tool === "knowledge_map_mark_done")
+            return item.status === "completed" && !compactDynamicToolOutput(item.output)?.isError
+              ? [{ id: item.id, kind: "save" }]
+              : [];
+          const card = lessonCardFromToolItem(item);
+          if (card === undefined) return [];
+          const purpose = (item.input as { readonly purpose?: unknown } | null)?.purpose;
+          return [
+            {
+              id: item.id,
+              kind: purpose === "explain-back" ? "explain-back" : "card",
+            },
+          ];
+        });
+      const answeredIds = projection.messages.flatMap((message) => {
+        const id = message.role === "user" ? cardAnswerId(message.text) : undefined;
+        return id === undefined ? [] : [id];
+      });
+      const retestProblem = explainBackRetestProblem(
+        items,
+        new Set(answeredIds),
+        answeredIds.at(-1),
+      );
+      if (retestProblem !== undefined) {
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: retestProblem,
         });
       }
       const scope = yield* McpInvocationContext.McpInvocationContext;

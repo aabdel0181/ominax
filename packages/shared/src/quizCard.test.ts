@@ -7,6 +7,7 @@ import {
   statesAnswer,
   cardReplyProblem,
   explainBackClaimsProblem,
+  explainBackRetestProblem,
   foldCardReply,
   MIN_CARD_REPLY_CHARS,
   blankAnswerRight,
@@ -202,7 +203,7 @@ describe("quiz cards", () => {
     expect(
       cardReplyProblem({
         reply: "The clearance is 3.0 mm between different mains conductors.",
-        answer: "3.0 mm",
+        answers: ["3.0 mm"],
         shownBefore: 0,
       }),
     ).toBe("The answer is stated just above; pose a new case that needs one more step.");
@@ -210,35 +211,116 @@ describe("quiz cards", () => {
       cardReplyProblem({
         reply: "The score uses bands.",
         shownText: "The score is 0.5 reward when half the checks pass.",
-        answer: "0.5 reward",
+        answers: ["0.5 reward"],
         shownBefore: 0,
       }),
     ).toBe("The answer is stated just above; pose a new case that needs one more step.");
     expect(
-      cardReplyProblem({ reply: "The answer is A.", answer: "A", shownBefore: 0 }),
+      cardReplyProblem({ reply: "The answer is A.", answers: ["A"], shownBefore: 0 }),
     ).toBeDefined();
     expect(
       cardReplyProblem({
         reply: "Friction matches the push it opposes, so a 20 N push means 20 N of friction.",
-        answer: "20 N",
+        answers: ["20 N"],
         shownBefore: 0,
       }),
     ).toBe("The answer is stated just above; pose a new case that needs one more step.");
     expect(
       cardReplyProblem({
         reply: "Right. Friction opposes the push.",
-        answer: "Right",
+        answers: ["Right"],
         shownBefore: 250,
       }),
     ).toBeUndefined();
     expect(
       cardReplyProblem({
         reply: "Steps:\n1. Add the forces.\n2. Divide by mass in m/s^2.\n3. Check units.",
-        answer: "3 m/s^2",
+        answers: ["3 m/s^2"],
         shownBefore: 250,
       }),
     ).toBeUndefined();
   });
+  it("checks units, unicode minus, prior text, and only substantial quiz answers", () => {
+    expect(
+      cardReplyProblem({
+        reply: "Here is the worked result.",
+        shownText: "The ratio is 20.09 times.",
+        answers: ["20.09"],
+        shownBefore: 0,
+      }),
+    ).toMatch(/stated/u);
+    expect(
+      cardReplyProblem({
+        reply: "The result is −3.5.",
+        answers: ["-3.5"],
+        shownBefore: 0,
+      }),
+    ).toMatch(/stated/u);
+    // A named idea counts only in this turn's text; a number also in the message before.
+    const rule = {
+      reply: "Apply the rule in this new setting.",
+      answers: ["use conservation of momentum"],
+      shownBefore: 250,
+    };
+    expect(
+      cardReplyProblem({ ...rule, shownText: "The rule is use conservation of momentum." }),
+    ).toMatch(/stated/u);
+    expect(
+      cardReplyProblem({ ...rule, previousText: "The rule is use conservation of momentum." }),
+    ).toBeUndefined();
+    expect(
+      cardReplyProblem({
+        reply: "Try a new case.",
+        previousText: "The correct answer was 0.01 to 0.25.",
+        answers: ["0.01 to 0.25"],
+        shownBefore: 250,
+      }),
+    ).toMatch(/stated/u);
+    expect(
+      cardReplyProblem({ reply: "Slowing down", answers: ["Slowing down"], shownBefore: 250 }),
+    ).toBeUndefined();
+  });
+  it("requires and accepts a worked number answer after I don't know", () => {
+    const unknownNumber = { answer: 20.09, tolerance: 0 };
+    expect(
+      cardReplyProblem({
+        reply: "The ratio is about 20.",
+        shownBefore: 0,
+        unknownNumber,
+      }),
+    ).toMatch(/own answer/u);
+    expect(
+      cardReplyProblem({
+        reply: "20.09 times: divide 60.27 by 3.",
+        shownBefore: 250,
+        unknownNumber,
+      }),
+    ).toBeUndefined();
+    expect(
+      cardReplyProblem({
+        reply: "So $E = 1{,}500$ J.",
+        shownBefore: 250,
+        unknownNumber: { answer: 1500, tolerance: 0 },
+      }),
+    ).toBeUndefined();
+  });
+  it("blocks an explain-back retest until an ordinary card or a save intervenes", () => {
+    const eb = (id: string) => ({ id, kind: "explain-back" as const });
+    const answered = new Set(["eb1", "eb2", "practice"]);
+    expect(explainBackRetestProblem([eb("eb1"), eb("eb2")], answered, "eb2")).toMatch(/new case/u);
+    const practice = { id: "practice", kind: "card" as const };
+    expect(
+      explainBackRetestProblem([eb("eb1"), practice, eb("eb2")], answered, "eb2"),
+    ).toBeUndefined();
+    const save = { id: "save", kind: "save" as const };
+    expect(explainBackRetestProblem([eb("eb1"), save, eb("eb2")], answered, "eb2")).toBeUndefined();
+    // An unanswered card in between doesn't count.
+    const open = { id: "open", kind: "card" as const };
+    expect(explainBackRetestProblem([eb("eb1"), open, eb("eb2")], answered, "eb2")).toMatch(
+      /new case/u,
+    );
+  });
+
   it.each([
     [
       "number",
