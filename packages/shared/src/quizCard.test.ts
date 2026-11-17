@@ -5,6 +5,7 @@ import {
   lessonCardAnswers,
   openLessonCardItemId,
   statesAnswer,
+  withoutShownParagraphs,
   cardReplyProblem,
   explainBackClaimsProblem,
   explainBackRetestProblem,
@@ -40,6 +41,15 @@ const card: QuizCard = {
 };
 
 describe("quiz cards", () => {
+  it("drops reply paragraphs already shown above the card, never the whole reply", () => {
+    const example = "Worked example: x(t) = t⁴ gives v(t) = 4t³, so a(2 s) = 48 m/s².";
+    const reply = `${example}\n\nNow run it backwards.`;
+    expect(withoutShownParagraphs(reply, `Differentiate twice.\n\n${example}`)).toBe(
+      "Now run it backwards.",
+    );
+    expect(withoutShownParagraphs(example, example)).toBe(example);
+  });
+
   it("finds the card the lesson still shows open and spots a picture that states its answer", () => {
     const card = {
       role: "assistant",

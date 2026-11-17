@@ -65,6 +65,30 @@ describe("quiz card reply visibility", () => {
     });
   });
 
+  it("does not take a status line for the verdict", () => {
+    const answer = "A board is a KiCad project.\n\n(card card-1)";
+    const status =
+      "Checking one thing in the code: whether CW2's tasks use the new scoring scheme.";
+    expect(shownTutorText([at(26, "user", answer), at(36, "assistant", status)])).toMatchObject({
+      answeredCard: true,
+      visibleSinceAnswer: false,
+    });
+    const verdict = "v".repeat(198);
+    expect(
+      shownTutorText([
+        at(26, "user", answer),
+        at(30, "assistant", status),
+        at(36, "assistant", verdict),
+      ]),
+    ).toMatchObject({ count: status.length, visibleSinceAnswer: true });
+    expect(
+      shownTutorText([
+        at(26, "user", answer),
+        at(36, "assistant", "Let me see: yes, that's right."),
+      ]),
+    ).toMatchObject({ visibleSinceAnswer: true });
+  });
+
   it("does not count a card reply as visible text after an answer", () => {
     const answer = "The water beads on wax.\n\n(card card-1)";
     expect(
