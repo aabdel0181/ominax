@@ -19,6 +19,8 @@ import { Atom } from "effect/reactivity";
 import type { EnvironmentThreadShell, PendingSubagentRequest } from "./models.ts";
 import { presentThreadShell, threadRuntimeIsActive } from "./models.ts";
 import { hiddenThreadKeys, NO_HIDDEN_THREADS } from "./threadTagFilter.ts";
+
+const EMPTY_LEARNING_PROJECT_IDS: ReadonlySet<string> = new Set();
 import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
 import {
   arrayElementsEqual,
@@ -261,6 +263,9 @@ export function createEnvironmentThreadShellAtoms(input: {
   readonly hiddenThreadTagsAtom: (
     environmentId: EnvironmentId,
   ) => Atom.Atom<ReadonlyArray<string> | null>;
+  readonly learningProjectIdsAtom?: (
+    environmentId: EnvironmentId,
+  ) => Atom.Atom<ReadonlySet<string>>;
 }) {
   // Point reads and aggregate lists share values without keeping an atom alive
   // for every listed thread. Replaced source objects can be collected.
@@ -664,6 +669,10 @@ export function createEnvironmentThreadShellAtoms(input: {
       (environmentId) => ({
         environmentId,
         hiddenTags: get(input.hiddenThreadTagsAtom(environmentId)),
+        learningProjectIds:
+          input.learningProjectIdsAtom === undefined
+            ? EMPTY_LEARNING_PROJECT_IDS
+            : get(input.learningProjectIdsAtom(environmentId)),
       }),
     );
     // Read shells only while some environment hides tags, so streaming ticks cost nothing otherwise.

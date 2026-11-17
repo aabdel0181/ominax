@@ -1192,6 +1192,7 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "sidebarAutoSettleOnMerge",
   "sidebarAutoSettleAfterDays",
   "sidebarAutoSettleKeepPullRequests",
+  "learningProject",
   "continueThreadsAfterServerUpdate",
   "responseStreamingMode",
   "speechProjectCustomWords",
@@ -1230,6 +1231,7 @@ export const ProjectSettingsOverrides = Schema.Struct({
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),
+  learningProject: Schema.optionalKey(Schema.Boolean),
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
   speechProjectCustomWords: Schema.optionalKey(SpeechCustomWords),
@@ -1483,6 +1485,7 @@ export const ServerSettings = Schema.Struct({
   sidebarAutoSettleKeepPullRequests: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
+  learningProject: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   sidebarAutoSettleOnMerge: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   backgroundActivity: BackgroundActivitySettings,
 
@@ -1925,6 +1928,7 @@ export const ServerSettingsPatch = Schema.Struct({
   compactIdleThreads: Schema.optionalKey(LegacyCompactIdleThreads),
   idleCompaction: Schema.optionalKey(IdleCompactionMode),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),
+  learningProject: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   autoResumeLimitedThreads: Schema.optionalKey(Schema.Boolean),
   snoozeLimitedThreads: Schema.optionalKey(Schema.Boolean),

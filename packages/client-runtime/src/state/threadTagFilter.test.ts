@@ -12,9 +12,11 @@ const thread = (
   tags: Array<string>,
   parent?: { readonly id: string; readonly relationship: "fork" | "subagent" },
   delegatedFrom?: { readonly environmentId: EnvironmentId; readonly id: string },
+  projectId = "project",
 ) => ({
   id: ThreadId.make(id),
   tags,
+  projectId,
   lineage: {
     parentThreadId: parent === undefined ? null : ThreadId.make(parent.id),
     relationshipToParent: parent?.relationship ?? null,
@@ -49,8 +51,18 @@ const linkedThreads = [
 const hiddenIds = (localTags: Array<string> | null, linkedTags: Array<string> | null) =>
   [
     ...hiddenThreadKeys([
-      { environmentId: local, threads: localThreads, hiddenTags: localTags },
-      { environmentId: linked, threads: linkedThreads, hiddenTags: linkedTags },
+      {
+        environmentId: local,
+        threads: localThreads,
+        hiddenTags: localTags,
+        learningProjectIds: new Set(),
+      },
+      {
+        environmentId: linked,
+        threads: linkedThreads,
+        hiddenTags: linkedTags,
+        learningProjectIds: new Set(),
+      },
     ]),
   ].toSorted();
 const key = (environmentId: EnvironmentId, id: string) =>
@@ -73,6 +85,21 @@ describe("hiddenThreadKeys", () => {
         key(linked, "delegated-from-private"),
       ].toSorted(),
     );
+  });
+
+  it("treats learning-project threads as lessons for the hidden lesson tag", () => {
+    const learning = { ...thread("learning", [], undefined, undefined, "learn") };
+    const coding = { ...thread("coding", []) };
+    expect(
+      hiddenThreadKeys([
+        {
+          environmentId: local,
+          threads: [learning, coding, thread("tagged", ["lesson"])],
+          hiddenTags: ["lesson"],
+          learningProjectIds: new Set(["learn"]),
+        },
+      ]),
+    ).toEqual(new Set([key(local, "learning"), key(local, "tagged")]));
   });
 
   it("judges an archive page against live hidden parents", () => {

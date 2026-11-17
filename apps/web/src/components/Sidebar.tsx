@@ -66,6 +66,7 @@ import {
 } from "@t3tools/client-runtime/state/threads";
 
 import {
+  BookOpenIcon,
   CheckIcon,
   ChevronDownIcon,
   FolderIcon,
@@ -354,6 +355,8 @@ type SidebarOptimisticDrop = {
 interface SidebarThreadPartitionInput {
   readonly threads: readonly EnvironmentThreadShell[];
   readonly scopedProjectKeys: ReadonlySet<string> | null;
+  readonly lessonsOnly: boolean;
+  readonly learningProjectKeys: ReadonlySet<string>;
   /** Tasks linked environments run for a listed thread; they show under it. */
   readonly delegatedUnderParent: ReadonlySet<string>;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
@@ -421,6 +424,8 @@ function routeThreadOnly(
 function useSidebarThreads(input: {
   readonly projectScopeKey: string | null;
   readonly scopedProjectKeys: ReadonlySet<string> | null;
+  readonly lessonsOnly: boolean;
+  readonly learningProjectKeys: ReadonlySet<string>;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly connectedEnvironmentIds: readonly EnvironmentId[];
   readonly optimisticDrop: SidebarOptimisticDrop | null;
@@ -435,6 +440,8 @@ function useSidebarThreads(input: {
   const {
     projectScopeKey,
     scopedProjectKeys,
+    lessonsOnly,
+    learningProjectKeys,
     serverConfigs,
     connectedEnvironmentIds,
     optimisticDrop,
@@ -485,6 +492,8 @@ function useSidebarThreads(input: {
   const partition = partitionSidebarThreads({
     threads,
     scopedProjectKeys,
+    lessonsOnly,
+    learningProjectKeys,
     delegatedUnderParent,
     serverConfigs,
     connectedEnvironmentIds,
@@ -621,6 +630,8 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   const {
     threads,
     scopedProjectKeys,
+    lessonsOnly,
+    learningProjectKeys,
     delegatedUnderParent,
     serverConfigs,
     optimisticDrop,
@@ -628,7 +639,13 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     sortActiveBySend,
   } = input;
   const preciseNow = new Date().toISOString();
-  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, delegatedUnderParent);
+  const visible = filterSidebarV2VisibleThreads(
+    threads,
+    scopedProjectKeys,
+    delegatedUnderParent,
+    lessonsOnly,
+    learningProjectKeys,
+  );
   const inboxObservation = inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
@@ -832,6 +849,7 @@ function useSidebarLookups() {
   );
   const projectScopeItems = [
     { value: "all", label: "All projects" },
+    { value: "lessons", label: "Lessons" },
     ...pickableProjectGroups(projectGroups).map((project) => ({
       value: project.projectKey,
       label: project.displayName,
@@ -1002,6 +1020,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const projectGroupsRef = useRef(projectGroups);
   const persistedProjectScopeKeys = useUiStateStore((store) => store.sidebarProjectScopeKeys);
   const setPersistedProjectScopeKeys = useUiStateStore((store) => store.setSidebarProjectScopeKeys);
+  const lessonsOnly = useUiStateStore((store) => store.sidebarLessonsOnly);
+  const setLessonsOnly = useUiStateStore((store) => store.setSidebarLessonsOnly);
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
     reduceSidebarProjectScopeMenuState,
     { open: false, query: "" },
@@ -1099,6 +1119,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
+  const learningProjectKeys = new Set(
+    [...serverConfigs].flatMap(([environmentId, config]) =>
+      Object.entries(config.settings?.projectSettingsOverrides ?? {})
+        .filter(([, override]) => override.learningProject === true)
+        .map(([projectId]) => `${environmentId}:${projectId}`),
+    ),
+  );
   const threads = useQuietThreadShells();
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
   const listedThreads =
@@ -1170,8 +1197,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     (item) => item.value,
     projectScopeMenuState.open,
   );
-  const selectedProjectScopeItem =
-    projectScopeKeys.length > 1
+  const selectedProjectScopeItem = lessonsOnly
+    ? projectScopeItems.find((item) => item.value === "lessons")!
+    : projectScopeKeys.length > 1
       ? null
       : (projectScopeItems.find((item) => item.value === (projectScopeKeys[0] ?? "all")) ??
         projectScopeItems[0]!);
@@ -1335,6 +1363,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   } = useSidebarThreads({
     projectScopeKey,
     scopedProjectKeys,
+    lessonsOnly,
+    learningProjectKeys,
     serverConfigs,
     connectedEnvironmentIds,
     optimisticDrop,
@@ -3009,7 +3039,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       return;
                     }
                     if (!item) return;
-                    if (item.value === "all") {
+                    if (item.value === "lessons") {
+                      setLessonsOnly(!lessonsOnly);
+                    } else if (item.value === "all") {
+                      setLessonsOnly(false);
                       setProjectScopeKeys([]);
                     } else if (
                       eventDetails.event instanceof MouseEvent &&
@@ -3019,6 +3052,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       eventDetails.cancel();
                       toggleProjectScopeKey(item.value);
                     } else {
+                      setLessonsOnly(false);
                       setProjectScopeKeys([item.value]);
                     }
                   }}
@@ -3027,14 +3061,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     render={
                       <SidebarHeaderIconButton
                         label={
-                          scopedProjectGroups.length > 0
-                            ? `Filter threads by project: ${scopedProjectGroups.map((project) => project.displayName).join(", ")}`
-                            : "Filter threads by project"
+                          lessonsOnly
+                            ? "Filter threads: lessons only"
+                            : scopedProjectGroups.length > 0
+                              ? `Filter threads by project: ${scopedProjectGroups.map((project) => project.displayName).join(", ")}`
+                              : "Filter threads by project"
                         }
                       />
                     }
                   >
-                    {scopedProjectGroups.length > 1 ? (
+                    {lessonsOnly ? (
+                      <BookOpenIcon className="size-4" aria-hidden />
+                    ) : scopedProjectGroups.length > 1 ? (
                       <span className="flex shrink-0">
                         {scopedProjectGroups.slice(0, 2).map((project, index) => (
                           <span
@@ -3115,9 +3153,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     <ComboboxList aria-multiselectable>
                       {(item: (typeof projectScopeItems)[number]) => {
                         const project = projectGroupByScopeKey.get(item.value) ?? null;
-                        const isSelected = project
-                          ? projectScopeKeys.includes(item.value)
-                          : projectScopeKeys.length === 0;
+                        const isSelected =
+                          item.value === "lessons"
+                            ? lessonsOnly
+                            : project
+                              ? projectScopeKeys.includes(item.value)
+                              : projectScopeKeys.length === 0;
                         return (
                           <ComboboxItem
                             key={item.value}
@@ -3131,7 +3172,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             }}
                           >
                             <ProjectScopeRowIcon isSelected={isSelected}>
-                              {project ? (
+                              {item.value === "lessons" ? (
+                                <BookOpenIcon className="size-4 shrink-0" aria-hidden />
+                              ) : project ? (
                                 <ProjectFavicon project={project} className="size-4 shrink-0" />
                               ) : (
                                 <FolderIcon className="size-4 shrink-0" />

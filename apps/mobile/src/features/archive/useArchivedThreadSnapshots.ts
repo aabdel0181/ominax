@@ -22,6 +22,7 @@ function archivedSnapshotAtom(environmentId: EnvironmentId) {
 const archivedSnapshotsAtom = createArchivedThreadSnapshotsAtomFamily({
   getSnapshotAtom: archivedSnapshotAtom,
   hiddenThreadTagsAtom: serverEnvironment.hiddenThreadTagsAtom,
+  learningProjectIdsAtom: serverEnvironment.learningProjectIdsAtom,
   hiddenThreadKeysAtom: environmentThreadShells.hiddenThreadKeysAtom,
   liveThreadRefsAtom: environmentThreadShells.threadRefsAtom,
   anyEnvironmentHidingAtom: environmentThreadShells.anyEnvironmentHidingAtom,

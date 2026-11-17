@@ -177,6 +177,23 @@ describe("filterSidebarV2VisibleThreads", () => {
       filterSidebarV2VisibleThreads(threads, null, new Set()).map((thread) => thread.id),
     ).toEqual(["lesson", "fork"]);
   });
+
+  it("shows only lesson threads when the lessons filter is active", () => {
+    const lesson = makeThreadFixture({ id: ThreadId.make("lesson") });
+    const ordinary = makeThreadFixture({
+      id: ThreadId.make("ordinary"),
+      projectId: ProjectId.make("coding-project"),
+    });
+    expect(
+      filterSidebarV2VisibleThreads(
+        [lesson, ordinary],
+        null,
+        new Set(),
+        true,
+        new Set(["environment-test:project-test"]),
+      ).map((thread) => thread.id),
+    ).toEqual(["lesson"]);
+  });
 });
 function makeLatestRun(overrides?: {
   completedAt?: string | null;

@@ -422,6 +422,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarAutoSettleOnMerge !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge
       ? ["Auto-settle merged threads"]
       : []),
+    ...(settings.learningProject !== DEFAULT_UNIFIED_SETTINGS.learningProject
+      ? ["Learning project"]
+      : []),
     ...(settings.autoResumeLimitedThreads !== DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads
       ? ["Resume after usage limits"]
       : []),
@@ -608,6 +611,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
+      learningProject: DEFAULT_UNIFIED_SETTINGS.learningProject,
       autoResumeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads,
       snoozeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.snoozeLimitedThreads,
       snoozePresets: DEFAULT_UNIFIED_SETTINGS.snoozePresets,
@@ -1915,6 +1919,34 @@ export function ThreadsSettingsPanel() {
                     updateSettings({ sidebarAutoSettleKeepPullRequests: checked })
                   }
                   aria-label="Keep threads with a PR"
+                />
+              }
+            />
+          ) : null}
+          {isProjectScope && supportsAutoSettlementScope ? (
+            <SettingsRow
+              serverScoped
+              settingKeys={["learningProject"]}
+              title="Learning project"
+              description="Chats here count as lessons: they never auto-settle, and the sidebar's Lessons filter shows them."
+              resetAction={
+                settings.learningProject !== DEFAULT_UNIFIED_SETTINGS.learningProject ? (
+                  <SettingResetButton
+                    label="learning project"
+                    onClick={() =>
+                      updateSettings({ learningProject: DEFAULT_UNIFIED_SETTINGS.learningProject })
+                    }
+                  />
+                ) : null
+              }
+              control={
+                <ScopedSwitch
+                  settingKeys={["learningProject"]}
+                  checked={settings.learningProject}
+                  onCheckedChange={(checked) =>
+                    updateSettings({ learningProject: Boolean(checked) })
+                  }
+                  aria-label="Learning project"
                 />
               }
             />

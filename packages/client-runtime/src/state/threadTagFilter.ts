@@ -12,6 +12,7 @@ type FilterableThread = Pick<
   OrchestrationV2ThreadShell,
   "id" | "lineage" | "tags" | "delegatedFrom"
 > & {
+  readonly projectId?: string;
   readonly sideChat?: { readonly lessonThreadId: ThreadId } | undefined;
 };
 
@@ -20,6 +21,7 @@ export interface TagFilteredEnvironment {
   readonly threads: ReadonlyArray<FilterableThread>;
   /** Tags this environment hides, or null while its filter is off. */
   readonly hiddenTags: ReadonlyArray<string> | null;
+  readonly learningProjectIds?: ReadonlySet<string>;
 }
 
 export const NO_HIDDEN_THREADS: ReadonlySet<string> = new Set();
@@ -68,6 +70,16 @@ function hasHiddenTag(
   return hiddenTags?.some((tag) => tags?.includes(tag) === true) === true;
 }
 
+export function isLessonThread(
+  thread: Pick<FilterableThread, "tags" | "projectId">,
+  learningProjectIds: ReadonlySet<string>,
+): boolean {
+  return (
+    thread.tags?.includes("lesson") === true ||
+    (thread.projectId !== undefined && learningProjectIds.has(thread.projectId))
+  );
+}
+
 /**
  * Keys of threads the tag filter hides. Children (subagents, side chats, delegated tasks) follow
  * their parent; while any environment hides tags, a child whose parent is not loaded stays hidden.
@@ -113,7 +125,10 @@ export function hiddenThreadKeys(
       return true;
     }
     if (!followsParent) {
-      const hidden = hasHiddenTag(thread.tags, environment.hiddenTags);
+      const hidden =
+        hasHiddenTag(thread.tags, environment.hiddenTags) ||
+        (environment.hiddenTags?.includes("lesson") === true &&
+          isLessonThread(thread, environment.learningProjectIds ?? new Set()));
       hiddenByKey.set(key, hidden);
       return hidden;
     }

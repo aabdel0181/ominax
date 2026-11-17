@@ -235,6 +235,20 @@ describe("isAutoSettlementCandidate", () => {
 });
 
 describe("resolveAutoSettlementAt", () => {
+  it("keeps learning-project threads open while ordinary threads settle", () => {
+    const input = {
+      thread: shell({ latestUserMessageAt: at(-4 * DAY_MS) }),
+      pullRequest: null,
+      nowMs: NOW_MS,
+      autoSettleAfterDays: 3,
+      autoSettleOnMerge: true,
+    };
+    expect(
+      ThreadSettlementService.resolveAutoSettlementAt({ ...input, learningProject: true }),
+    ).toBeNull();
+    expect(ThreadSettlementService.resolveAutoSettlementAt(input)).toEqual(at(-4 * DAY_MS));
+  });
+
   it("keeps threads with a PR from inactivity settlement only when asked", () => {
     const input = {
       thread: shell({
