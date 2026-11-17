@@ -296,6 +296,7 @@ describe("quiz cards", () => {
         reply:
           "The vertical component is v sin θ. With v = 20 m/s and sin 30° = 0.5, use the component rule.",
         answers: ["10 m/s"],
+        numberCard: true,
         shownBefore: 0,
       }),
     ).toMatch(/stated/u);
@@ -310,6 +311,7 @@ describe("quiz cards", () => {
       cardReplyProblem({
         reply: "Use a different mass and angle, then combine the two forces before solving.",
         answers: ["10 m/s"],
+        numberCard: true,
         shownBefore: 250,
       }),
     ).toBeUndefined();
@@ -318,6 +320,15 @@ describe("quiz cards", () => {
         reply:
           "By Pythagoras, the overall speed is the square root of the east component squared plus the north component squared.",
         answers: ["13 m/s"],
+        numberCard: true,
+        shownBefore: 250,
+      }),
+    ).toBeUndefined();
+    expect(
+      cardReplyProblem({
+        reply: "The sine rule remains available for a zero result.",
+        answers: ["0"],
+        numberCard: true,
         shownBefore: 250,
       }),
     ).toBeUndefined();

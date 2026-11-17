@@ -212,6 +212,7 @@ const handlers = {
         ...(input.number === undefined
           ? {}
           : {
+              numberCard: true,
               answers: [
                 String(input.number.answer),
                 ...(input.number.unit === undefined

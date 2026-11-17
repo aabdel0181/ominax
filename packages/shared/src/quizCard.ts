@@ -22,6 +22,7 @@ export function cardReplyProblem(input: {
   readonly unknownNumber?: { readonly answer: number; readonly tolerance: number };
   /** A quiz answer, or a number card's bare answer and "<answer> <unit>". */
   readonly answers?: ReadonlyArray<string>;
+  readonly numberCard?: boolean;
 }): string | undefined {
   if (input.answeredCard && !input.visibleSinceAnswer && !input.verdict?.trim()) {
     return "The learner's last message answered a card, and no verdict on it is visible; they never see your thinking. Put your verdict on that answer (right or wrong, and why, in a line or two) in verdict, then call the card again.";
@@ -49,7 +50,11 @@ export function cardReplyProblem(input: {
   );
   if (answerAppears)
     return "The answer is stated just above; pose a new case that needs one more step.";
-  if ((input.answers ?? []).some((answer) => answerIsRestatedOrComputed(shown, answer)))
+  if (
+    (input.answers ?? []).some((answer) =>
+      answerIsRestated(shown, answer, input.numberCard === true),
+    )
+  )
     return "The answer is stated just above; pose a new case that needs one more step.";
   if (input.purpose !== undefined) return undefined;
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
@@ -68,6 +73,7 @@ const visibleNumbers = (text: string) =>
   }));
 
 function computedAnswerAppears(text: string, answer: number): boolean {
+  if (answer === 0) return false;
   if (
     !/[=×*÷/+-]|\b(?:sin|cos|multiply|divid|times|component|average|velocity|force|weight)\b/iu.test(
       text,
@@ -88,7 +94,6 @@ function computedAnswerAppears(text: string, answer: number): boolean {
     if (near && /÷|\//u.test(between) && right !== 0 && close(left / right)) return true;
     if (near && /\+/u.test(between) && close(left + right)) return true;
     if (near && /(?<![\d.])-(?![\d.])/u.test(between) && close(left - right)) return true;
-    if (trigonometry && right >= -1 && right <= 1 && close(left * right)) return true;
   }
   if (trigonometry) {
     for (const left of numbers) {
@@ -106,9 +111,15 @@ function computedAnswerAppears(text: string, answer: number): boolean {
   return false;
 }
 
-function answerIsRestatedOrComputed(text: string, answer: string): boolean {
+function answerIsRestated(text: string, answer: string, numberCard: boolean): boolean {
   const number = answerNumber(answer);
-  if (number !== undefined && computedAnswerAppears(text, number)) return true;
+  if (
+    numberCard &&
+    number !== undefined &&
+    /^\s*[−+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:\s+\S+)?\s*$/u.test(answer) &&
+    computedAnswerAppears(text, number)
+  )
+    return true;
   const wanted = new Set(coverageTokens(answer));
   if (wanted.size < 4) return false;
   return text.split(/(?<=[.!?])\s+|\n{2,}/u).some((sentence) => {
@@ -305,11 +316,7 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
     const card = {
       ...reply,
       question,
-      number: {
-        answer: number.answer,
-        tolerance: number.tolerance,
-        ...(unit ? { unit } : {}),
-      },
+      number: { answer: number.answer, tolerance: number.tolerance, ...(unit ? { unit } : {}) },
     };
     return fitsCardBytes(card) ? card : undefined;
   }
@@ -504,7 +511,7 @@ export function numberAnswerMessage(input: {
 /** The grade in a `quizAnswerMessage`, so analytics can count answers without their text. */
 export function quizAnswerGrade(text: string): "right" | "wrong" | "unknown" | undefined {
   if (text.startsWith("Quiz answer: I don't know.")) return "unknown";
-  // Keep the answer quoted so punctuation inside an option cannot shift the grade match.
+  // shortcut: an option whose own text holds `", right.` misgrades; quote answers if counts drift.
   const graded = /^Quiz answer: ".*?", (right|wrong)\./s.exec(text)?.[1];
   return graded === "right" || graded === "wrong" ? graded : undefined;
 }
