@@ -3158,7 +3158,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             ? lessonsOnly
                             : project
                               ? projectScopeKeys.includes(item.value)
-                              : projectScopeKeys.length === 0;
+                              : !lessonsOnly && projectScopeKeys.length === 0;
                         return (
                           <ComboboxItem
                             key={item.value}

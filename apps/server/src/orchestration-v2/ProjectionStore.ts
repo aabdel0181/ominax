@@ -1737,6 +1737,17 @@ const linkCardStillAsks = (
   latestUserAuthoredMessageAt === null ||
   !DateTime.isGreaterThan(latestUserAuthoredMessageAt, item.startedAt ?? item.updatedAt);
 
+/** @internal A New Lesson thread carries a derived `lesson` tag, so clients' tag filters find it (APP-133). */
+export function shellTags(thread: Pick<OrchestrationV2AppThread, "tags" | "lesson">): {
+  readonly tags?: ReadonlyArray<string>;
+} {
+  const tags =
+    thread.lesson === undefined
+      ? (thread.tags ?? [])
+      : [...new Set([...(thread.tags ?? []), "lesson"])];
+  return tags.length > 0 ? { tags } : {};
+}
+
 export function threadShellFromProjection(
   projection: OrchestrationV2ThreadProjection,
 ): OrchestrationV2ThreadShell {
@@ -1906,16 +1917,7 @@ export function threadShellFromProjection(
 
     autoSettleDisabledAt: projection.thread.autoSettleDisabledAt ?? null,
     pinOrderKey: projection.thread.pinOrderKey ?? null,
-    ...(projection.thread.tags?.length || projection.thread.lesson !== undefined
-      ? {
-          tags: [
-            ...new Set([
-              ...(projection.thread.tags ?? []),
-              ...(projection.thread.lesson !== undefined ? ["lesson"] : []),
-            ]),
-          ],
-        }
-      : {}),
+    ...shellTags(projection.thread),
     lastVisitedAt: projection.thread.lastVisitedAt,
     opens: projection.thread.opens ?? null,
     titleRegeneration: projection.thread.titleRegeneration ?? null,
@@ -2218,16 +2220,7 @@ function shellFromState(input: {
 
     autoSettleDisabledAt: input.state.thread.autoSettleDisabledAt ?? null,
     pinOrderKey: input.state.thread.pinOrderKey ?? null,
-    ...(input.state.thread.tags?.length || input.state.thread.lesson !== undefined
-      ? {
-          tags: [
-            ...new Set([
-              ...(input.state.thread.tags ?? []),
-              ...(input.state.thread.lesson !== undefined ? ["lesson"] : []),
-            ]),
-          ],
-        }
-      : {}),
+    ...shellTags(input.state.thread),
     lastVisitedAt: input.state.thread.lastVisitedAt,
     opens: input.state.thread.opens ?? null,
     titleRegeneration: input.state.thread.titleRegeneration ?? null,
