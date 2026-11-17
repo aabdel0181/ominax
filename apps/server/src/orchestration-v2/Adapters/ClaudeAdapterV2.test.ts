@@ -450,7 +450,8 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
       await run("Bash", { command: "cd ~/cw/circuit-world && git fetch -q origin" }),
       denied,
     );
-    assert.equal(matcher.matcher, "Bash|Edit|Write|NotebookEdit|Monitor");
+    assert.equal(matcher.matcher, "Bash|Edit|Write|NotebookEdit|Monitor|WebFetch");
+    assert.deepEqual(await run("WebFetch", { url: "https://example.com", prompt: "x" }), denied);
     assert.deepEqual(await run("Monitor", { command: "rm -rf ~/cw-data/x" }), denied);
     assert.deepEqual(
       await run("Write", { file_path: "/home/quokka/cw/circuit-world/x.py", content: "" }),

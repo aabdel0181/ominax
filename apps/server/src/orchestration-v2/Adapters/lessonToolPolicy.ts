@@ -21,6 +21,21 @@ const PACKAGE_COMMANDS = new Set(
   ),
 );
 const SEPARATORS = new Set([";", "&&", "||", "|", "(", ")"]);
+// Inline-code flags per interpreter; `-` or no script means the code comes on stdin.
+const INLINE_CODE_FLAGS: ReadonlyArray<readonly [RegExp, ReadonlyArray<string>]> = [
+  [/^python(?:[23](?:\.\d+)?)?$/u, ["-c"]],
+  [/^(?:node|nodejs|bun)$/u, ["-e", "--eval", "-p", "--print", "-pe"]],
+  [/^(?:perl|ruby|Rscript|julia|lua)$/u, ["-e", "-E"]],
+  [/^php$/u, ["-r"]],
+  [/^deno$/u, ["eval"]],
+];
+// Code that may open a socket, run a process or write a file; plain maths and reads pass.
+const UNSAFE_CODE = [
+  /\b(?:socket|urllib\d?|requests|https?|httpx|aiohttp|ftplib|smtplib|telnetlib|xmlrpc|websockets?|WebSocket|XMLHttpRequest|fetch|net|dgram|tls|undici|axios)\b/u,
+  /\b(?:subprocess|system|popen|spawn\w*|exec\w*|fork|child_process|ctypes|importlib|__import__|getattr|eval|compile|Deno|Bun)\b/u,
+  /(?<!(?:stdout|stderr)\.)\b(?:write\w*|append\w*|unlink\w*|remove\w*|rmdir|rmtree|rm|rmSync|rename\w*|mkdir\w*|makedirs|shutil|copy\w*|move|chmod|chown|symlink\w*|truncate|touch|utime)\b|\bos\.replace\b/u,
+  /\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?['"][^'"]*[wax+]|\bopen\s*\(?[^)]*['"]\s*\+?[>|]/u,
+];
 export interface LessonToolPolicyInput {
   readonly toolName: string;
   readonly toolInput: unknown;
@@ -118,6 +133,26 @@ function network(parts: ReadonlyArray<string>): boolean {
                           ? ["get", "install"].includes(value)
                           : ["install"].includes(value),
   );
+}
+function unsafeInlineCode(parts: ReadonlyArray<string>, command: string): boolean {
+  const i = commandIndex(parts);
+  const name = commandName(parts);
+  const flags = INLINE_CODE_FLAGS.find(
+    ([pattern]) => name !== undefined && pattern.test(name),
+  )?.[1];
+  if (i === undefined || flags === undefined) return false;
+  const values = parts.slice(i + 1).map(clean);
+  const unsafe = (code: string) => UNSAFE_CODE.some((pattern) => pattern.test(code));
+  // perl -pi and ruby -i edit files in place.
+  if (/^(?:perl|ruby)$/u.test(name!) && values.some((value) => /^-\w*i/u.test(value))) return true;
+  const flag = values.findIndex((value) => flags.includes(value));
+  if (flag >= 0) return unsafe(values[flag + 1] ?? "");
+  const module = values.indexOf("-m");
+  if (module >= 0) return unsafe(values[module + 1] ?? "");
+  const script = values.find(
+    (value, k) => !/^[<>-]/u.test(value) && !/^[<>]/u.test(values[k - 1] ?? ""),
+  );
+  return (script === undefined || values.includes("-")) && unsafe(command);
 }
 function writesOutside(
   parts: ReadonlyArray<string>,
@@ -232,6 +267,7 @@ function bashAllowed(command: string, input: LessonToolPolicyInput): boolean {
           return false;
       }
     }
+    if (unsafeInlineCode(segment, command)) return false;
     if (cwd === undefined)
       return (
         !network(segment) &&
@@ -252,6 +288,8 @@ function bashAllowed(command: string, input: LessonToolPolicyInput): boolean {
 }
 export function lessonToolPolicy(input: LessonToolPolicyInput): LessonToolPolicyResult {
   if (["Read", "Grep", "Glob"].includes(input.toolName)) return { allow: true };
+  // WebFetch connects from this machine; WebSearch runs on Anthropic's side (APP-138).
+  if (input.toolName === "WebFetch") return deny();
   if (WRITE_TOOLS.has(input.toolName)) {
     const path = directPath(input.toolName, input.toolInput);
     return path !== undefined && writable(path, input.projectRoot, input)

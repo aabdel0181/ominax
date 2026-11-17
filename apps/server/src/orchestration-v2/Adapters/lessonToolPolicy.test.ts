@@ -115,6 +115,10 @@ describe("lessonToolPolicy", () => {
     "python3 -m json.tool package.json",
     "python3 --version",
     "python3 -c 'open(\"waveform.json\")'",
+    "python3 -c 'import math; print(math.comb(8, 3))'",
+    "python3 -c 'import sys; sys.stdout.write(str(2**10))'",
+    "node -e 'console.log(0.01 + 0.24 * 0.8)'",
+    "node -p '6 / 7'",
     "echo 'cost: $5'",
     "ls ~/cw/circuit-world 2>&1 | head",
     "cat <<'EOF' > /tmp/demo.txt\nhello\nEOF",
@@ -135,6 +139,14 @@ describe("lessonToolPolicy", () => {
     assert.deepEqual(input("Bash", { command }), { allow: true });
   });
 
+  it("refuses WebFetch and leaves WebSearch to the lesson's reference search", () => {
+    assert.deepEqual(input("WebFetch", { url: "https://example.com", prompt: "x" }), {
+      allow: false,
+      reason: LESSON_TOOL_DENIAL_REASON,
+    });
+    assert.deepEqual(input("WebSearch", { query: "8.01 pset 1 solutions" }), { allow: true });
+  });
+
   it("allows reads through file tools anywhere", () => {
     assert.deepEqual(input("Read", { file_path: "~/cw-data/v3/x/details.json" }), { allow: true });
     assert.deepEqual(input("Grep", { path: "~/cw/circuit-world" }), { allow: true });
@@ -144,8 +156,6 @@ describe("lessonToolPolicy", () => {
   it("allows project and temporary direct writes", () => {
     assert.deepEqual(input("Edit", { file_path: `${projectRoot}/x.py` }), { allow: true });
     assert.deepEqual(input("Write", { file_path: "/tmp/x.html" }), { allow: true });
-    assert.deepEqual(input("WebSearch", { query: "course topic" }), { allow: true });
-    assert.deepEqual(input("WebFetch", { url: "https://example.com" }), { allow: true });
   });
 
   it.each([
@@ -249,6 +259,20 @@ describe("lessonToolPolicy", () => {
     "cd -\necho x > f",
     "cd\necho x > f",
     "cat <<EOF > /tmp/demo.txt\n$(rm -rf ~/cw-data/x)\nEOF",
+    "python3 -c 'import urllib.request; urllib.request.urlopen(\"https://example.com\")'",
+    "python3 -c 'import socket; socket.create_connection((\"example.com\", 80))'",
+    'python3 -c \'open("/home/quokka/cw-data/x", "w").write("")\'',
+    "python3 -c 'import os; os.remove(\"/home/quokka/cw-data/x\")'",
+    'python3 -c \'import subprocess; subprocess.run(["curl", "x"])\'',
+    "python3 -m http.server 8000",
+    "python3 - <<'EOF'\nimport urllib.request\nEOF",
+    "node -e 'fetch(\"https://example.com\")'",
+    'node --eval \'require("fs").writeFileSync("/home/quokka/x", "")\'',
+    'node -e \'require("child_process").execSync("curl x")\'',
+    "perl -e 'open(F, \">/home/quokka/x\")'",
+    "perl -pi -e 's/a/b/' ~/cw/circuit-world/README.md",
+    'ruby -e \'require "net/http"; Net::HTTP.get(URI("https://example.com"))\'',
+    "cd ~/cw/circuit-world && python3 -c 'import requests'",
   ])("denies dangerous command: %s", (command) => {
     assert.deepEqual(input("Bash", { command }), {
       allow: false,
