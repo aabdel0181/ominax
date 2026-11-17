@@ -92,17 +92,22 @@ export const shownTutorText = (
 const readShownTutor = readThread(undefined, ["messages"]).pipe(
   Effect.map(({ projection }) => ({
     ...shownTutorText(projection.messages),
-    openCardItemId: openLessonCardItemId(projection.messages),
-    cardFollowedByFreeMessage: (() => {
-      const cardIndex = projection.messages.findLastIndex(
-        (message) => message.role === "assistant" && message.id.endsWith(":reply"),
-      );
-      return (
-        cardIndex >= 0 &&
-        projection.messages
-          .slice(cardIndex + 1)
-          .some((message) => message.role === "user" && cardAnswerId(message.text) === undefined)
-      );
+    // Clients close a card left open before a free message once a newer card arrives.
+    skippedCardId: (() => {
+      const open = openLessonCardItemId(projection.messages);
+      const reply = projection.messages.find((message) => message.id === `${open}:reply`);
+      const lastUser = projection.messages
+        .filter((message) => message.role === "user")
+        .toSorted(
+          (a, b) => DateTime.toEpochMillis(a.createdAt) - DateTime.toEpochMillis(b.createdAt),
+        )
+        .at(-1);
+      return reply !== undefined &&
+        lastUser !== undefined &&
+        cardAnswerId(lastUser.text) === undefined &&
+        DateTime.toEpochMillis(reply.createdAt) < DateTime.toEpochMillis(lastUser.createdAt)
+        ? open
+        : undefined;
     })(),
   })),
   Effect.orElseSucceed(() => undefined),
@@ -171,17 +176,10 @@ const shownReply = (
     shown?.visibleSinceAnswer ? undefined : input.verdict,
   );
 
-const skippedCardNotice = (
-  shown:
-    | {
-        readonly openCardItemId: string | undefined;
-        readonly cardFollowedByFreeMessage: boolean;
-      }
-    | undefined,
-) =>
-  shown?.openCardItemId !== undefined && shown.cardFollowedByFreeMessage
-    ? "An older open card was closed as skipped by the learner's free message. Do not point back to that card; re-ask it as a new card if it is still needed."
-    : undefined;
+const skippedCardNotice = (shown: { readonly skippedCardId: string | undefined } | undefined) =>
+  shown?.skippedCardId === undefined
+    ? undefined
+    : "An older open card was closed as skipped by the learner's free message. Do not point back to that card; re-ask it as a new card if it is still needed.";
 
 const handlers = {
   quiz_card: McpToolAccess.readsAsCaller((input) =>
