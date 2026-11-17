@@ -68,7 +68,7 @@ import type { ToolCallVisibility } from "@t3tools/contracts/settings";
 import { resolveT3McpToolDefinition } from "@t3tools/shared/t3McpToolPresentation";
 import { compactDynamicToolOutput, lessonCardReplyMessageId } from "@t3tools/shared/toolOutput";
 import { htmlRenderReferencesEqual, type HtmlRenderReference } from "@t3tools/shared/htmlRender";
-import type { LessonCard } from "@t3tools/shared/quizCard";
+import { isCardAnswered, type LessonCard } from "@t3tools/shared/quizCard";
 import { mcpAppReferencesEqual, type McpAppReference } from "@t3tools/shared/mcpApp";
 import { dynamicToolTitle } from "@t3tools/shared/toolActivity";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
@@ -1726,7 +1726,8 @@ export function deriveMessagesTimelineRows(input: {
           if (entry.kind !== "html-render" || entry.runId === null) return [];
           if (
             entry.htmlRender.forCard !== undefined &&
-            input.answeredCardAnswers?.has(entry.htmlRender.forCard) === true
+            input.answeredCardAnswers !== undefined &&
+            isCardAnswered(input.answeredCardAnswers, entry.htmlRender.forCard)
           )
             return [];
           let pendingCard: Extract<TimelineEntry, { kind: "quiz-card" }> | undefined;
