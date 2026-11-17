@@ -18,7 +18,7 @@ import * as Stream from "effect/Stream";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as ServerConfig from "../config.ts";
-import { auditDownload } from "../course/downloadAudit.ts";
+import { auditDownload, withAuditHops, type DownloadAuditHop } from "../course/downloadAudit.ts";
 import { expandHomePath } from "../os-jank.ts";
 import type { SpeechModel } from "./model.ts";
 
@@ -177,12 +177,13 @@ const make = Effect.gen(function* () {
     url: string,
     partialPath: string,
     offset: number,
+    hops: Array<DownloadAuditHop>,
     onProgress?: (downloaded: number, bytes: number) => void,
   ) {
     const request = HttpClientRequest.get(url).pipe(
       offset > 0 ? HttpClientRequest.setHeader("Range", `bytes=${offset}-`) : (r) => r,
     );
-    const response = yield* http.execute(request);
+    const response = yield* withAuditHops(http, hops).execute(request);
     const resumed = offset > 0 && response.status === 206;
     if (!resumed && response.status !== 200)
       return yield* new SpeechModelDownloadError({
@@ -310,22 +311,39 @@ const make = Effect.gen(function* () {
         readonly bytes: number;
         readonly status: number;
         readonly contentType: string | null;
+        readonly hops: ReadonlyArray<DownloadAuditHop>;
       }> = [];
+      let lastHops: DownloadAuditHop[] = [];
       return yield* Effect.gen(function* () {
         for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
           const offset = Number((yield* statFile(partialPath))?.size ?? 0);
           if (offset === model.size) break;
           // Transport and disk failures resume from the partial file; a bad response does not.
           attemptBytes = 0;
-          const result = yield* fetchInto(model, url, partialPath, offset, (downloaded, bytes) => {
-            attemptBytes = bytes;
-            progress.onProgress?.(downloaded);
-          }).pipe(
+          const hops: DownloadAuditHop[] = [];
+          lastHops = hops;
+          const result = yield* fetchInto(
+            model,
+            url,
+            partialPath,
+            offset,
+            hops,
+            (downloaded, bytes) => {
+              attemptBytes = bytes;
+              progress.onProgress?.(downloaded);
+            },
+          ).pipe(
             Effect.tapCause((cause) =>
               Effect.promise(() =>
                 auditDownload(
                   { stateDir: config.stateDir },
-                  { url, bytes: attemptBytes, error: Cause.pretty(cause) },
+                  {
+                    url,
+                    kind: "speech-model",
+                    hops,
+                    bytes: attemptBytes,
+                    error: Cause.pretty(cause),
+                  },
                 ),
               ),
             ),
@@ -341,7 +359,7 @@ const make = Effect.gen(function* () {
             ),
           );
           attemptBytes = result.bytes;
-          if (result.downloaded >= 0) attempts.push(result);
+          if (result.downloaded >= 0) attempts.push({ ...result, hops });
           if (result.downloaded === model.size) break;
         }
         progress.onVerificationStart?.();
@@ -351,7 +369,13 @@ const make = Effect.gen(function* () {
           yield* Effect.promise(() =>
             auditDownload(
               { stateDir: config.stateDir },
-              { url, bytes: attemptBytes, error: error.message },
+              {
+                url,
+                kind: "speech-model",
+                hops: lastHops,
+                bytes: attemptBytes,
+                error: error.message,
+              },
             ),
           );
           return yield* error;
@@ -362,6 +386,8 @@ const make = Effect.gen(function* () {
               { stateDir: config.stateDir },
               {
                 url,
+                kind: "speech-model",
+                hops: attempt.hops,
                 bytes: attempt.bytes,
                 contentType: attempt.contentType,
                 sha256: model.sha256,
