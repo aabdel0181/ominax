@@ -34,6 +34,12 @@ const KnowledgeMapMarkDoneTool = Tool.make("knowledge_map_mark_done", {
       Schema.Struct({
         claim: Schema.String.pipe(Schema.check(Schema.isMaxLength(300))),
         holds: Schema.Boolean,
+        source: Schema.optional(
+          Schema.String.annotate({
+            description:
+              "For a claim about the learner's project: the file you checked it against (path, optional :lines). Omit for general knowledge.",
+          }),
+        ),
       }),
     )
       .check(Schema.isMinLength(1), Schema.isMaxLength(12))

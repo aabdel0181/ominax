@@ -34,9 +34,26 @@ const answer = (id: string) => ({
   text: `Mine.\n\n(card ${id})`,
 });
 
+const said = (ordinal: number, text: string) => ({
+  id: `said-${ordinal}`,
+  ordinal,
+  type: "assistant_message",
+  messageId: `said-${ordinal}`,
+  text,
+});
+const ran = (ordinal: number, input: string) => ({
+  id: `ran-${ordinal}`,
+  ordinal,
+  type: "command_execution",
+  input,
+});
+
 const markDone = (
-  turnItems: ReadonlyArray<ReturnType<typeof card>>,
+  turnItems: ReadonlyArray<{ readonly type: string; readonly ordinal: number }>,
   messages: ReadonlyArray<ReturnType<typeof answer>>,
+  claims: ReadonlyArray<{ claim: string; holds: boolean; source?: string }> = [
+    { claim: "T divides the logits", holds: true },
+  ],
 ) => {
   const shell = McpToolAccessTestkit.liveThreadShell(threadId);
   const projection = McpToolAccessTestkit.idleThreadProjection(shell);
@@ -46,7 +63,7 @@ const markDone = (
       .handle("knowledge_map_mark_done", {
         topic: "Temperature",
         explanation: "T divides the logits.",
-        claims: [{ claim: "T divides the logits", holds: true }],
+        claims,
       })
       .pipe(Stream.unwrap, Stream.runCollect);
   }).pipe(
@@ -103,5 +120,45 @@ it.effect("refuses saving an explain-back retest that only restates the correcti
       [answer("eb1"), answer("case"), answer("eb2")],
     );
     expect(afterNewCase.at(-1)?.result).toMatchObject({ saved: "Temperature" });
+  }),
+);
+
+it.effect("refuses a claim the lesson hedged until its source is read after the hedge", () =>
+  Effect.gen(function* () {
+    const claim = "A failed required check caps the reward just under the pass mark";
+    const lesson = [
+      ran(1, "cd ~/cw/circuit-world && grep -n 'def compose' -A90 cw/verify/core.py"),
+      said(
+        2,
+        "Suppose a task's pass mark is 0.8 (hypothetical; I haven't checked MCU-1's real one).",
+      ),
+      card("eb1", 3, "explain-back"),
+    ];
+    const save = (items: typeof lesson, source: string) =>
+      markDone(items, [answer("eb1")], [{ claim, holds: true, source }]);
+
+    expect(yield* Effect.flip(save(lesson, "cw/verify/core.py:163-208"))).toMatchObject({
+      code: "invalid_request",
+      message: expect.stringMatching(/hedged: "Suppose a task's pass mark/u),
+    });
+    expect(yield* Effect.flip(save(lesson, "cw/verify/bank/compose.py"))).toMatchObject({
+      message: expect.stringMatching(/never read/u),
+    });
+    const checked = [
+      ...lesson,
+      ran(4, "sed -n 1,80p ~/cw/circuit-world/cw/verify/bank/compose.py"),
+    ];
+    expect((yield* save(checked, "./cw/verify/bank/compose.py#L5")).at(-1)?.result).toMatchObject({
+      saved: "Temperature",
+    });
+    // Telling the learner what they missed is not the lesson hedging.
+    const verdict = [said(1, "Close, but you didn't check the pass mark on the failed check.")];
+    expect(
+      (yield* markDone(
+        [...verdict, card("eb1", 2, "explain-back")],
+        [answer("eb1")],
+        [{ claim, holds: true }],
+      )).at(-1)?.result,
+    ).toMatchObject({ saved: "Temperature" });
   }),
 );
