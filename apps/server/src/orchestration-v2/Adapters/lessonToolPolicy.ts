@@ -34,7 +34,7 @@ const INLINE_CODE_FLAG: ReadonlyArray<readonly [RegExp, RegExp]> = [
 const RUNNERS = new Set(["uv", "poetry", "pipenv", "conda"]);
 // Code that may reach the network, run a process or write a file; maths and reads pass.
 const UNSAFE_CODE = [
-  /\b(?:socket|urllib\d?|requests|https?|httpx|aiohttp|ftplib|smtplib|telnetlib|xmlrpc|websockets?|WebSocket|XMLHttpRequest|fetch|fetch_\w+|dgram|tls|undici|axios|Net::\w+|download|from_pretrained|load_dataset|install\.packages|Pkg\.add)\b/u,
+  /['"](?:node:)?(?:net|dgram|tls|https?)['"]|\b(?:socket|urllib\d?|requests|https?|httpx|aiohttp|ftplib|smtplib|telnetlib|xmlrpc|websockets?|WebSocket|XMLHttpRequest|fetch|fetch_\w+|dgram|tls|undici|axios|Net::\w+|download|from_pretrained|load_dataset|install\.packages|Pkg\.add)\b/u,
   /\b(?:subprocess|popen|spawn\w*|execSync|execFile\w*|fork|child_process|ctypes|importlib|__import__|getattr)\b|\b(?:os\.(?:system|exec\w*)|Deno\.|Bun\.)|(?<![.\w])(?:eval|exec|compile|system)\s*\(/u,
   /\b(?:os|shutil|fs|FileUtils|File|IO|pathlib)\.\w*(?:write|remove|unlink|rename|replace|copy|move|mkdir|makedirs|rmtree|rmdir|rm|chmod|chown|symlink|truncate|utime|touch)\w*|\b(?:write_text|write_bytes|writeFile\w*|appendFile\w*|createWriteStream|shutil)\b/u,
   /\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?['"][^'"]*[wax+]|\bopen\s*\(?[^)]*['"]\s*\+?[>|]/u,
@@ -148,7 +148,7 @@ function unsafeInlineCode(parts: ReadonlyArray<string>, command: string): boolea
     (value) => codeFlag.test(value) || /^--(?:eval|print)=/u.test(value),
   );
   // perl -pi and ruby -i edit files in place; -M, -I and -r load modules.
-  const options = values.slice(0, inline >= 0 ? inline + 1 : undefined);
+  const options = values.filter((_, k) => inline < 0 || k !== inline + 1);
   if (/^(?:perl|ruby)$/u.test(name) && options.some((value) => /^-(?![MIr])\w*i/u.test(value)))
     return true;
   if (inline >= 0) {
@@ -164,8 +164,10 @@ function unsafeInlineCode(parts: ReadonlyArray<string>, command: string): boolea
   );
   if (script !== undefined && !values.includes("-")) return false;
   // shortcut: code piped in from another command is judged on the whole command text.
-  const heredoc = command.match(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/u);
-  return unsafe(heredoc?.[3] ?? command);
+  const bodies = [
+    ...command.matchAll(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/gu),
+  ].map((match) => match[3]!);
+  return (bodies.length === 0 ? [command] : bodies).some(unsafe);
 }
 function writesOutside(
   parts: ReadonlyArray<string>,
