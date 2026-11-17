@@ -177,6 +177,28 @@ describe("filterSidebarV2VisibleThreads", () => {
       filterSidebarV2VisibleThreads(threads, null, new Set()).map((thread) => thread.id),
     ).toEqual(["lesson", "fork"]);
   });
+
+  it("shows only lesson threads when the lessons filter is active", () => {
+    const learning = makeThreadFixture({ id: ThreadId.make("learning") });
+    const lesson = makeThreadFixture({
+      id: ThreadId.make("lesson"),
+      projectId: ProjectId.make("coding-project"),
+      tags: ["lesson"],
+    });
+    const ordinary = makeThreadFixture({
+      id: ThreadId.make("ordinary"),
+      projectId: ProjectId.make("coding-project"),
+    });
+    expect(
+      filterSidebarV2VisibleThreads(
+        [learning, lesson, ordinary],
+        null,
+        new Set(),
+        true,
+        new Set(["environment-test:project-test"]),
+      ).map((thread) => thread.id),
+    ).toEqual(["learning", "lesson"]);
+  });
 });
 function makeLatestRun(overrides?: {
   completedAt?: string | null;
@@ -1583,6 +1605,23 @@ describe("resolveSidebarRouteReveal", () => {
         findThread,
       }),
     ).toEqual({ pendingKey: hiddenKey, widensScope: true });
+  });
+
+  it("leaves the Lessons view for a newly opened thread that is not a lesson", () => {
+    const resolve = (learningProjectKeys: ReadonlySet<string>) =>
+      resolveSidebarRouteReveal({
+        reveal: { observedKey: "environment-test:other", pendingKey: null },
+        routeKey: hiddenKey,
+        routeKeyInPlace: false,
+        isSearching: false,
+        scopedProjectKeys: null,
+        lessonsOnly: true,
+        learningProjectKeys,
+        delegatedUnderParent: new Set(),
+        findThread,
+      }).widensScope;
+    expect(resolve(new Set())).toBe(true);
+    expect(resolve(new Set(["environment-test:project-other"]))).toBe(false);
   });
 
   it("never widens for a thread whose reveal already completed", () => {

@@ -30,6 +30,7 @@ import {
 } from "./entities.ts";
 
 const EMPTY_THREADS: ReadonlyArray<OrchestrationV2ThreadShell> = Object.freeze([]);
+const EMPTY_LEARNING_PROJECT_IDS: ReadonlySet<string> = new Set();
 const EMPTY_SCOPED_THREAD_REFS: ReadonlyArray<ScopedThreadRef> = Object.freeze([]);
 const EMPTY_THREAD_INDEX: ReadonlyMap<ThreadId, OrchestrationV2ThreadShell> = new Map();
 const EMPTY_SUBAGENT_REQUESTS: ReadonlyMap<ThreadId, never> = new Map<ThreadId, never>();
@@ -261,6 +262,9 @@ export function createEnvironmentThreadShellAtoms(input: {
   readonly hiddenThreadTagsAtom: (
     environmentId: EnvironmentId,
   ) => Atom.Atom<ReadonlyArray<string> | null>;
+  readonly learningProjectIdsAtom?: (
+    environmentId: EnvironmentId,
+  ) => Atom.Atom<ReadonlySet<string>>;
 }) {
   // Point reads and aggregate lists share values without keeping an atom alive
   // for every listed thread. Replaced source objects can be collected.
@@ -664,6 +668,10 @@ export function createEnvironmentThreadShellAtoms(input: {
       (environmentId) => ({
         environmentId,
         hiddenTags: get(input.hiddenThreadTagsAtom(environmentId)),
+        learningProjectIds:
+          input.learningProjectIdsAtom === undefined
+            ? EMPTY_LEARNING_PROJECT_IDS
+            : get(input.learningProjectIdsAtom(environmentId)),
       }),
     );
     // Read shells only while some environment hides tags, so streaming ticks cost nothing otherwise.

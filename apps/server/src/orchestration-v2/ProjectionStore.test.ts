@@ -300,6 +300,16 @@ const addRolledBackRecoveryCandidate = Effect.fn("addRolledBackRecoveryCandidate
   return threadId;
 });
 
+it("gives a New Lesson thread's shell the derived lesson tag", () => {
+  const lesson = { topic: "Forces", depth: "overview", purpose: "outcome" } as const;
+  assert.deepEqual(ProjectionStore.shellTags({ tags: ["private"], lesson }), {
+    tags: ["private", "lesson"],
+  });
+  assert.deepEqual(ProjectionStore.shellTags({ tags: ["lesson"], lesson }), { tags: ["lesson"] });
+  assert.deepEqual(ProjectionStore.shellTags({ tags: ["private"] }), { tags: ["private"] });
+  assert.deepEqual(ProjectionStore.shellTags({}), {});
+});
+
 it.effect("routes full projection reads to readers and retains uncommitted writer state", () =>
   Effect.gen(function* () {
     const store = yield* ProjectionStore.ProjectionStoreV2;

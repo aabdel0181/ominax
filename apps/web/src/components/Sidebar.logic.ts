@@ -54,6 +54,7 @@ import { isModelPickerOpen, subscribeToModelPickerVisibility } from "../modelPic
 import { shortcutModifierStore } from "../shortcutModifierState";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
+import { isLessonThread } from "@t3tools/client-runtime/state/threads";
 
 export function shouldNavigateAfterThreadPark(input: {
   readonly threadKey: string;
@@ -597,6 +598,8 @@ export function filterSidebarV2VisibleThreads<
   threads: readonly T[],
   scopedProjectKeys: ReadonlySet<string> | null,
   delegatedUnderParent: ReadonlySet<string>,
+  lessonsOnly = false,
+  learningProjectKeys: ReadonlySet<string> = new Set(),
 ): T[] {
   return threads.filter(
     (thread) =>
@@ -608,7 +611,12 @@ export function filterSidebarV2VisibleThreads<
         delegatedUnderParent,
       ) &&
       (scopedProjectKeys === null ||
-        scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+        scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)) &&
+      (!lessonsOnly ||
+        isLessonThread(
+          { ...thread, projectId: `${thread.environmentId}:${thread.projectId}` },
+          learningProjectKeys,
+        )),
   );
 }
 

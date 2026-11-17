@@ -16,6 +16,8 @@ Choose **New lesson** beside New thread, find **New lesson** in the command pale
 
 Lessons don't track file changes, so they show no changed files and can't restore files; files a lesson writes, like notes or visuals, stay as written.
 
+To keep ordinary chats in a learning project with your lessons, open that project's settings and turn on **Learning project**. Its chats stay in the sidebar, count as lessons for the **Lessons** filter, and never auto-settle. Turn the setting off there to return the project to normal chats.
+
 ## Settings
 
 Open **Settings → Threads → Side chats** to choose the model for new side chats, change how they explain things, and attach skills. Skills are added when a side chat starts where its provider supports them; a few providers can only see the skill name.

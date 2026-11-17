@@ -222,8 +222,12 @@ export function resolveAutoSettlementAt(input: {
   readonly autoSettleAfterDays: number | null;
   readonly autoSettleOnMerge: boolean;
   readonly autoSettleKeepPullRequests?: boolean;
+  readonly learningProject?: boolean;
 }): DateTime.Utc | null {
   const { thread } = input;
+  if (input.learningProject === true && thread.lineage.relationshipToParent !== "subagent") {
+    return null;
+  }
   let pullRequest = input.pullRequest;
   const links = settlementPullRequestLinks(thread.pullRequests ?? []);
   if (links.some((link) => link.snapshot === null)) return null;
@@ -294,12 +298,14 @@ export function autoSettlementSettingsKey(
     settings.sidebarAutoSettleOnMerge,
     settings.sidebarAutoSettleAfterDays,
     settings.sidebarAutoSettleKeepPullRequests,
+    settings.learningProject,
     Object.entries(settings.projectSettingsOverrides)
       .filter(
         ([, entry]) =>
           entry.sidebarAutoSettleOnMerge !== undefined ||
           entry.sidebarAutoSettleAfterDays !== undefined ||
-          entry.sidebarAutoSettleKeepPullRequests !== undefined,
+          entry.sidebarAutoSettleKeepPullRequests !== undefined ||
+          entry.learningProject !== undefined,
       )
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([projectId, entry]) => [
@@ -309,6 +315,7 @@ export function autoSettlementSettingsKey(
           ? "inherit"
           : entry.sidebarAutoSettleAfterDays,
         entry.sidebarAutoSettleKeepPullRequests ?? "inherit",
+        entry.learningProject ?? "inherit",
       ]),
   ]);
 }
@@ -399,6 +406,7 @@ export const make = Effect.gen(function* () {
           autoSettleAfterDays: currentSettings.sidebarAutoSettleAfterDays,
           autoSettleOnMerge: currentSettings.sidebarAutoSettleOnMerge,
           autoSettleKeepPullRequests: currentSettings.sidebarAutoSettleKeepPullRequests,
+          learningProject: currentSettings.learningProject,
         });
         if (settledAt === null) return thread;
         const uuid = yield* random.uuidV4();
@@ -429,6 +437,8 @@ export const make = Effect.gen(function* () {
       (thread) => {
         if (thread.lineage.relationshipToParent === "subagent") return settleThread(thread, null);
         const projectSettings = resolveProjectSettings(settings, thread.projectId).settings;
+        // Learning-project threads never settle, so they skip the git and pull request lookups.
+        if (projectSettings.learningProject) return Effect.succeed(null);
         // Skip no-op decisions; actual settlement still reads fresh settings before dispatch.
         const settledAt = resolveAutoSettlementAt({
           thread,
@@ -437,6 +447,7 @@ export const make = Effect.gen(function* () {
           autoSettleAfterDays: projectSettings.sidebarAutoSettleAfterDays,
           autoSettleOnMerge: projectSettings.sidebarAutoSettleOnMerge,
           autoSettleKeepPullRequests: projectSettings.sidebarAutoSettleKeepPullRequests,
+          learningProject: projectSettings.learningProject,
         });
         return settledAt === null ? Effect.succeed(thread) : settleThread(thread, null);
       },
@@ -516,6 +527,7 @@ export const make = Effect.gen(function* () {
             autoSettleAfterDays: settings.sidebarAutoSettleAfterDays,
             autoSettleOnMerge: settings.sidebarAutoSettleOnMerge,
             autoSettleKeepPullRequests: settings.sidebarAutoSettleKeepPullRequests,
+            learningProject: settings.learningProject,
           }) !== null
         );
       });

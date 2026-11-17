@@ -46,6 +46,7 @@ export const environmentThreadShells = createEnvironmentThreadShellAtoms({
   catalogValueAtom: environmentCatalog.catalogValueAtom,
   snapshotAtom: threadEnvironment.snapshotAtom,
   hiddenThreadTagsAtom: serverEnvironment.hiddenThreadTagsAtom,
+  learningProjectIdsAtom: serverEnvironment.learningProjectIdsAtom,
 });
 const steadyShells = createSteadyShellAtoms({
   catalogValueAtom: environmentCatalog.catalogValueAtom,
@@ -63,6 +64,7 @@ export const steadyNavigationThreadShellsAtom = createEnvironmentThreadShellAtom
   catalogValueAtom: environmentCatalog.catalogValueAtom,
   snapshotAtom: steadyShells.snapshotAtom,
   hiddenThreadTagsAtom: serverEnvironment.hiddenThreadTagsAtom,
+  learningProjectIdsAtom: serverEnvironment.learningProjectIdsAtom,
 }).navigationThreadShellsAtom;
 export const childThreadApprovalsAtom = createChildThreadApprovalsAtom({
   childThreadInputsAtom: environmentThreadShells.childThreadInputsAtom,

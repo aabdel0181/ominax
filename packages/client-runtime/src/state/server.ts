@@ -1263,6 +1263,16 @@ export function createServerEnvironmentAtoms<R, E>(
       Atom.withLabel(`environment-data:server:hidden-thread-tags:${environmentId}`),
     ),
   );
+  const learningProjectIdsAtom = Atom.family((environmentId: EnvironmentId) =>
+    Atom.make((get) => {
+      const settings = get(settingsValueAtom(environmentId));
+      return new Set(
+        Object.entries(settings?.projectSettingsOverrides ?? {})
+          .filter(([, override]) => override.learningProject === true)
+          .map(([projectId]) => projectId),
+      );
+    }).pipe(Atom.withLabel(`environment-data:server:learning-project-ids:${environmentId}`)),
+  );
   const usagePricesAtom = Atom.family((environmentId: EnvironmentId) =>
     Atom.make((get) => {
       const overrides = get(settingsValueAtom(environmentId))?.usagePriceOverrides ?? {};
@@ -1450,6 +1460,7 @@ export function createServerEnvironmentAtoms<R, E>(
     updateStateAtom,
     settingsValueAtom,
     hiddenThreadTagsAtom,
+    learningProjectIdsAtom,
     usageModelFilterAtom,
     providersValueAtom,
     providerAuthState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {

@@ -56,6 +56,12 @@ describe("V2 client presentation", () => {
     expect(effectiveSnoozed(active, { now: "2026-06-20T00:05:00.000Z" })).toBe(false);
   });
 
+  it("keeps the shell's tags, so the sidebar's Lessons filter sees the derived lesson tag", () => {
+    expect(presentThreadShell(environmentId, { ...v2ThreadShell, tags: ["lesson"] }).tags).toEqual([
+      "lesson",
+    ]);
+  });
+
   it("moves a running thread with any question out of Working", () => {
     for (const capability of [{ blocking: false }, { blocking: true }, {}]) {
       const shell = presentThreadShell(environmentId, {

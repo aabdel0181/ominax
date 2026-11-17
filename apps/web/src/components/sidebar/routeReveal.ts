@@ -80,6 +80,8 @@ export function resolveSidebarRouteReveal<T extends RevealableThread>(input: {
   readonly routeKeyInPlace: boolean;
   readonly isSearching: boolean;
   readonly scopedProjectKeys: ReadonlySet<string> | null;
+  readonly lessonsOnly?: boolean;
+  readonly learningProjectKeys?: ReadonlySet<string>;
   readonly delegatedUnderParent: ReadonlySet<string>;
   readonly findThread: (key: string) => T | undefined;
 }): { readonly pendingKey: string | null; readonly widensScope: boolean } {
@@ -90,8 +92,14 @@ export function resolveSidebarRouteReveal<T extends RevealableThread>(input: {
   const thread = pendingKey === null || isSearching ? undefined : findThread(pendingKey);
   const widensScope =
     thread !== undefined &&
-    scopedProjectKeys !== null &&
-    filterSidebarV2VisibleThreads([thread], scopedProjectKeys, delegatedUnderParent).length === 0 &&
+    (scopedProjectKeys !== null || input.lessonsOnly === true) &&
+    filterSidebarV2VisibleThreads(
+      [thread],
+      scopedProjectKeys,
+      delegatedUnderParent,
+      input.lessonsOnly,
+      input.learningProjectKeys,
+    ).length === 0 &&
     filterSidebarV2VisibleThreads([thread], null, delegatedUnderParent).length === 1;
   return { pendingKey, widensScope };
 }

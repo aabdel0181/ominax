@@ -12,6 +12,8 @@ import { AsyncResult, Atom } from "effect/reactivity";
 import { threadKey } from "./entities.ts";
 import { hiddenThreadKeys, type TagFilteredEnvironment } from "./threadTagFilter.ts";
 
+const EMPTY_LEARNING_PROJECT_IDS: ReadonlySet<string> = new Set();
+
 export interface ArchivedSnapshotEntry {
   readonly environmentId: EnvironmentId;
   readonly snapshot: OrchestrationV2ArchivedShellSnapshot;
@@ -68,6 +70,9 @@ export function createArchivedThreadSnapshotsAtomFamily<E>(options: {
   readonly hiddenThreadTagsAtom: (
     environmentId: EnvironmentId,
   ) => Atom.Atom<ReadonlyArray<string> | null>;
+  readonly learningProjectIdsAtom?: (
+    environmentId: EnvironmentId,
+  ) => Atom.Atom<ReadonlySet<string>>;
   /** Live threads the tag filter hides, so archived children of hidden parents stay hidden. */
   readonly hiddenThreadKeysAtom: Atom.Atom<ReadonlySet<string>>;
   /** Live threads, so archived children of loaded, visible parents stay visible. */
@@ -96,6 +101,10 @@ export function createArchivedThreadSnapshotsAtomFamily<E>(options: {
           environmentId,
           threads: snapshot?.threads ?? [],
           hiddenTags: get(options.hiddenThreadTagsAtom(environmentId)),
+          learningProjectIds:
+            options.learningProjectIdsAtom === undefined
+              ? EMPTY_LEARNING_PROJECT_IDS
+              : get(options.learningProjectIdsAtom(environmentId)),
         });
 
         if (error === null && result._tag === "Failure") {
