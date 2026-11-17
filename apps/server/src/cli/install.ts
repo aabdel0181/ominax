@@ -1,6 +1,6 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { T3_LEARN_COMMAND, T3_LEARN_REPOSITORY } from "@t3tools/shared/t3LearnIdentity";
-import { pathSetupCommand } from "@t3tools/shared/shell";
+import { pathSetupCommand, resolveCommandPath } from "@t3tools/shared/shell";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -159,7 +159,7 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
         ? [`${T3_LEARN_COMMAND}.cmd`, `${T3_LEARN_COMMAND}.exe`]
         : [T3_LEARN_COMMAND]) {
         const candidate = path.join(entry, name);
-        if (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))) return candidate;
+        if (yield* resolveCommandPath(candidate, { env: environment })) return candidate;
       }
     }
     return undefined;
