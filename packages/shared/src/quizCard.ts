@@ -22,7 +22,6 @@ export function cardReplyProblem(input: {
   readonly unknownNumber?: { readonly answer: number; readonly tolerance: number };
   /** A quiz answer, or a number card's bare answer and "<answer> <unit>". */
   readonly answers?: ReadonlyArray<string>;
-  readonly numberCard?: boolean;
 }): string | undefined {
   if (input.answeredCard && !input.visibleSinceAnswer && !input.verdict?.trim()) {
     return "The learner's last message answered a card, and no verdict on it is visible; they never see your thinking. Put your verdict on that answer (right or wrong, and why, in a line or two) in verdict, then call the card again.";
@@ -48,88 +47,20 @@ export function cardReplyProblem(input: {
       ? statesAnswer(`${shown}\n${input.previousText ?? ""}`, answer)
       : answer.trim().split(/\s+/u).length >= 3 && statesAnswer(shown, answer),
   );
-  if (answerAppears)
-    return "The answer is stated just above; pose a new case that needs one more step.";
-  if (
-    (input.answers ?? []).some((answer) =>
-      answerIsRestated(shown, answer, input.numberCard === true),
-    )
-  )
+  if (answerAppears || (input.answers ?? []).some((answer) => answerIsRestated(shown, answer)))
     return "The answer is stated just above; pose a new case that needs one more step.";
   if (input.purpose !== undefined) return undefined;
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
 }
 
-const answerNumber = (answer: string) => {
-  const match = answer.replace(/[−–]/gu, "-").match(/-?(?:\d+(?:\.\d*)?|\.\d+)/u);
-  return match === null ? undefined : Number(match[0]);
-};
-
-const visibleNumbers = (text: string) =>
-  [...text.replace(/[−–]/gu, "-").matchAll(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu)].map((match) => ({
-    value: Number(match[0]),
-    index: match.index,
-  }));
-
-function computedAnswerAppears(text: string, answer: number): boolean {
-  if (answer === 0) return false;
-  if (
-    !/[=×*÷/+-]|\b(?:sin|cos|multiply|divid|times|component|average|velocity|force|weight)\b/iu.test(
-      text,
-    )
-  )
-    return false;
-  const numbers = visibleNumbers(text);
-  const trigonometry = /\b(?:sin|cos)\b/iu.test(text);
-  const close = (value: number) =>
-    Number.isFinite(value) && Math.abs(value - answer) <= Math.max(1e-6, Math.abs(answer) * 1e-6);
-  for (let index = 0; index < numbers.length; index += 1) {
-    const left = numbers[index]!.value;
-    const right = numbers[index + 1]?.value;
-    if (right === undefined) continue;
-    const between = text.slice(numbers[index]!.index, numbers[index + 1]!.index);
-    const near = between.length <= 32;
-    if (near && /×|\*/u.test(between) && close(left * right)) return true;
-    if (near && /÷|\//u.test(between) && right !== 0 && close(left / right)) return true;
-    if (near && /\+/u.test(between) && close(left + right)) return true;
-    if (near && /(?<![\d.])-(?![\d.])/u.test(between) && close(left - right)) return true;
-  }
-  if (trigonometry) {
-    for (const left of numbers) {
-      for (const right of numbers) {
-        if (
-          left !== right &&
-          right.value >= -1 &&
-          right.value <= 1 &&
-          close(left.value * right.value)
-        )
-          return true;
-      }
-    }
-  }
-  return false;
-}
-
-function answerIsRestated(text: string, answer: string, numberCard: boolean): boolean {
-  const number = answerNumber(answer);
-  if (
-    numberCard &&
-    number !== undefined &&
-    /^\s*[−+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:\s+\S+)?\s*$/u.test(answer) &&
-    computedAnswerAppears(text, number)
-  )
-    return true;
+// A rule the reply already wrote out, restated as the card's answer (r13 cw2).
+function answerIsRestated(text: string, answer: string): boolean {
   const wanted = new Set(coverageTokens(answer));
   if (wanted.size < 4) return false;
   return text.split(/(?<=[.!?])\s+|\n{2,}/u).some((sentence) => {
-    const tokens = coverageTokens(sentence);
-    if (tokens.length < 4) return false;
-    const overlap = tokens.filter((token) => wanted.has(token)).length / wanted.size;
-    return (
-      overlap >= 0.75 &&
-      overlap >= tokens.filter((token) => wanted.has(token)).length / tokens.length
-    );
+    const tokens = new Set(coverageTokens(sentence));
+    return [...wanted].filter((token) => tokens.has(token)).length >= 0.75 * wanted.size;
   });
 }
 
@@ -354,12 +285,10 @@ export function parseNumberAnswer(input: string): number | undefined {
 
 export function numberAnswerRight(number: NonNullable<QuestionCard["number"]>, input: string) {
   const parsed = parseNumberAnswer(input);
-  // Keep rounded values from trig and similar calculations within one percent of the key.
-  const minimumRelativeTolerance = Math.abs(number.answer) * 0.01;
+  // Relative slack only absorbs float error such as 0.1 + 0.2.
   return (
     parsed !== undefined &&
-    Math.abs(parsed - number.answer) <=
-      Math.max(number.tolerance, minimumRelativeTolerance, 1e-9 * Math.abs(number.answer))
+    Math.abs(parsed - number.answer) <= number.tolerance + 1e-9 * Math.abs(number.answer)
   );
 }
 

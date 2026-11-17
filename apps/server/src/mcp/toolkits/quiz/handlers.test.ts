@@ -249,7 +249,6 @@ it.effect("refuses an answer stated since the learner's last message or just bef
     const refusing = yield* toolkit
       .handle("quiz_card", {
         ...card,
-        purpose: "opening-check",
         reply: "Friction matches the push it opposes, so a 20 N push means 20 N of friction.",
         answer: "20 N",
       })
@@ -284,24 +283,6 @@ it.effect("refuses an answer stated since the learner's last message or just bef
       .handle("quiz_card", { ...card, verdict: "Correct, 20 N." })
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(verdictAlreadyShown.at(-1)?.result).toMatchObject({ quizCard: { reply: card.reply } });
-
-    const duplicateVerdict = yield* toolkit
-      .handle("quiz_card", {
-        ...card,
-        purpose: "opening-check",
-        reply:
-          "One claim is wrong: high temperature flattens probabilities but never changes their order.",
-        verdict:
-          "Not saved yet: one claim fails. High temperature does not change the order; it only flattens probabilities.",
-      })
-      .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild({ startImmediately: true }));
-    yield* TestClock.adjust("1 second");
-    expect((yield* Fiber.join(duplicateVerdict)).at(-1)?.result).toMatchObject({
-      quizCard: {
-        reply:
-          "One claim is wrong: high temperature flattens probabilities but never changes their order.",
-      },
-    });
 
     // The verdict "Correct, 20 N." is on screen, so a new card answered 20 N copies it.
     const verdictNumber = yield* toolkit

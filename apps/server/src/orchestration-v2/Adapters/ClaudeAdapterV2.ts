@@ -9221,12 +9221,24 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             }),
         });
 
+        // A lesson turn ends at its card, so text after it is a recap (r13 phys); a steer's answer still shows.
+        const lessonRecapAfterCard = (context: ActiveClaudeTurnContext) =>
+          Ref.get(steeredTurns).pipe(
+            Effect.map(
+              (steered) =>
+                isLessonTurn(context.input) &&
+                context.assistant.cardSeen &&
+                !steered.has(context.providerTurnId),
+            ),
+          );
+
         const emitHeldAssistantTextAsReasoning = Effect.fnUntraced(function* (
           context: ActiveClaudeTurnContext,
         ) {
           if (context.assistant.heldText.length === 0) return;
           const joined = context.assistant.heldText.map((item) => item.text).join("\n");
           if (
+            !(yield* lessonRecapAfterCard(context)) &&
             joined.length > 150 &&
             replyCoverage(joined, context.assistant.cardReplies.join("\n")) < 0.85
           ) {
@@ -9297,7 +9309,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             yield* flushHeldAssistantText(context);
             return;
           }
-          if (context.assistant.cardSeen) {
+          if (yield* lessonRecapAfterCard(context)) {
             for (const item of context.assistant.heldText)
               yield* emitHeldAssistantTextItemAsReasoning(context, item);
             context.assistant.heldText = [];

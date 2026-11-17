@@ -4643,6 +4643,14 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       tool: "mcp__t3-code__question_card",
       reply: "Try it.",
       lesson: true,
+      afterCardText:
+        "The card above covers the idea. The next check revisits the same teaching in a fresh setting, while keeping the learner's answer and the card's verdict separate. This deliberately long recap exercises the adapter's post-card text path instead of the short verdict handling branch, and it includes enough ordinary explanatory prose to resemble the physics walk's repeated paragraph rather than a compact verdict or a tool status line.",
+      expected: ["reasoning", "reasoning", "reasoning"],
+    },
+    {
+      tool: "mcp__t3-code__question_card",
+      reply: "Try it.",
+      lesson: true,
       turnText: "It slows down.\n\n(card card-1)",
       heldText: "Right, friction slows it.\n\nFriction opposes sliding.",
       verdict: "Right: friction slows it.",
@@ -4858,9 +4866,13 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                 snapshot("00000000-0000-4000-8000-000000000905", [
                   { type: "text", text: afterCardText },
                 ]),
-                snapshot("00000000-0000-4000-8000-000000000906", [
-                  { type: "tool_use", id: "tool-2", name: afterCardTool ?? "Read", input: {} },
-                ]),
+                ...(afterCardTool === undefined
+                  ? []
+                  : [
+                      snapshot("00000000-0000-4000-8000-000000000906", [
+                        { type: "tool_use", id: "tool-2", name: afterCardTool, input: {} },
+                      ]),
+                    ]),
               ]),
           makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000904", result: "" }),
         ];

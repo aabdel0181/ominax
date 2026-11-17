@@ -290,16 +290,7 @@ describe("quiz cards", () => {
       cardReplyProblem({ reply: "Slowing down", answers: ["Slowing down"], shownBefore: 250 }),
     ).toBeUndefined();
   });
-  it("refuses a one-substitution calculation and a copied rule, while keeping a new case", () => {
-    expect(
-      cardReplyProblem({
-        reply:
-          "The vertical component is v sin θ. With v = 20 m/s and sin 30° = 0.5, use the component rule.",
-        answers: ["10 m/s"],
-        numberCard: true,
-        shownBefore: 0,
-      }),
-    ).toMatch(/stated/u);
+  it("refuses a rule copied from the reply, but not one sharing only repeated words", () => {
     expect(
       cardReplyProblem({
         reply: "A required check failed, so 0.799 is a cap rather than the score it earned.",
@@ -309,26 +300,8 @@ describe("quiz cards", () => {
     ).toMatch(/stated/u);
     expect(
       cardReplyProblem({
-        reply: "Use a different mass and angle, then combine the two forces before solving.",
-        answers: ["10 m/s"],
-        numberCard: true,
-        shownBefore: 250,
-      }),
-    ).toBeUndefined();
-    expect(
-      cardReplyProblem({
-        reply:
-          "By Pythagoras, the overall speed is the square root of the east component squared plus the north component squared.",
-        answers: ["13 m/s"],
-        numberCard: true,
-        shownBefore: 250,
-      }),
-    ).toBeUndefined();
-    expect(
-      cardReplyProblem({
-        reply: "The sine rule remains available for a zero result.",
-        answers: ["0"],
-        numberCard: true,
+        reply: "The verifier checks wiring, and the verifier checks each part.",
+        answers: ["Hold it until the verifier checks each pin's net"],
         shownBefore: 250,
       }),
     ).toBeUndefined();
@@ -505,8 +478,6 @@ describe("quiz cards", () => {
     expect(numberAnswerRight({ answer: 10, tolerance: 1 }, "9")).toBe(true);
     expect(numberAnswerRight({ answer: 10, tolerance: 1 }, "11")).toBe(true);
     expect(numberAnswerRight({ answer: 10, tolerance: 1 }, "8.9")).toBe(false);
-    expect(numberAnswerRight({ answer: 0.405, tolerance: 0 }, "0.409")).toBe(true);
-    expect(numberAnswerRight({ answer: 0.405, tolerance: 0 }, "0.41")).toBe(false);
     expect(numberAnswerRight({ answer: 0.1 + 0.2, tolerance: 0 }, "0.3")).toBe(true);
     expect(numberAnswerRight({ answer: 9.81, tolerance: 0 }, "9,81")).toBe(true);
     expect(parseNumberAnswer("6.67e-11")).toBe(6.67e-11);
