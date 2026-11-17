@@ -201,6 +201,7 @@ import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
 import {
   claudeLocalSettingsDirectory,
   claudeSignedOutMessage,
+  hasClaudeManagedMcpConfig,
   makeClaudeEnvironment,
   mergeClaudeProcessEnvironment,
   resolveClaudeHomePath,
@@ -2116,7 +2117,10 @@ export function claudeQueryEnvironment(
     return environment;
   }
   return {
-    ...(lessonTurn ? withLessonGitNetworkBlocked(environment) : environment),
+    ...(lessonTurn
+      ? // claude.ai connectors are the user's own MCP servers too (APP-137).
+        { ...withLessonGitNetworkBlocked(environment), ENABLE_CLAUDEAI_MCP_SERVERS: "false" }
+      : environment),
     ...(promptCacheTtl === undefined ? {} : { CLAUDE_CODE_PROMPT_CACHE_TTL: promptCacheTtl }),
     ...(blockingMcpConnect ? { MCP_CONNECTION_NONBLOCKING: "0" } : {}),
   };
@@ -2207,6 +2211,8 @@ export function makeClaudeQueryOptions(input: {
   // Flag settings, because a user's settings.json env beats the process env in Claude Code.
   readonly toolSearchOverride?: "true";
   readonly lessonTurn?: boolean;
+  /** managed-mcp.json is present: it already excludes other MCP config and forbids strict mode. */
+  readonly managedMcpConfig?: boolean;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection, input.modelCatalog);
   const {
@@ -2359,6 +2365,14 @@ export function makeClaudeQueryOptions(input: {
       : {}),
     ...(input.environment === undefined ? {} : { env: input.environment }),
     ...(input.mcpServers === undefined ? {} : { mcpServers: input.mcpServers }),
+    // Lessons skip the user's own skills, plugins and MCP servers: a stale personal skill taught
+    // retired code as current (APP-137). Shared project settings and CLAUDE.md still load.
+    ...(input.lessonTurn === true
+      ? {
+          settingSources: ["project" as const],
+          ...(input.managedMcpConfig === true ? {} : { strictMcpConfig: true }),
+        }
+      : {}),
     systemPrompt: {
       type: "preset" as const,
       preset: "claude_code" as const,
@@ -2386,7 +2400,7 @@ export function makeClaudeQueryOptions(input: {
               ? {
                   PreToolUse: [
                     {
-                      matcher: "Bash|Edit|Write|NotebookEdit|Monitor",
+                      matcher: "Bash|Edit|Write|NotebookEdit|Monitor|WebFetch",
                       hooks: [lessonToolGuard],
                       onFailure: "block" as const,
                     },
@@ -5823,6 +5837,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
     },
   );
   const routeModelCatalog = adapterOptions.routeModelCatalog ?? Effect.succeed;
+  const managedMcpConfig = yield* hasClaudeManagedMcpConfig().pipe(
+    Effect.provideService(FileSystem.FileSystem, fileSystem),
+  );
 
   // Claude Code's own subagent TTL setting, in its precedence order. Unset or unreadable means
   // Anthropic's default applies.
@@ -13308,6 +13325,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             ),
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,
             lessonTurn: isLessonTurn(turnInput),
+            managedMcpConfig,
             ...(mcpOverrides.allowedTools === undefined
               ? {}
               : { allowedTools: mcpOverrides.allowedTools }),

@@ -450,7 +450,8 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
       await run("Bash", { command: "cd ~/cw/circuit-world && git fetch -q origin" }),
       denied,
     );
-    assert.equal(matcher.matcher, "Bash|Edit|Write|NotebookEdit|Monitor");
+    assert.equal(matcher.matcher, "Bash|Edit|Write|NotebookEdit|Monitor|WebFetch");
+    assert.deepEqual(await run("WebFetch", { url: "https://example.com", prompt: "x" }), denied);
     assert.deepEqual(await run("Monitor", { command: "rm -rf ~/cw-data/x" }), denied);
     assert.deepEqual(
       await run("Write", { file_path: "/home/quokka/cw/circuit-world/x.py", content: "" }),
@@ -1419,6 +1420,12 @@ describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
         assert.equal(lessonOptions?.env?.GIT_ALLOW_PROTOCOL, "");
         assert.isUndefined(regularOptions?.hooks?.PreToolUse);
         assert.isUndefined(regularOptions?.env?.GIT_ALLOW_PROTOCOL);
+        // The user's own skills, plugins and MCP servers stay out of lessons (APP-137).
+        assert.deepEqual(lessonOptions?.settingSources, ["project"]);
+        assert.isTrue(lessonOptions?.strictMcpConfig);
+        assert.equal(lessonOptions?.env?.ENABLE_CLAUDEAI_MCP_SERVERS, "false");
+        assert.isUndefined(regularOptions?.settingSources);
+        assert.isUndefined(regularOptions?.strictMcpConfig);
       }),
     ).pipe(
       Effect.provide(

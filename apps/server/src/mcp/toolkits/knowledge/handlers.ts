@@ -17,6 +17,69 @@ import { KnowledgeToolkit } from "./tools.ts";
 const toFailure = (error: { readonly message: string }) =>
   new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message });
 
+// First person only: card verdicts tell the learner "you didn't check…" all the time.
+const HEDGE =
+  /\bI\s+(?:have\s+not|haven['’]t|did\s+not|didn['’]t|cannot|can['’]t|could\s+not|couldn['’]t)\s+(?:yet\s+)?(?:check|trac|verif|confirm|read|look)\w*|\bI(?:['’]m|\s+am)\s+not\s+sure\b|\bunverified\b|\bnot\s+(?:yet\s+)?(?:checked|verified)\b/iu;
+const STOPWORDS = new Set(
+  "that this with from have what when then than they them there their which would could should into only just each every does about your will been were also more most some such".split(
+    " ",
+  ),
+);
+const keyWords = (text: string) =>
+  new Set(
+    (text.toLowerCase().match(/[a-z0-9]+/gu) ?? []).filter(
+      (w) => w.length >= 4 && !STOPWORDS.has(w),
+    ),
+  );
+const sourceKey = (source: string) =>
+  source
+    .replace(/#.*$|:[\d,-]+$/u, "")
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== ".")
+    .slice(-2)
+    .join("/");
+const mentionsPath = (text: string, key: string) =>
+  new RegExp(`(?:^|[\\s/'"\`=(~])${RegExp.escape(key)}(?:$|[\\s'"\`:),;])`, "u").test(text);
+
+type LessonLine = { readonly kind: "said" | "read"; readonly text: string };
+
+/**
+ * A claim that rests on something the lesson itself hedged ("I haven't traced…", "hypothetical")
+ * saves only once its `source` was read after that hedge; a cited `source` must have been read.
+ */
+function uncheckedClaimProblem(
+  lines: ReadonlyArray<LessonLine>,
+  claims: ReadonlyArray<{ readonly claim: string; readonly source?: string | undefined }>,
+): string | undefined {
+  for (const { claim, source } of claims) {
+    const key = source === undefined ? undefined : sourceKey(source);
+    const readAt = (from: number) =>
+      key !== undefined &&
+      key.length > 0 &&
+      lines.some(
+        (line, index) => index > from && line.kind === "read" && mentionsPath(line.text, key),
+      );
+    if (key !== undefined && !readAt(-1)) {
+      return `Not saved: the claim "${claim}" cites ${source}, which this lesson never read. Read it, check the claim against it, and save again.`;
+    }
+    const words = keyWords(claim);
+    for (let index = lines.length - 1; index >= 0; index--) {
+      const line = lines[index]!;
+      if (line.kind !== "said") continue;
+      const hedge = line.text
+        .split(/(?<=[.!?])\s+|\n+/u)
+        .find(
+          (sentence) =>
+            HEDGE.test(sentence) && [...keyWords(sentence)].filter((w) => words.has(w)).length >= 2,
+        );
+      if (hedge === undefined) continue;
+      if (readAt(index)) break;
+      return `Not saved: the claim "${claim}" rests on a point this lesson hedged: "${hedge.trim()}". Read the file the project actually runs for it, correct anything you taught wrong, then save again with that file as the claim's \`source\`. If you can't check it, tell the learner it's unchecked and don't save.`;
+    }
+  }
+  return undefined;
+}
+
 const handlers = {
   knowledge_map_read: McpToolAccess.readsAsCaller(() =>
     Effect.gen(function* () {
@@ -37,11 +100,33 @@ const handlers = {
         });
       }
       const { projection } = yield* readThread(undefined, ["messages", "turnItems"], {
-        turnItemTypes: ["dynamic_tool"],
+        turnItemTypes: ["dynamic_tool", "assistant_message", "command_execution"],
       });
-      const items = projection.turnItems
-        .toSorted((a, b) => a.ordinal - b.ordinal)
-        .flatMap((item): ReadonlyArray<Parameters<typeof explainBackRetestProblem>[0][number]> => {
+      const sorted = projection.turnItems.toSorted((a, b) => a.ordinal - b.ordinal);
+      const messageText = new Map(projection.messages.map((message) => [message.id, message.text]));
+      const lines = sorted.flatMap((item): ReadonlyArray<LessonLine> => {
+        if (item.type === "assistant_message")
+          return [{ kind: "said", text: messageText.get(item.messageId) ?? item.text }];
+        if (item.type === "command_execution") return [{ kind: "read", text: item.input }];
+        if (item.type !== "dynamic_tool") return [];
+        if (resolveT3McpToolId(item.toolName) === null)
+          return [{ kind: "read", text: JSON.stringify(item.input ?? null) }];
+        if (lessonCardFromToolItem(item) === undefined) return [];
+        const input = (item.input ?? {}) as Readonly<Record<string, unknown>>;
+        const said = ["question", "reply", "verdict"].flatMap((field) =>
+          typeof input[field] === "string" ? [input[field]] : [],
+        );
+        return [{ kind: "said", text: said.join("\n") }];
+      });
+      const uncheckedProblem = uncheckedClaimProblem(lines, claims);
+      if (uncheckedProblem !== undefined) {
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: uncheckedProblem,
+        });
+      }
+      const items = sorted.flatMap(
+        (item): ReadonlyArray<Parameters<typeof explainBackRetestProblem>[0][number]> => {
           if (item.type !== "dynamic_tool") return [];
           const tool = resolveT3McpToolId(item.toolName);
           if (tool === "knowledge_map_mark_done")
@@ -57,7 +142,8 @@ const handlers = {
               kind: purpose === "explain-back" ? "explain-back" : "card",
             },
           ];
-        });
+        },
+      );
       const answeredIds = projection.messages.flatMap((message) => {
         const id = message.role === "user" ? cardAnswerId(message.text) : undefined;
         return id === undefined ? [] : [id];
