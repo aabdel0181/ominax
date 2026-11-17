@@ -5,6 +5,11 @@ name: OminaX CI
 
 on:
   workflow_dispatch:
+    inputs:
+      reuse:
+        description: Skip every job if a passing PR run tested this exact tree
+        type: boolean
+        default: false
   pull_request:
   push:
     branches:
@@ -15,7 +20,7 @@ permissions:
 
 concurrency:
   group: ominax-ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Skips jobs a pull request cannot affect: a web change does not run the
@@ -74,7 +79,7 @@ jobs:
 
       - name: Reuse a passing PR run of this tree
         id: tested
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.reuse
         env:
           GH_TOKEN: ${{ github.token }}
           TREE: ${{ steps.tree.outputs.tree }}
