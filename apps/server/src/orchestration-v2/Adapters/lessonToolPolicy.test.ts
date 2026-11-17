@@ -288,6 +288,7 @@ describe("lessonToolPolicy", () => {
     "python3 - <<'EOF'\nprint(1)\n  EOF\nimport socket\nEOF",
     "python3 - <<'EOF'\nprint(1)\n\tEOF\nimport socket\nEOF",
     "python3 - <<'E-1'\nimport socket\nE-1",
+    "python3 - <<'EOF'x\nprint(1)\nEOF\nimport socket\nEOFx",
     "node --eval='fetch(\"https://example.com\")'",
     "python3 -Ic 'import socket'",
     "perl -le 'open(F, \">/home/quokka/x\")'",
