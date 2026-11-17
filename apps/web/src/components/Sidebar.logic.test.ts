@@ -1607,6 +1607,23 @@ describe("resolveSidebarRouteReveal", () => {
     ).toEqual({ pendingKey: hiddenKey, widensScope: true });
   });
 
+  it("leaves the Lessons view for a newly opened thread that is not a lesson", () => {
+    const resolve = (learningProjectKeys: ReadonlySet<string>) =>
+      resolveSidebarRouteReveal({
+        reveal: { observedKey: "environment-test:other", pendingKey: null },
+        routeKey: hiddenKey,
+        routeKeyInPlace: false,
+        isSearching: false,
+        scopedProjectKeys: null,
+        lessonsOnly: true,
+        learningProjectKeys,
+        delegatedUnderParent: new Set(),
+        findThread,
+      }).widensScope;
+    expect(resolve(new Set())).toBe(true);
+    expect(resolve(new Set(["environment-test:project-other"]))).toBe(false);
+  });
+
   it("never widens for a thread whose reveal already completed", () => {
     // A remount's once-per-mount scroll must keep the scope the user chose.
     expect(

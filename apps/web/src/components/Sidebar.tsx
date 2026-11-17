@@ -507,7 +507,13 @@ function useSidebarThreads(input: {
     partition;
   // Older settled threads load in pages; the shelf lists them only as far as they are loaded.
   const olderSettledShelf = useOlderSettledShelf({
-    scopes: olderSettledScopes([...serverConfigs.keys()], scopedProjectKeys),
+    // Older settled pages load by project, so the Lessons view pages only learning projects.
+    scopes: olderSettledScopes(
+      [...serverConfigs.keys()],
+      lessonsOnly
+        ? new Set([...learningProjectKeys].filter((key) => scopedProjectKeys?.has(key) ?? true))
+        : scopedProjectKeys,
+    ),
     expanded: settledShelfExpanded,
     visibleCount: settledVisibleCount,
   });
@@ -1020,7 +1026,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const projectGroupsRef = useRef(projectGroups);
   const persistedProjectScopeKeys = useUiStateStore((store) => store.sidebarProjectScopeKeys);
   const setPersistedProjectScopeKeys = useUiStateStore((store) => store.setSidebarProjectScopeKeys);
-  const lessonsOnly = useUiStateStore((store) => store.sidebarLessonsOnly);
+  const persistedLessonsOnly = useUiStateStore((store) => store.sidebarLessonsOnly);
   const setLessonsOnly = useUiStateStore((store) => store.setSidebarLessonsOnly);
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
     reduceSidebarProjectScopeMenuState,
@@ -1155,10 +1161,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     routeKeyInPlace,
     isSearching: isSearchingThreads,
     scopedProjectKeys: chosenScopeProjectKeys,
+    lessonsOnly: persistedLessonsOnly,
+    learningProjectKeys,
     delegatedUnderParent,
     findThread: (key) => threads.find((candidate) => threadShellKey(candidate) === key),
   });
   const projectScopeKeys = revealWidensScope ? [] : chosenProjectScopeKeys;
+  const lessonsOnly = persistedLessonsOnly && !revealWidensScope;
   const projectScopeKey = projectScopeKeys.length === 0 ? null : projectScopeKeys.join("\n");
   const toggleProjectScopeKey = (key: string) =>
     setProjectScopeKeys(
@@ -1175,7 +1184,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     if (!revealWidensScope) return;
     clearSelection();
     setPersistedProjectScopeKeys([]);
-  }, [clearSelection, revealWidensScope, setPersistedProjectScopeKeys]);
+    setLessonsOnly(false);
+  }, [clearSelection, revealWidensScope, setLessonsOnly, setPersistedProjectScopeKeys]);
   const revealActiveRow = useActiveRowReveal(routeReveal, routeRowThreadKey, routeKeyInPlace);
   const showProjectEnvironments = projectGroupsSpanEnvironments(projectGroups);
   const scratchMachineLabelFor = (

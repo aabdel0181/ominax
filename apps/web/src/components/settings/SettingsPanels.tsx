@@ -1679,6 +1679,10 @@ export function ThreadsSettingsPanel() {
   const supportsAutoSettlementScope = connectedEnvironments.every(
     (target) => target.serverConfig?.environment.capabilities.threadAutoSettlementScope === true,
   );
+  // Older servers omit learningProject instead of decoding its default, and drop it on write.
+  const supportsLearningProject = connectedEnvironments.every(
+    (target) => typeof target.serverConfig?.settings?.learningProject === "boolean",
+  );
 
   const textGenerationTargets = useTextGenerationTargets({
     environmentId,
@@ -1923,7 +1927,7 @@ export function ThreadsSettingsPanel() {
               }
             />
           ) : null}
-          {isProjectScope && supportsAutoSettlementScope ? (
+          {isProjectScope && supportsLearningProject ? (
             <SettingsRow
               serverScoped
               settingKeys={["learningProject"]}

@@ -437,6 +437,8 @@ export const make = Effect.gen(function* () {
       (thread) => {
         if (thread.lineage.relationshipToParent === "subagent") return settleThread(thread, null);
         const projectSettings = resolveProjectSettings(settings, thread.projectId).settings;
+        // Learning-project threads never settle, so they skip the git and pull request lookups.
+        if (projectSettings.learningProject) return Effect.succeed(null);
         // Skip no-op decisions; actual settlement still reads fresh settings before dispatch.
         const settledAt = resolveAutoSettlementAt({
           thread,
