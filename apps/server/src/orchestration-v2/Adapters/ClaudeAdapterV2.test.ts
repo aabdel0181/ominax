@@ -1419,6 +1419,12 @@ describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
         assert.equal(lessonOptions?.env?.GIT_ALLOW_PROTOCOL, "");
         assert.isUndefined(regularOptions?.hooks?.PreToolUse);
         assert.isUndefined(regularOptions?.env?.GIT_ALLOW_PROTOCOL);
+        // The user's own skills, plugins and MCP servers stay out of lessons (APP-137).
+        assert.deepEqual(lessonOptions?.settingSources, ["project"]);
+        assert.isTrue(lessonOptions?.strictMcpConfig);
+        assert.equal(lessonOptions?.env?.ENABLE_CLAUDEAI_MCP_SERVERS, "false");
+        assert.isUndefined(regularOptions?.settingSources);
+        assert.isUndefined(regularOptions?.strictMcpConfig);
       }),
     ).pipe(
       Effect.provide(
