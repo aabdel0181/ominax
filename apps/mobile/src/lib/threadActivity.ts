@@ -73,7 +73,7 @@ import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 import { truncate } from "@t3tools/shared/String";
 import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import type { McpAppReference } from "@t3tools/shared/mcpApp";
-import { answeredCardAnswers, type LessonCard } from "@t3tools/shared/quizCard";
+import { answeredCardAnswers, isCardAnswered, type LessonCard } from "@t3tools/shared/quizCard";
 import {
   compactDynamicToolOutput,
   courseOutlineFromToolItem,
@@ -1768,7 +1768,10 @@ export function deriveThreadFeedPresentation(
   const feedWithPictureState = lesson
     ? sourceFeed.map((entry, index) => {
         if (entry.type !== "html-render" || entry.runId === null) return entry;
-        if (entry.render.forCard !== undefined && answeredCards.has(entry.render.forCard)) {
+        if (
+          entry.render.forCard !== undefined &&
+          isCardAnswered(answeredCards, entry.render.forCard)
+        ) {
           return entry;
         }
         let pendingCardId: string | undefined;

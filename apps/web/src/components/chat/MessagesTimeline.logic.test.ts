@@ -5536,21 +5536,23 @@ it("hides a lesson picture before an unanswered card until the card is answered"
     }).find((row) => row.id === "picture"),
   ).not.toMatchObject({ picturePending: true });
 
-  const answeredPicture = {
-    ...picture,
-    htmlRender: { ...picture.htmlRender, forCard: "old-card" },
-  };
-  expect(
-    deriveMessagesTimelineRows({
-      ...input,
-      timelineEntries: [
-        ...input.timelineEntries.slice(0, 2),
-        answeredPicture,
-        ...input.timelineEntries.slice(3),
-      ],
-      answeredCardAnswers: new Map([["old-card", "A"]]),
-    }).find((row) => row.id === "picture"),
-  ).not.toMatchObject({ picturePending: true });
+  // A tutor may tag forCard with the bare native tool id instead of the card's turn-item id.
+  for (const [forCard, cardId] of [
+    ["old-card", "old-card"],
+    ["toolu_old", "turn-item:provider:claudeAgent:native-item:toolu_old"],
+  ] as const) {
+    expect(
+      deriveMessagesTimelineRows({
+        ...input,
+        timelineEntries: [
+          ...input.timelineEntries.slice(0, 2),
+          { ...picture, htmlRender: { ...picture.htmlRender, forCard } },
+          ...input.timelineEntries.slice(3),
+        ],
+        answeredCardAnswers: new Map([[cardId, "A"]]),
+      }).find((row) => row.id === "picture"),
+    ).not.toMatchObject({ picturePending: true });
+  }
   for (const forCard of ["card", undefined]) {
     expect(
       deriveMessagesTimelineRows({

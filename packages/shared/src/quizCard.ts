@@ -549,6 +549,13 @@ export function answeredCardAnswers(
   return answers;
 }
 
+/** Tutors sometimes tag a picture's forCard with the card's bare native tool id. */
+export function isCardAnswered(answers: ReadonlyMap<string, string>, cardId: string) {
+  return (
+    answers.has(cardId) || [...answers.keys()].some((id) => id.endsWith(`:native-item:${cardId}`))
+  );
+}
+
 /** The item id of the newest card the learner has not answered, as the lesson shows it open. */
 export function openLessonCardItemId(
   messages: ReadonlyArray<{

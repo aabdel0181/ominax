@@ -286,6 +286,42 @@ it("hides a lesson picture before an unanswered card until the card is answered"
     picturePending: true,
   });
 
+  const bareIdRows = deriveThreadFeedPresentation(
+    buildThreadFeed([
+      projected(userMessage(), 0),
+      projected({ ...assistantMessage(), id: TurnItemId.make("text-before") }, 1),
+      projected(
+        {
+          ...visual,
+          output: { htmlRender: { ...visual.output.htmlRender, forCard: "toolu_old" } },
+        },
+        2,
+      ),
+      projected({ ...assistantMessage(), id: TurnItemId.make("text-after") }, 3),
+      projected(card, 4),
+      projected(
+        {
+          ...userMessage("2026-06-20T00:00:03.000Z"),
+          id: TurnItemId.make("old-card-answer"),
+          messageId: MessageId.make("old-card-answer-message"),
+          text: 'Quiz answer: "A", right.\n\n(card turn-item:provider:claudeAgent:native-item:toolu_old)',
+        },
+        3,
+      ),
+    ]),
+    null,
+    new Set(),
+    new Set(),
+    null,
+    false,
+    undefined,
+    undefined,
+    true,
+  );
+  expect(bareIdRows.find((entry) => entry.type === "html-render")).not.toMatchObject({
+    picturePending: true,
+  });
+
   const openCardPicture = {
     ...visual,
     output: { htmlRender: { ...visual.output.htmlRender, forCard: "card" } },
