@@ -4610,11 +4610,12 @@ describe("ClaudeAdapterV2 background wake turns", () => {
   // unless the card's reply already says it.
   it.effect.each([
     { tool: "Bash", reply: undefined, expected: ["reasoning", "assistant_message"] },
+    // A lesson never shows a thinking block as text; the card's reply carries the teaching.
     {
       tool: "mcp__t3-code__quiz_card",
       reply: "Try it.",
       lesson: true,
-      expected: ["reasoning", "assistant_message"],
+      expected: ["reasoning", "reasoning"],
     },
     {
       tool: "mcp__t3-code__quiz_card",
@@ -4629,8 +4630,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       turnText: "It slows down.\n\n(card card-1)",
       heldText: "Right, friction slows it.\n\nFriction opposes sliding.",
       verdict: "Right: friction slows it.",
-      shownText: ["Friction opposes sliding.", "The repo review found three task families."],
-      expected: ["reasoning", "assistant_message", "assistant_message"],
+      shownText: ["Friction opposes sliding."],
+      expected: ["reasoning", "reasoning", "assistant_message"],
     },
     {
       tool: "mcp__t3-code__question_card",
@@ -4652,8 +4653,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       lesson: true,
       thinking:
         "Melting begins at the solidus, but wetting needs the liquidus. I'm applying the same idea next.",
-      shownText: ["Melting begins at the solidus, but wetting needs the liquidus."],
-      expected: ["reasoning", "assistant_message"],
+      shownText: [],
+      expected: ["reasoning", "reasoning"],
     },
     {
       tool: "mcp__t3-code__question_card",
@@ -4664,35 +4665,13 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     },
     {
       tool: "mcp__t3-code__question_card",
-      reply: "Which width?",
-      lesson: true,
-      thinking:
-        "Keep the trace 2.5 mm wide; Ohm's law says V = I × R.\nI = V / R, so doubling R halves the current. I'm moving on next.",
-      shownText: [
-        "Keep the trace 2.5 mm wide; Ohm's law says V = I × R.\nI = V / R, so doubling R halves the current.",
-      ],
-      expected: ["reasoning", "assistant_message"],
-    },
-    {
-      tool: "mcp__t3-code__question_card",
-      reply: "Which goes on first?",
-      lesson: true,
-      thinking: "Let's say the pad is at 20 °C.\n\n- Flux\n- Solder\n\nI'll ask which comes first.",
-      shownText: ["Let's say the pad is at 20 °C.\n\n- Flux\n- Solder"],
-      expected: ["reasoning", "assistant_message"],
-    },
-    {
-      tool: "mcp__t3-code__question_card",
       reply: "Try it.",
       lesson: true,
       heldText: "Melting begins at the solidus.",
       thinking:
         "Melting begins at the solidus.\n\n- Wetting needs the liquidus.\n- Reflow aims 15–30 °C above it.",
-      shownText: [
-        "Melting begins at the solidus.",
-        "- Wetting needs the liquidus.\n- Reflow aims 15–30 °C above it.",
-      ],
-      expected: ["reasoning", "assistant_message", "assistant_message"],
+      shownText: ["Melting begins at the solidus."],
+      expected: ["reasoning", "reasoning", "assistant_message"],
     },
     {
       tool: "mcp__t3-code__question_card",
@@ -4726,7 +4705,10 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       heldText:
         "Differentiate twice to connect position, velocity, and acceleration.\n\nWorked example: x(t) = t⁴ gives v(t) = 4t³ and a(t) = 12t², so a(2 s) = 48 m/s².",
       thinking: "",
-      shownText: ["Differentiate twice to connect position, velocity, and acceleration."],
+      // The worked example stays even though the card's reply repeats it (APP-130).
+      shownText: [
+        "Differentiate twice to connect position, velocity, and acceleration.\n\nWorked example: x(t) = t⁴ gives v(t) = 4t³ and a(t) = 12t², so a(2 s) = 48 m/s².",
+      ],
       expected: ["reasoning", "assistant_message"],
     },
     {
@@ -4993,97 +4975,6 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         items.map((item): ReadonlyArray<string> => [item.type, item.text]),
         shown.map((row): ReadonlyArray<string> => row),
       );
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(
-        Layer.mergeAll(
-          IdAllocator.layer,
-          McpProviderSessions.layer,
-          NodeServices.layer,
-          NodeCrypto.layer,
-        ),
-      ),
-    ),
-  );
-
-  it.effect.each([
-    {
-      name: "out-and-back planning tail",
-      input:
-        "Net displacement only compares endpoints, so the 4 m out-and-back trip is missed; I need to find where v = 0 and add each leg's distance separately. Next I'll apply that to the cart on the rail with v(t) = 6 − 2t over 0 to 5 s.",
-      expected: "Net displacement only compares endpoints, so the 4 m out-and-back trip is missed.",
-    },
-    {
-      name: "grading tail",
-      input:
-        "That matches the posted student solution, though its quoted v₀ and c don't reproduce its t₂, so I'm grading against my own working since no official solution exists.",
-      expected:
-        "That matches the posted student solution, though its quoted v₀ and c don't reproduce its t₂.",
-    },
-    {
-      name: "target tail",
-      input:
-        "A green KiCad DRC doesn't prove the board is safe: the grader enforces the 5.5 mm figure, so I'm treating that as the target.",
-      expected:
-        "A green KiCad DRC doesn't prove the board is safe: the grader enforces the 5.5 mm figure.",
-    },
-    ...[
-      "A Type I error rejects a true null hypothesis.",
-      "Current I equals V divided by R, and I is in amperes.",
-      "Multiply both sides by i, and i squared becomes −1.",
-      "The Me group donates electrons to my favourite ring.",
-    ].map((teaching) => ({ name: teaching, input: teaching, expected: teaching })),
-    {
-      name: "teaching stays",
-      input: "Net displacement compares endpoints, while distance adds the length of each leg.",
-      expected: "Net displacement compares endpoints, while distance adds the length of each leg.",
-    },
-  ] as const)("strips planning voice from promoted thinking ($name)", ({ input, expected }) =>
-    Effect.gen(function* () {
-      const harness = yield* makeWakeHarness;
-      yield* harness.runtime.startTurn(
-        makeClaudeTestTurnInput({
-          threadId: harness.threadId,
-          providerThread: harness.providerThread,
-          now: yield* DateTime.now,
-          attemptId: RunAttemptId.make(`strip-lesson-narration-${input.slice(0, 12)}`),
-          text: "Teach me",
-          attachments: [],
-          lesson: true,
-        }),
-      );
-      const snapshot = (uuid: string, content: ReadonlyArray<unknown>) =>
-        claudeSdkFrame({
-          type: "assistant",
-          uuid,
-          session_id: WAKE_NATIVE_SESSION,
-          parent_tool_use_id: null,
-          message: { id: "strip-thinking-message", model: "claude-sonnet-5-5", content },
-        });
-      for (const frame of [
-        snapshot("strip-thinking-1", [
-          { type: "thinking", thinking: "Planning the check", signature: "sig" },
-        ]),
-        snapshot("strip-thinking-2", [{ type: "thinking", thinking: input, signature: "sig" }]),
-        snapshot("strip-thinking-card", [
-          {
-            type: "tool_use",
-            id: "strip-card",
-            name: "mcp__t3-code__question_card",
-            input: { reply: "Which idea is correct?" },
-          },
-        ]),
-        makeResultFrame({ uuid: "strip-thinking-result", result: "" }),
-      ]) {
-        yield* Queue.offer(harness.sdkMessages, frame);
-      }
-      yield* harness.awaitTerminal(1);
-      const items = harness.events.flatMap((event) =>
-        event.type === "turn_item.updated" && event.turnItem.type === "assistant_message"
-          ? [event.turnItem.text]
-          : [],
-      );
-      assert.deepEqual(items, [expected]);
     }).pipe(
       Effect.scoped,
       Effect.provide(
