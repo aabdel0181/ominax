@@ -285,6 +285,7 @@ describe("lessonToolPolicy", () => {
     'node -e \'require("net").connect(80, "example.com")\'',
     "cat <<'A' > /tmp/x\nhi\nA\npython3 - <<'B'\nimport socket\nB",
     "perl -e 's/a/b/' -i ~/cw/circuit-world/README.md",
+    "python3 - <<'EOF'\nprint(1)\n  EOF\nimport socket\nEOF",
     "node --eval='fetch(\"https://example.com\")'",
     "python3 -Ic 'import socket'",
     "perl -le 'open(F, \">/home/quokka/x\")'",

@@ -165,7 +165,7 @@ function unsafeInlineCode(parts: ReadonlyArray<string>, command: string): boolea
   if (script !== undefined && !values.includes("-")) return false;
   // shortcut: code piped in from another command is judged on the whole command text.
   const bodies = [
-    ...command.matchAll(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/gu),
+    ...command.matchAll(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\t*\2(?:\n|$)/gu),
   ].map((match) => match[3]!);
   return (bodies.length === 0 ? [command] : bodies).some(unsafe);
 }
