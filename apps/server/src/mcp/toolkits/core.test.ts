@@ -22,6 +22,7 @@ import {
   TurnItemId,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ProjectedTurnItem,
+  type OrchestrationV2ThreadProjection,
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
 import { pinOrderKeyBetween } from "@t3tools/shared/pinOrderKey";
@@ -1507,6 +1508,17 @@ it.effect(
 
 let animationRuntimeMode: OrchestrationV2ThreadShell["runtimeMode"] = "full-access";
 const lessonSideChatId = ThreadId.make("course-lesson-side-chat");
+const liveThreadShell = (id: ThreadId) =>
+  ({
+    id: threadId,
+    ...(id === lessonSideChatId ? { sideChat: { lessonThreadId: threadId } } : {}),
+    deletedAt: null,
+    archivedAt: null,
+    activeRunId: RunId.make("mcp-core-run"),
+    providerInstanceId: ProviderInstanceId.make("codex"),
+    runtimeMode: animationRuntimeMode,
+    interactionMode: "default",
+  }) as OrchestrationV2ThreadShell;
 const liveCallerLayer = Layer.mock(ThreadManagement.ThreadManagementService)({
   getThreadShell: (id) =>
     Effect.succeed({
@@ -1695,8 +1707,12 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     const outline = JSON.stringify((yield* callAs("course_read", {})).content);
     expect(outline).toContain("1. One");
     expect(outline).not.toContain("prepThreadIds");
+    // A recap of an earlier unit keeps the saved spot; reading ahead moves it.
     yield* callAs("course_read", { unit: 1 });
-    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 1 });
+    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 2 });
+    yield* callAs("course_update", { position: { unit: 1 } });
+    yield* callAs("course_read", { unit: 2 });
+    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 2 });
     // The prep turn may call course_read at once, so its id is recorded before it starts.
     expect(recordedAtCreate).toEqual([(yield* service.get({ id: course.id })).prepThreadIds]);
     expect(recordedAtCreate[0]).toHaveLength(1);
@@ -1728,10 +1744,15 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     });
     expect(part.isError).not.toBe(true);
     expect((yield* service.get({ id: course.id })).position).toMatchObject({
-      unit: 1,
+      unit: 2,
       pset: 1,
       problem: "1(a)",
     });
+    const skipped = yield* callAs("course_problems", { courseId: course.id, pset: 1, skip: true });
+    expect(JSON.stringify(skipped.content)).toContain("pset-card");
+    // A later call on the same set without `problem` keeps the saved part.
+    yield* callAs("course_problems", { courseId: course.id, pset: 1 });
+    expect((yield* service.get({ id: course.id })).position).toMatchObject({ problem: "1(a)" });
     const beforeSearch = yield* callAs("course_problems", { courseId: course.id });
     expect(JSON.stringify(beforeSearch.content)).toContain("one web search");
     const invalidPrep = yield* callAs("course_prepare", {
@@ -1867,7 +1888,23 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
         Layer.provideMerge(courseServiceLayer),
         Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-mcp-course-" })),
         Layer.provideMerge(NodeServices.layer),
-        Layer.provide(liveCallerLayer),
+        // The lesson has one unanswered pset card, so a skip closes it.
+        Layer.provide(
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: (id) => Effect.succeed(liveThreadShell(id)),
+            getProjectThreadRecords: () =>
+              Effect.succeed({
+                messages: [
+                  {
+                    id: "pset-card:reply",
+                    role: "assistant",
+                    text: "Problem 1(b).",
+                    createdAt: DateTime.makeUnsafe(0),
+                  },
+                ],
+              } as unknown as OrchestrationV2ThreadProjection),
+          }),
+        ),
       ),
     ),
   );

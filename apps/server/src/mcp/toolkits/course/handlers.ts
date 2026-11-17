@@ -196,8 +196,10 @@ const handlers = {
         .readUnit({ courseId: course.id, unit: input.unit, ...(at === undefined ? {} : { at }) })
         .pipe(Effect.mapError(fail));
       const { course: readCourse, index, unit: details, ...read } = unit;
+      // Reading ahead moves the lesson on; a recap of an earlier unit or a re-read keeps the saved spot.
       const current =
-        thread.threadId === readCourse.lessonThreadId
+        thread.threadId === readCourse.lessonThreadId &&
+        input.unit > (readCourse.position?.unit ?? 0)
           ? yield* service
               .update({
                 courseId: readCourse.id,
@@ -381,7 +383,11 @@ const handlers = {
         const position = {
           unit: course.position?.unit ?? 1,
           pset: input.pset,
-          ...(input.problem === undefined ? {} : { problem: input.problem }),
+          ...(input.problem !== undefined
+            ? { problem: input.problem }
+            : course.position?.pset === input.pset && course.position.problem !== undefined
+              ? { problem: course.position.problem }
+              : {}),
         };
         yield* service.update({ courseId: course.id, position }).pipe(Effect.mapError(fail));
       }

@@ -465,28 +465,6 @@ describe("CourseService", () => {
     ),
   );
 
-  it.effect("stores a pset part in the course position", () =>
-    withService((service) =>
-      Effect.gen(function* () {
-        const course = yield* service.add({
-          lessonThreadId: threadId,
-          ingested: {
-            kind: "ocw",
-            title: "Pset position",
-            source: "source",
-            units: [{ title: "Unit" }],
-            problemSets: [{ title: "Pset", text: "Problem" }],
-          },
-        });
-        const updated = yield* service.update({
-          courseId: course.id,
-          position: { unit: 1, pset: 1, problem: "1(a)" },
-        });
-        assert.deepStrictEqual(updated.position, { unit: 1, pset: 1, problem: "1(a)" });
-      }),
-    ),
-  );
-
   it.effect("remaps existing worked examples when a reorder has no incoming problem sets", () =>
     withService((service) =>
       Effect.gen(function* () {
