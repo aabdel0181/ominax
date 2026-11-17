@@ -46,12 +46,16 @@ function IssueLink() {
   );
 }
 
+function setup(sideChat: boolean) {
+  state.sideChat = sideChat;
+  useRightPanelStore.setState({ byThreadKey: {}, userActionRevisionByThreadKey: {} });
+}
+
 it.each([
   [false, true],
   [true, false],
 ] as const)("side chat %s: opens the issue beside the thread: %s", async (sideChat, opens) => {
-  state.sideChat = sideChat;
-  useRightPanelStore.setState({ byThreadKey: {}, userActionRevisionByThreadKey: {} });
+  setup(sideChat);
   await using screen = await render(<IssueLink />);
   const defaults: boolean[] = [];
   screen.container.addEventListener(
