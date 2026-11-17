@@ -179,20 +179,25 @@ describe("filterSidebarV2VisibleThreads", () => {
   });
 
   it("shows only lesson threads when the lessons filter is active", () => {
-    const lesson = makeThreadFixture({ id: ThreadId.make("lesson") });
+    const learning = makeThreadFixture({ id: ThreadId.make("learning") });
+    const lesson = makeThreadFixture({
+      id: ThreadId.make("lesson"),
+      projectId: ProjectId.make("coding-project"),
+      tags: ["lesson"],
+    });
     const ordinary = makeThreadFixture({
       id: ThreadId.make("ordinary"),
       projectId: ProjectId.make("coding-project"),
     });
     expect(
       filterSidebarV2VisibleThreads(
-        [lesson, ordinary],
+        [learning, lesson, ordinary],
         null,
         new Set(),
         true,
         new Set(["environment-test:project-test"]),
       ).map((thread) => thread.id),
-    ).toEqual(["lesson"]);
+    ).toEqual(["learning", "lesson"]);
   });
 });
 function makeLatestRun(overrides?: {
