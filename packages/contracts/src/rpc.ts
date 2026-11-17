@@ -902,6 +902,8 @@ const WsLearnFeatureUsedRpc = Rpc.make(WS_METHODS.learnFeatureUsed, {
         "lesson-pictures",
         "course-psets",
         "course-outline",
+        "lessons-filter",
+        "lesson-math",
       ]),
     }),
     Schema.Struct({ feature: Schema.Literal("knowledge_map.view") }),
