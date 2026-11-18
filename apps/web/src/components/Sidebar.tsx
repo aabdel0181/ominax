@@ -3375,76 +3375,68 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             0 &&
           emptyListNotice !== null ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
-              {(() => {
-                const notice = emptyListNotice;
-                if (notice === null) return null;
-                if (notice.kind === "no-projects") {
-                  return (
-                    <>
-                      <span>No projects yet</span>
-                      <button
-                        type="button"
-                        onClick={openAddProjectCommandPalette}
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                      >
-                        <PlusIcon className="-mx-0.5 size-3" />
-                        Add project
-                      </button>
-                    </>
-                  );
-                }
-                if (notice.kind === "no-lessons") {
-                  return (
-                    <>
-                      <span>
-                        {notice.projectName === null
-                          ? "No lessons. Mark a project as a Learning project in Settings, or start a New lesson."
-                          : `No lessons in ${notice.projectName}. Mark it as a Learning project in Settings, or start a New lesson.`}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void router.navigate({
-                            to: "/settings/threads",
-                            hash: "learning-project",
-                            ...(notice.projectName === null
-                              ? {}
-                              : { search: { project: scopedProjectGroups[0]!.projectKey } }),
-                          })
-                        }
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                      >
-                        Open Settings
-                      </button>
-                      {showNewLesson ? (
-                        <button
-                          type="button"
-                          onClick={handleNewLesson}
-                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                        >
-                          New lesson
-                        </button>
-                      ) : null}
-                    </>
-                  );
-                }
-                if (notice.kind === "no-active-lessons") return <span>No active lessons</span>;
-                if (notice.kind === "no-threads") return "No threads yet";
-                return (
-                  <>
-                    <span>
-                      {`No ${notice.hasSettled ? "active threads" : "threads"} in ${notice.label}${notice.hasSettled ? "" : " yet"}`}
-                    </span>
+              {emptyListNotice.kind === "no-projects" ? (
+                <>
+                  <span>No projects yet</span>
+                  <button
+                    type="button"
+                    onClick={openAddProjectCommandPalette}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                  >
+                    <PlusIcon className="-mx-0.5 size-3" />
+                    Add project
+                  </button>
+                </>
+              ) : emptyListNotice.kind === "no-lessons" ? (
+                <>
+                  <span>
+                    {emptyListNotice.projectName === null
+                      ? "No lessons. Mark a project as a Learning project in Settings, or start a New lesson."
+                      : `No lessons in ${emptyListNotice.projectName}. Mark it as a Learning project in Settings, or start a New lesson.`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void router.navigate({
+                        to: "/settings/threads",
+                        hash: "learning-project",
+                        ...(emptyListNotice.projectName === null
+                          ? {}
+                          : { search: { project: scopedProjectGroups[0]!.projectKey } }),
+                      })
+                    }
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                  >
+                    Open Settings
+                  </button>
+                  {showNewLesson ? (
                     <button
                       type="button"
-                      onClick={() => setProjectScopeKeys([])}
+                      onClick={handleNewLesson}
                       className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
                     >
-                      Show all projects
+                      New lesson
                     </button>
-                  </>
-                );
-              })()}
+                  ) : null}
+                </>
+              ) : emptyListNotice.kind === "no-active-lessons" ? (
+                "No active lessons"
+              ) : emptyListNotice.kind === "project" ? (
+                <>
+                  <span>
+                    {`No ${emptyListNotice.hasSettled ? "active threads" : "threads"} in ${emptyListNotice.label}${emptyListNotice.hasSettled ? "" : " yet"}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setProjectScopeKeys([])}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                  >
+                    Show all projects
+                  </button>
+                </>
+              ) : (
+                "No threads yet"
+              )}
             </div>
           ) : null}
           {!isSearchingThreads ? (
