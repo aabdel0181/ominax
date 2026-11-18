@@ -56,6 +56,38 @@ import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../termina
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { isLessonThread } from "@t3tools/client-runtime/state/threads";
 
+export type SidebarEmptyListNotice =
+  | { readonly kind: "no-projects" }
+  | { readonly kind: "no-lessons"; readonly projectName: string | null }
+  | { readonly kind: "no-active-lessons" }
+  | { readonly kind: "project"; readonly label: string; readonly hasSettled: boolean }
+  | { readonly kind: "no-threads" };
+
+export function sidebarEmptyListNotice(input: {
+  readonly hasProjects: boolean;
+  readonly lessonsOnly: boolean;
+  readonly scopedProjectNames: readonly string[];
+  readonly settledCount: number;
+}): SidebarEmptyListNotice | null {
+  if (!input.hasProjects) return input.settledCount === 0 ? { kind: "no-projects" } : null;
+  if (input.lessonsOnly) {
+    return input.settledCount > 0
+      ? { kind: "no-active-lessons" }
+      : {
+          kind: "no-lessons",
+          projectName: input.scopedProjectNames.length === 1 ? input.scopedProjectNames[0]! : null,
+        };
+  }
+  if (input.scopedProjectNames.length > 0) {
+    return {
+      kind: "project",
+      label: input.scopedProjectNames.length > 1 ? "these projects" : input.scopedProjectNames[0]!,
+      hasSettled: input.settledCount > 0,
+    };
+  }
+  return input.settledCount === 0 ? { kind: "no-threads" } : null;
+}
+
 export function shouldNavigateAfterThreadPark(input: {
   readonly threadKey: string;
   readonly currentThreadKey: string | null;

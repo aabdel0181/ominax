@@ -721,6 +721,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "project-defaults",
   },
   {
+    id: "learning-project",
+    title: "Learning project",
+    to: "/settings/threads",
+    scope: "project",
+    searchTerms: ["lessons lesson filter learning study course"],
+  },
+  {
     id: "thread-notifications",
     title: "Thread notifications",
     to: "/settings/general",

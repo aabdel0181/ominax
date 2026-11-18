@@ -37,6 +37,7 @@ import {
   groupSidebarThreadsByProject,
   resolveSidebarFolderDot,
   sidebarFolderExpansionKeys,
+  sidebarEmptyListNotice,
 } from "./Sidebar.logic";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -72,6 +73,63 @@ import {
 } from "./sidebar/routeReveal";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+describe("sidebarEmptyListNotice", () => {
+  it.each([
+    {
+      name: "lessons with no scoped project",
+      input: { hasProjects: true, lessonsOnly: true, scopedProjectNames: [], settledCount: 0 },
+      expected: { kind: "no-lessons", projectName: null },
+    },
+    {
+      name: "lessons with one scoped project",
+      input: {
+        hasProjects: true,
+        lessonsOnly: true,
+        scopedProjectNames: ["post-training"],
+        settledCount: 0,
+      },
+      expected: { kind: "no-lessons", projectName: "post-training" },
+    },
+    {
+      name: "lessons with multiple scoped projects",
+      input: {
+        hasProjects: true,
+        lessonsOnly: true,
+        scopedProjectNames: ["post-training", "research"],
+        settledCount: 0,
+      },
+      expected: { kind: "no-lessons", projectName: null },
+    },
+    {
+      name: "lessons with settled lessons",
+      input: { hasProjects: true, lessonsOnly: true, scopedProjectNames: [], settledCount: 3 },
+      expected: { kind: "no-active-lessons" },
+    },
+    {
+      name: "scoped threads with settled threads",
+      input: {
+        hasProjects: true,
+        lessonsOnly: false,
+        scopedProjectNames: ["project"],
+        settledCount: 2,
+      },
+      expected: { kind: "project", label: "project", hasSettled: true },
+    },
+    {
+      name: "settled threads without a scope",
+      input: { hasProjects: true, lessonsOnly: false, scopedProjectNames: [], settledCount: 2 },
+      expected: null,
+    },
+    {
+      name: "no projects",
+      input: { hasProjects: false, lessonsOnly: false, scopedProjectNames: [], settledCount: 0 },
+      expected: { kind: "no-projects" },
+    },
+  ])("returns the right notice for $name", ({ input, expected }) => {
+    expect(sidebarEmptyListNotice(input)).toEqual(expected);
+  });
+});
 
 describe("deleteSelectedThreadEntries", () => {
   const entries = [{ threadKey: "one" }, { threadKey: "two" }, { threadKey: "three" }] as const;
