@@ -219,7 +219,6 @@ const checkEarlierPictures = Effect.fn("quiz.checkEarlierPictures")(function* (
   const context = yield* loadCaller();
   const runId = context.caller?.activeRunId;
   if (card === undefined || context.caller === undefined) return false;
-  if (context.caller.tags?.includes("lesson") !== true) return true;
   if (runId === null || runId === undefined) return false;
   const htmlRender = yield* Effect.serviceOption(HtmlRender.HtmlRender).pipe(
     Effect.map(Option.getOrUndefined),
