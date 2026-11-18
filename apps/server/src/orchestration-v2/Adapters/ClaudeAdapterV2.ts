@@ -5181,6 +5181,8 @@ interface ActiveClaudeTurnContext {
     fallbackNativeItemId: string;
     emittedNativeItemIds: Set<string>;
     cardSeen: boolean;
+    /** A card the guard accepted; `cardSeen` also counts refused calls. */
+    cardPosted: boolean;
     cardReplies: Array<string>;
     htmlPreviewSeen: boolean;
     heldText: Array<{ readonly nativeItemId: string; readonly text: string }>;
@@ -9255,12 +9257,24 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             }),
         });
 
+        // A lesson turn ends at its card, so text after it is a recap (r13 phys); a steer's answer still shows.
+        const lessonRecapAfterCard = (context: ActiveClaudeTurnContext) =>
+          Ref.get(steeredTurns).pipe(
+            Effect.map(
+              (steered) =>
+                isLessonTurn(context.input) &&
+                context.assistant.cardPosted &&
+                !steered.has(context.providerTurnId),
+            ),
+          );
+
         const emitHeldAssistantTextAsReasoning = Effect.fnUntraced(function* (
           context: ActiveClaudeTurnContext,
         ) {
           if (context.assistant.heldText.length === 0) return;
           const joined = context.assistant.heldText.map((item) => item.text).join("\n");
           if (
+            !(yield* lessonRecapAfterCard(context)) &&
             joined.length > 150 &&
             replyCoverage(joined, context.assistant.cardReplies.join("\n")) < 0.85
           ) {
@@ -9329,6 +9343,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             return;
           if (!isLessonTurn(context.input) || context.assistant.heldText.length === 0) {
             yield* flushHeldAssistantText(context);
+            return;
+          }
+          if (yield* lessonRecapAfterCard(context)) {
+            for (const item of context.assistant.heldText)
+              yield* emitHeldAssistantTextItemAsReasoning(context, item);
+            context.assistant.heldText = [];
             return;
           }
           const held = context.assistant.heldText;
@@ -12017,6 +12037,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 (toolCall.toolName.startsWith("mcp__") ? withoutForgedMcpApp(output) : output),
               completedAt: yield* DateTime.now,
             });
+            if (isLessonCardTool(toolCall.toolName) && !isClaudeToolResultError(toolResult))
+              context.assistant.cardPosted = true;
             // Subagents write to the session's shared task store, so their
             // task tools update the parent turn's list. Failed or never-run
             // calls changed nothing.
@@ -12270,6 +12292,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 yield* flushHeldAssistantText(context);
               }
               context.assistant.cardSeen = false;
+              context.assistant.cardPosted = false;
               context.assistant.htmlPreviewSeen = false;
               context.assistant.cardReplies = [];
               context.steeredSegmentUsage.push(message.usage);
@@ -13677,6 +13700,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 fallbackNativeItemId: `assistant:${turnInput.runId}`,
                 emittedNativeItemIds: new Set(),
                 cardSeen: false,
+                cardPosted: false,
                 cardReplies: [],
                 htmlPreviewSeen: false,
                 heldText: [],

@@ -47,11 +47,21 @@ export function cardReplyProblem(input: {
       ? statesAnswer(`${shown}\n${input.previousText ?? ""}`, answer)
       : answer.trim().split(/\s+/u).length >= 3 && statesAnswer(shown, answer),
   );
-  if (answerAppears)
+  if (answerAppears || (input.answers ?? []).some((answer) => answerIsRestated(shown, answer)))
     return "The answer is stated just above; pose a new case that needs one more step.";
   if (input.purpose !== undefined) return undefined;
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
+}
+
+// A rule the reply already wrote out, restated as the card's answer (r13 cw2).
+function answerIsRestated(text: string, answer: string): boolean {
+  const wanted = new Set(coverageTokens(answer));
+  if (wanted.size < 4) return false;
+  return text.split(/(?<=[.!?])\s+|\n{2,}/u).some((sentence) => {
+    const tokens = new Set(coverageTokens(sentence));
+    return [...wanted].filter((token) => tokens.has(token)).length >= 0.75 * wanted.size;
+  });
 }
 
 const collapse = (value: string) => value.trim().replace(/\s+/gu, " ");

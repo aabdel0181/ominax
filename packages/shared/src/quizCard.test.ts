@@ -290,6 +290,22 @@ describe("quiz cards", () => {
       cardReplyProblem({ reply: "Slowing down", answers: ["Slowing down"], shownBefore: 250 }),
     ).toBeUndefined();
   });
+  it("refuses a rule copied from the reply, but not one sharing only repeated words", () => {
+    expect(
+      cardReplyProblem({
+        reply: "A required check failed, so 0.799 is a cap rather than the score it earned.",
+        answers: ["A required check failed; the 0.799 is a cap, not its score"],
+        shownBefore: 250,
+      }),
+    ).toMatch(/stated/u);
+    expect(
+      cardReplyProblem({
+        reply: "The verifier checks wiring, and the verifier checks each part.",
+        answers: ["Hold it until the verifier checks each pin's net"],
+        shownBefore: 250,
+      }),
+    ).toBeUndefined();
+  });
   it("requires and accepts a worked number answer after I don't know", () => {
     const unknownNumber = { answer: 20.09, tolerance: 0 };
     expect(
