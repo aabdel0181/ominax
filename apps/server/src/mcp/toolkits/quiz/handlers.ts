@@ -1,6 +1,7 @@
 import { OrchestratorMcpFailure, TurnItemId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import {
   type CardPurpose,
   cardAnswerVerdictLength,
@@ -14,9 +15,13 @@ import {
   withoutCardAnswerTag,
   withoutShownParagraphs,
   openLessonCardItemId,
+  lessonCardAnswers,
+  statesAnswer,
 } from "@t3tools/shared/quizCard";
-import { lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
+import { htmlRenderFromToolItem, lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
+import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
 
+import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { loadCaller, readThread } from "../../threadAccess.ts";
 import { QuizToolkit } from "./tools.ts";
@@ -181,6 +186,102 @@ const skippedCardNotice = (shown: { readonly skippedCardId: string | undefined }
     ? undefined
     : "An older open card was closed as skipped by the learner's free message. Do not point back to that card; re-ask it as a new card if it is still needed.";
 
+const pictureAnswers = (
+  card: ReturnType<typeof readQuestionCard> | ReturnType<typeof readQuizCard>,
+) => {
+  if (card === undefined) return [];
+  const numbers =
+    card.question
+      .match(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu)
+      ?.filter((number) => number.replace(/^-/u, "").length >= 2) ?? [];
+  return [...lessonCardAnswers(card), ...numbers];
+};
+
+const THEME_BOOTSTRAP_SCRIPT =
+  /<script>\(function\(\)\{var s=document\.getElementById\("t3-theme"\)[\s\S]*?<\/script>/u;
+
+const stripHtmlText = (html: string) =>
+  html
+    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/giu, " ")
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/&nbsp;|&#160;/giu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+
+const statesNumber = (text: string, value: string) => {
+  if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(value)) return false;
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}_])${value.replace(/[.-]/gu, "\\$&")}(?![\\p{L}\\p{N}_])`,
+    "u",
+  ).test(text.replace(/[−–]/gu, "-"));
+};
+
+const checkEarlierPictures = Effect.fn("quiz.checkEarlierPictures")(function* (
+  card: ReturnType<typeof readQuestionCard> | ReturnType<typeof readQuizCard>,
+) {
+  const context = yield* loadCaller();
+  const runId = context.caller?.activeRunId;
+  if (card === undefined || context.caller === undefined) return false;
+  if (runId === null || runId === undefined) return false;
+  const htmlRender = yield* Effect.serviceOption(HtmlRender.HtmlRender).pipe(
+    Effect.map(Option.getOrUndefined),
+  );
+  if (htmlRender === undefined) return false;
+  const records = yield* context.threads
+    .getProjectThreadRecords(
+      { projectId: context.caller.projectId, threadId: context.caller.id },
+      ["turnItems"],
+      { runIds: [runId] },
+    )
+    .pipe(Effect.orElseSucceed(() => undefined));
+  if (records === undefined) return false;
+  // undefined = a picture this check can't read (an animation, or one still being drawn).
+  const pictures = records.turnItems.flatMap((item) => {
+    if (item.type !== "dynamic_tool") return [];
+    const tool = resolveT3McpToolId(item.toolName);
+    if (tool === "animation_render") return [undefined];
+    if (tool !== "html_render") return [];
+    if (item.status !== "completed") return [undefined];
+    const reference = htmlRenderFromToolItem(item);
+    return reference?.forCard === undefined ? [reference] : [];
+  });
+  if (pictures.length === 0) return true;
+  let checked = true;
+  for (const picture of pictures) {
+    if (picture === undefined) {
+      checked = false;
+      continue;
+    }
+    const html = yield* htmlRender
+      .readPublished(picture.attachmentId)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    // Script- or canvas-drawn labels never reach the markup this check reads; publish adds a
+    // theme bootstrap script to every page, which draws nothing.
+    if (
+      html === undefined ||
+      /<(?:script|canvas)\b/iu.test(html.replace(THEME_BOOTSTRAP_SCRIPT, ""))
+    ) {
+      checked = false;
+      continue;
+    }
+    const text = stripHtmlText(html);
+    // Single digits are axis ticks and step numbers far more often than the answer.
+    const answer = pictureAnswers(card).find(
+      (candidate) =>
+        statesAnswer(html, candidate) ||
+        (candidate.replace(/^-/u, "").length >= 2 && statesNumber(text, candidate)),
+    );
+    if (answer !== undefined) {
+      return yield* new OrchestratorMcpFailure({
+        code: "invalid_request",
+        message:
+          "This card is refused because an earlier picture shows its answer or one of its numbers. Ask something the picture does not show.",
+      });
+    }
+  }
+  return checked;
+});
+
 const handlers = {
   quiz_card: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
@@ -202,8 +303,13 @@ const handlers = {
         verdict: input.verdict,
         answers: [input.answer],
       });
+      const picturesChecked = yield* checkEarlierPictures(card);
       return {
-        quizCard: { ...card, reply: shownReply(input, shown) },
+        quizCard: {
+          ...card,
+          reply: shownReply(input, shown),
+          ...(picturesChecked === true ? { picturesChecked: true as const } : {}),
+        },
         message: [QUIZ_CARD_SHOWN, skippedCardNotice(shown)].filter(Boolean).join("\n"),
       };
     }),
@@ -234,8 +340,13 @@ const handlers = {
               ],
             }),
       });
+      const picturesChecked = yield* checkEarlierPictures(card);
       return {
-        questionCard: { ...card, reply: shownReply(input, shown) },
+        questionCard: {
+          ...card,
+          reply: shownReply(input, shown),
+          ...(picturesChecked === true ? { picturesChecked: true as const } : {}),
+        },
         message: [QUESTION_CARD_SHOWN, skippedCardNotice(shown)].filter(Boolean).join("\n"),
       };
     }),

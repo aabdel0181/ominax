@@ -115,6 +115,7 @@ export interface QuestionCard {
   readonly question: string;
   readonly blanks?: ReadonlyArray<{ readonly answers: ReadonlyArray<string> }>;
   readonly number?: { readonly answer: number; readonly tolerance: number; readonly unit?: string };
+  readonly picturesChecked?: true;
 }
 
 export type QuizLevel = "remember" | "understand" | "apply" | "analyse";
@@ -126,6 +127,7 @@ export interface QuizCard {
   readonly level: QuizLevel;
   readonly question: string;
   readonly wrongOptions: ReadonlyArray<{ readonly option: string; readonly wrongIdea: string }>;
+  readonly picturesChecked?: true;
 }
 
 export type LessonCard = QuizCard | QuestionCard;
@@ -221,7 +223,12 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
       blanks.push({ answers: parsed });
     }
     if ((question.match(/_{3,}/g) ?? []).length !== blanks.length) return undefined;
-    const card = { ...reply, question, blanks };
+    const card = {
+      ...reply,
+      question,
+      blanks,
+      ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
+    };
     return fitsCardBytes(card) ? card : undefined;
   }
   if (hasNumber) {
@@ -248,10 +255,15 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
       ...reply,
       question,
       number: { answer: number.answer, tolerance: number.tolerance, ...(unit ? { unit } : {}) },
+      ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
     };
     return fitsCardBytes(card) ? card : undefined;
   }
-  const card = { ...reply, question };
+  const card = {
+    ...reply,
+    question,
+    ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
+  };
   return fitsCardBytes(card) ? card : undefined;
 }
 
@@ -334,6 +346,7 @@ export function readQuizCard(value: unknown): QuizCard | undefined {
     level: level as QuizLevel,
     question,
     wrongOptions: parsed as QuizCard["wrongOptions"],
+    ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
   };
 }
 
@@ -595,7 +608,12 @@ export function openLessonCardItemId(
 export function lessonCardAnswers(card: LessonCard): ReadonlyArray<string> {
   if ("answer" in card) return [card.answer];
   return [
-    ...(card.number === undefined ? [] : [String(card.number.answer)]),
+    ...(card.number === undefined
+      ? []
+      : [
+          String(card.number.answer),
+          ...(card.number.unit ? [`${card.number.answer} ${card.number.unit}`] : []),
+        ]),
     ...(card.blanks ?? []).flatMap((blank) => blank.answers),
   ];
 }
