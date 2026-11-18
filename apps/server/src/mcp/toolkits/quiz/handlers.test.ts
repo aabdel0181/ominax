@@ -594,7 +594,8 @@ it.effect("refuses picture spoilers and flags a clean teaching picture", () => {
               ? "<svg><text>1 2 3</text></svg>"
               : attachmentId.startsWith("canvas-")
                 ? "<canvas></canvas><script>ctx.fillText('20 N', 0, 0)</script>"
-                : "<p>The split is 20 N along the slope.</p>",
+                : '<script>(function(){var s=document.getElementById("t3-theme");})();</script>' +
+                  "<p>The split is 20 N along the slope.</p>",
           ),
         preview: () => Effect.die("unused"),
       } as never),

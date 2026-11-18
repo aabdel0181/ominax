@@ -197,6 +197,9 @@ const pictureAnswers = (
   return [...lessonCardAnswers(card), ...numbers];
 };
 
+const THEME_BOOTSTRAP_SCRIPT =
+  /<script>\(function\(\)\{var s=document\.getElementById\("t3-theme"\)[\s\S]*?<\/script>/u;
+
 const stripHtmlText = (html: string) =>
   html
     .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/giu, " ")
@@ -252,8 +255,12 @@ const checkEarlierPictures = Effect.fn("quiz.checkEarlierPictures")(function* (
     const html = yield* htmlRender
       .readPublished(picture.attachmentId)
       .pipe(Effect.orElseSucceed(() => undefined));
-    // Script- or canvas-drawn labels never reach the markup this check reads.
-    if (html === undefined || /<(?:script|canvas)\b/iu.test(html)) {
+    // Script- or canvas-drawn labels never reach the markup this check reads; publish adds a
+    // theme bootstrap script to every page, which draws nothing.
+    if (
+      html === undefined ||
+      /<(?:script|canvas)\b/iu.test(html.replace(THEME_BOOTSTRAP_SCRIPT, ""))
+    ) {
       checked = false;
       continue;
     }
