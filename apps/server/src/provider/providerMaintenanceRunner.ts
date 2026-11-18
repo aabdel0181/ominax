@@ -603,7 +603,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                 Effect.andThen(
                   runMaintenanceCommand(command, setRunningMessage).pipe(
                     Effect.tapCause((cause) =>
-                      audit({ url: auditUrl, error: Cause.pretty(cause) }),
+                      audit({ url: auditUrl, kind: "provider", error: Cause.pretty(cause) }),
                     ),
                   ),
                 ),
@@ -612,7 +612,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
             const finishedAt = yield* nowIso;
             if (result.timedOut || result.exitCode !== 0) {
               const error = failureMessage(result);
-              yield* audit({ url: auditUrl, error });
+              yield* audit({ url: auditUrl, kind: "provider", error });
               yield* Effect.logWarning("Provider update command failed", {
                 provider,
                 command: describeCommand(command),
@@ -669,10 +669,11 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
               verifiedProviders.some((verifiedProvider) => isOutdatedProvider(verifiedProvider));
             const status = couldNotVerify || stillOutdated ? "unchanged" : "succeeded";
             if (status === "succeeded") {
-              yield* audit({ url: auditUrl });
+              yield* audit({ url: auditUrl, kind: "provider" });
             } else {
               yield* audit({
                 url: auditUrl,
+                kind: "provider",
                 error: couldNotVerify
                   ? "Update command completed, but T3 Code could not verify the provider version."
                   : "Update command completed, but T3 Code still detects an outdated provider version.",

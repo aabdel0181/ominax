@@ -264,6 +264,8 @@ type ThreadFeedEntryContent =
   | {
       readonly type: "run-fold";
       readonly deferredWorkItemIds?: ReadonlyArray<string>;
+      /** Set while the run works: the row shows a live timer and does not toggle. */
+      readonly workingSince?: string;
       readonly id: string;
       readonly createdAt: string;
       readonly runId: RunId;
@@ -1270,26 +1272,11 @@ function deriveThreadFeedRunFolds(
           (entry) =>
             entry.id !== terminalAssistantId &&
             !(entry.type === "message" && retainedAnswerIds.has(entry.message.id)) &&
-            entry.type !== "html-render" &&
-            entry.type !== "sent-message" &&
-            entry.type !== "mcp-app" &&
             entry.type !== "quiz-card" &&
             !(lesson && entry.type === "message" && entry.message.role === "assistant") &&
             !cardLeadIds.has(entry.id) &&
             entry.id !== visibleCompactionId &&
-            !(
-              entry.type === "activity-group" &&
-              entry.activities.some(
-                (activity) =>
-                  activity.prominent ||
-                  activity.workEntry.questionAnswer !== undefined ||
-                  activity.projectedItem.item.type === "notification" ||
-                  activity.projectedItem.item.type === "handoff" ||
-                  // A child still working outlives its settled launching run;
-                  // its group stays visible while any member is live.
-                  isLiveSubagentTurnItem(activity.projectedItem.item),
-              )
-            ),
+            !staysOutOfFold(entry),
         )
         .map((entry) => entry.id),
     );
@@ -1488,6 +1475,26 @@ function latestRunsEqual(left: ThreadFeedLatestRun | null, right: ThreadFeedLate
   );
 }
 
+/** Rows a fold leaves in view; the live fold skips them too, so settling keeps its place. */
+function staysOutOfFold(entry: ThreadFeedEntry): boolean {
+  return (
+    entry.type === "html-render" ||
+    entry.type === "sent-message" ||
+    entry.type === "mcp-app" ||
+    (entry.type === "activity-group" &&
+      entry.activities.some(
+        (activity) =>
+          activity.prominent ||
+          activity.workEntry.questionAnswer !== undefined ||
+          activity.projectedItem.item.type === "notification" ||
+          activity.projectedItem.item.type === "handoff" ||
+          // A child still working outlives its settled launching run;
+          // its group stays visible while any member is live.
+          isLiveSubagentTurnItem(activity.projectedItem.item),
+      ))
+  );
+}
+
 function feedEntryRunId(entry: ThreadFeedEntry): RunId | null {
   return entry.type === "message" ? (entry.message.runId ?? null) : entry.runId;
 }
@@ -1676,6 +1683,20 @@ const DEFAULT_THREAD_FEED_DISPLAY: ThreadFeedDisplay = {
   revealedMessageId: null,
 };
 
+/** Cards a `course_problems` skip closed ("just tell me"). */
+export function skippedCardIds(feed: ReadonlyArray<ThreadFeedEntry>): string[] {
+  return feed.flatMap((entry) =>
+    entry.type !== "activity-group"
+      ? []
+      : entry.activities.flatMap((activity) => {
+          const item = activity.projectedItem.item;
+          if (item.type !== "dynamic_tool" || item.status !== "completed") return [];
+          const id = courseProblemSkippedCardId(item);
+          return id === undefined ? [] : [id];
+        }),
+  );
+}
+
 export function deriveThreadFeedPresentation(
   feed: ReadonlyArray<ThreadFeedEntry>,
   latestRun: ThreadFeedLatestRun | null,
@@ -1764,15 +1785,7 @@ export function deriveThreadFeedPresentation(
   const answeredCards = lesson
     ? answeredCardAnswers(
         sourceFeed.flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
-        sourceFeed.flatMap((entry) => {
-          if (entry.type !== "activity-group") return [];
-          return entry.activities.flatMap((activity) => {
-            const item = activity.projectedItem.item;
-            if (item.type !== "dynamic_tool" || item.status !== "completed") return [];
-            const id = courseProblemSkippedCardId(item);
-            return id === undefined ? [] : [id];
-          });
-        }),
+        skippedCardIds(sourceFeed),
       )
     : new Map<string, string>();
   const feedWithPictureState = lesson
@@ -1843,9 +1856,46 @@ export function deriveThreadFeedPresentation(
       for (const entryId of fold.hiddenEntryIds) collapsedEntryIds.add(entryId);
     }
   }
+  // The working run's fold row shows its live timer where "Worked for" lands once it settles.
+  // Zen never folds, so it keeps only the Thinking row.
+  // Runless work folds under its prompt's key once it settles, so the live row takes that key.
+  const runlessPrompt =
+    activeRunId === null && runlessWorkActive
+      ? sourceFeed.findLast((entry) => isUserMessageEntry(entry) && feedEntryRunId(entry) === null)
+      : undefined;
+  const liveRunId =
+    activeRunId ?? (runlessPrompt ? RunId.make(`runless:${runlessPrompt.id}`) : null);
+  const liveFold =
+    !zen &&
+    isWorking &&
+    activeWorkStartedAt !== null &&
+    liveRunId !== null &&
+    !compactionCommandRunIds.has(liveRunId)
+      ? liveRunFoldRow(liveRunId, activeWorkStartedAt)
+      : null;
+  let liveFoldPlaced = false;
+  // Earlier turns can hold the run's own items (a subagent it continued), so wait for its prompt.
+  let liveFoldReady =
+    liveFold !== null &&
+    activeRunId !== null &&
+    !sourceFeed.some((entry) => isUserMessageEntry(entry) && feedEntryRunId(entry) === activeRunId);
   for (let sourceIndex = 0; sourceIndex < feedWithPictureState.length; sourceIndex += 1) {
     const entry = feedWithPictureState[sourceIndex]!;
     const feedIndex = retainedFeedIndices[sourceIndex]!;
+    if (liveFold !== null && !liveFoldPlaced && feedEntryRunId(entry) === activeRunId) {
+      if (isUserMessageEntry(entry)) {
+        liveFoldReady = activeRunId !== null || entry === runlessPrompt;
+      } else if (
+        liveFoldReady &&
+        !staysOutOfFold(entry) &&
+        entry.type !== "quiz-card" &&
+        !(lesson && entry.type === "message" && entry.message.role === "assistant") &&
+        !(entry.type === "activity-group" && isContextCompactionActivityGroup(entry))
+      ) {
+        result.push(liveFold);
+        liveFoldPlaced = true;
+      }
+    }
     if (isUserMessageEntry(entry)) {
       restarts.push({ entry: feedIndex, rowsLength: result.length });
     }
@@ -1926,6 +1976,7 @@ export function deriveThreadFeedPresentation(
       );
     }
   }
+  if (liveFold !== null && !liveFoldPlaced) result.push(liveFold);
   if (
     isWorking &&
     activeWorkStartedAt !== null &&
@@ -2055,7 +2106,7 @@ function isWorkLogFeedRow(row: ThreadFeedEntry | undefined): boolean {
   );
 }
 
-const LIVE_ACTIVITY_ROW_ID = "live-activity-row";
+export const LIVE_ACTIVITY_ROW_ID = "live-activity-row";
 
 /** Reads the feed before tool visibility filters it, so hidden newer parent work still counts. */
 function runningSubagentsAtRunTail(feed: ReadonlyArray<ThreadFeedEntry>, runId: RunId): number {
@@ -2068,6 +2119,23 @@ function runningSubagentsAtRunTail(feed: ReadonlyArray<ThreadFeedEntry>, runId: 
     running += items.filter(isLiveSubagentTurnItem).length;
   }
   return running;
+}
+
+let cachedLiveRunFoldRow: Extract<ThreadFeedEntry, { readonly type: "run-fold" }> | null = null;
+
+function liveRunFoldRow(runId: RunId, startedAt: string) {
+  if (cachedLiveRunFoldRow?.runId !== runId || cachedLiveRunFoldRow.workingSince !== startedAt) {
+    cachedLiveRunFoldRow = {
+      type: "run-fold",
+      id: `run-fold:${runId}`,
+      createdAt: startedAt,
+      runId,
+      label: "Working",
+      expanded: false,
+      workingSince: startedAt,
+    };
+  }
+  return cachedLiveRunFoldRow;
 }
 
 function thinkingRow(

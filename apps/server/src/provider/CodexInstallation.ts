@@ -29,7 +29,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as NodeCrypto from "node:crypto";
 import * as ServerConfig from "../config.ts";
-import { auditDownload } from "../course/downloadAudit.ts";
+import { auditDownload, withAuditHops, type DownloadAuditHop } from "../course/downloadAudit.ts";
 import { selectManagedRelease } from "./managedRelease.ts";
 import * as ModelManifest from "./ModelManifest.ts";
 import { resolveProviderCompatibility } from "./providerCompatibility.ts";
@@ -545,6 +545,16 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
     );
     return true;
   });
+  const withValidationTimeout = Effect.timeoutOrElse({
+    duration: "90 seconds",
+    orElse: () =>
+      Effect.fail(
+        installationError(
+          "verify",
+          "Codex runtime verification timed out after 90 seconds. Check this environment's server logs for startup errors, then retry installation.",
+        ),
+      ),
+  });
   const validate =
     options.validate ??
     Effect.fn("CodexInstallation.validate")(
@@ -615,10 +625,7 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
             "The existing managed Codex release differs from the official package. Remove it and reinstall.",
           );
         yield* ensureEligible();
-        yield* validate(existing, release.version).pipe(
-          Effect.scoped,
-          Effect.timeout("90 seconds"),
-        );
+        yield* validate(existing, release.version).pipe(Effect.scoped, withValidationTimeout);
         yield* activate();
         return;
       }
@@ -632,9 +639,10 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
       const hash = NodeCrypto.createHash("sha256");
       const maxArchiveBytes = release.archiveBytes ?? UPSTREAM_MAX_ARCHIVE_BYTES;
       let downloadedBytes = 0;
+      const hops: DownloadAuditHop[] = [];
       let lastProgressAt = yield* Clock.currentTimeMillis;
       yield* Effect.gen(function* () {
-        const response = yield* http
+        const response = yield* withAuditHops(http, hops)
           .execute(HttpClientRequest.get(release.url))
           .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
         yield* response.stream.pipe(
@@ -673,6 +681,8 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
             { stateDir: options.stateDir },
             {
               url: release.url,
+              kind: "provider",
+              hops,
               status: response.status,
               bytes: downloadedBytes,
               contentType: response.headers["content-type"] ?? null,
@@ -695,7 +705,13 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
           Effect.promise(() =>
             auditDownload(
               { stateDir: options.stateDir },
-              { url: release.url, bytes: downloadedBytes, error: Cause.pretty(cause) },
+              {
+                url: release.url,
+                kind: "provider",
+                hops,
+                bytes: downloadedBytes,
+                error: Cause.pretty(cause),
+              },
             ),
           ),
         ),
@@ -740,10 +756,7 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
       );
       const executable = yield* fromDirectory(runtime, release.version, release.target);
       yield* ensureEligible();
-      yield* validate(executable, release.version).pipe(
-        Effect.scoped,
-        Effect.timeout("90 seconds"),
-      );
+      yield* validate(executable, release.version).pipe(Effect.scoped, withValidationTimeout);
       yield* fs.writeFileString(
         path.join(runtime, ".install-complete.json"),
         yield* encodeRecord({
@@ -788,10 +801,7 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
     function* () {
       const active = yield* readRecord(activePath, ActiveRelease);
       const executable = yield* completedRelease(active.version);
-      yield* validate(executable, executable.version).pipe(
-        Effect.scoped,
-        Effect.timeout("90 seconds"),
-      );
+      yield* validate(executable, executable.version).pipe(Effect.scoped, withValidationTimeout);
       const kept = yield* keptInstall(executable.version);
       if (kept === null) {
         yield* SubscriptionRef.update(state, (current) => ({ ...current, ...offer(kept) }));

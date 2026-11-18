@@ -1,20 +1,34 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalConsole:off
 import * as NodeCrypto from "node:crypto";
+import * as NodeDnsPromises from "node:dns/promises";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
+import * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 
 export interface DownloadAuditContext {
   readonly stateDir: string;
   readonly threadId?: string | null;
   readonly courseId?: string | null;
 }
+export type DownloadAuditKind =
+  | "runtime"
+  | "course"
+  | "reference"
+  | "speech-model"
+  | "browser"
+  | "provider"
+  | "device-tool";
+export interface DownloadAuditHop {
+  readonly url: string;
+  readonly status: number | null;
+  readonly ips: ReadonlyArray<string>;
+}
 export interface DownloadAuditAttempt {
   readonly url: string;
-  readonly hops?: ReadonlyArray<{
-    readonly url: string;
-    readonly status: number | null;
-    readonly ips: ReadonlyArray<string>;
-  }>;
+  readonly kind: DownloadAuditKind;
+  readonly hops?: ReadonlyArray<DownloadAuditHop>;
   readonly status?: number | null;
   readonly bytes?: number;
   readonly contentType?: string | null;
@@ -23,6 +37,27 @@ export interface DownloadAuditAttempt {
   readonly blocked?: string;
   readonly error?: string;
 }
+/** Follows redirects in the client, not in fetch, so every hop the bytes passed through is recorded. */
+export const withAuditHops = (client: HttpClient.HttpClient, hops: Array<DownloadAuditHop>) =>
+  client.pipe(
+    HttpClient.tap((response) => {
+      const url = response.request.url;
+      const host = new URL(url).hostname.replace(/^\[|\]$/g, "");
+      // An IP literal needs no lookup.
+      if (NodeNet.isIP(host))
+        return Effect.sync(() => hops.push({ url, status: response.status, ips: [host] }));
+      return Effect.promise(() =>
+        NodeDnsPromises.lookup(host, { all: true })
+          .then((rows) => rows.map(({ address }) => address))
+          .catch(() => [])
+          .then((ips) => hops.push({ url, status: response.status, ips })),
+      );
+    }),
+    HttpClient.followRedirects(10),
+    HttpClient.transform((effect) =>
+      Effect.provideService(effect, FetchHttpClient.RequestInit, { redirect: "manual" }),
+    ),
+  );
 const SECRET = /token|key|sig|secret|pass|pw|pwd|auth|session|code|cred|jwt|access/i;
 const redactUrl = (raw: string) => {
   try {
@@ -62,6 +97,7 @@ export const auditDownload = async (
     const line = {
       at: now.toISOString(),
       url: redactUrl(attempt.url),
+      kind: attempt.kind,
       hops: (attempt.hops ?? []).map((hop) => ({ ...hop, url: redactUrl(hop.url) })),
       status: attempt.status ?? null,
       bytes: attempt.bytes ?? attempt.body?.byteLength ?? 0,

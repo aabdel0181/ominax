@@ -22,6 +22,7 @@ import {
   TurnItemId,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ProjectedTurnItem,
+  type OrchestrationV2ThreadProjection,
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
 import { pinOrderKeyBetween } from "@t3tools/shared/pinOrderKey";
@@ -712,7 +713,7 @@ const clientScope = (
   thread: undefined,
   client: { sessionId: "session-1", label: "Claude Code", access },
   issuedAt: 0,
-  capabilities: new Set(["orchestration", "worktree", "pull-requests"]),
+  capabilities: new Set(["orchestration", "worktree", "pull-requests", "issues"]),
 });
 
 it.effect("a client caller targets any thread within its ceiling and cannot act as a thread", () =>
@@ -1354,6 +1355,7 @@ it.effect("discovers workflow stop targets and requires orchestration capability
             getThreadShell: (id) => Effect.succeed(McpToolAccessTestkit.liveThreadShell(id)),
             getProjectThreadRecords: () =>
               Effect.succeed(McpToolAccessTestkit.idleThreadProjection(shell)),
+            getRunCount: () => Effect.succeed(1),
             getTimelinePage: () =>
               Effect.succeed({ items: [row], totalItems: 1, hasMore: false, hasEarlier: false }),
             stopWorkflow: (input) =>
@@ -1437,6 +1439,100 @@ it.effect("only the caller that prepared a pending upload can discard it", () =>
   ),
 );
 
+const sendTargetId = ThreadId.make("send-target-thread");
+const sendCommand = {
+  commandId: CommandId.make("mcp-core-send"),
+  commandType: "message.dispatch",
+};
+
+it.effect.each([
+  {
+    outcome: "says that the missing workspace could not be recreated",
+    refusal: new ThreadManagement.ThreadManagementWorktreeRestoreError({
+      threadId: sendTargetId,
+      cause: new Error("The branch no longer exists."),
+    }),
+    reply: {
+      _tag: "OrchestratorMcpFailure",
+      code: "thread_not_sendable",
+      message:
+        "Couldn't recreate the missing workspace of thread send-target-thread, so the message was not sent. The branch no longer exists.",
+    },
+  },
+  {
+    outcome: "passes on the text reason of an orchestrator rejection",
+    refusal: new OrchestratorCommandRejectedError({
+      ...sendCommand,
+      cause: "Thread send-target-thread is deleted.",
+    }),
+    reply: {
+      _tag: "OrchestratorMcpFailure",
+      code: "orchestration_error",
+      message: "Thread send-target-thread is deleted.",
+    },
+  },
+  {
+    outcome: "keeps an internal dispatch cause private",
+    refusal: new OrchestratorDispatchError({
+      ...sendCommand,
+      cause: new Error("private-storage-path"),
+    }),
+    reply: {
+      _tag: "OrchestratorMcpFailure",
+      code: "orchestration_error",
+      message: "The operation could not be completed.",
+    },
+  },
+])("t3_thread_send_attachments $outcome", ({ refusal, reply }) => {
+  const stored = ChatImageAttachment.make({
+    type: "image",
+    id: "owned-image",
+    name: "original.png",
+    mimeType: "image/png",
+    sizeBytes: 12,
+  });
+  return Effect.gen(function* () {
+    const server = yield* McpServer.McpServer;
+    const result = yield* server
+      .callTool({
+        name: "t3_thread_send_attachments",
+        arguments: { threadId: sendTargetId, message: "See the file.", attachments: [stored] },
+      })
+      .pipe(
+        Effect.provideService(McpInvocationContext.McpInvocationContext, scope),
+        Effect.provideService(McpSchema.McpServerClient, client),
+      );
+    expect(declaredFailure(result)).toEqual(reply);
+  }).pipe(
+    Effect.provide(
+      McpHttpServer.layerAttachmentToolkit.pipe(
+        Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
+        Layer.provide(
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: (id) => Effect.succeed(McpToolAccessTestkit.liveThreadShell(id)),
+            getProjectThreadRecords: () =>
+              Effect.succeed({
+                ...McpToolAccessTestkit.idleThreadProjection(
+                  McpToolAccessTestkit.liveThreadShell(sendTargetId),
+                ),
+                messages: [{ attachments: [stored] }],
+              } as never),
+            sendToThread: () => Effect.fail(refusal),
+          }),
+        ),
+        Layer.provide(AssetSigner.layer.pipe(Layer.provideMerge(ServerSecretStore.layer))),
+        Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-mcp-attachment-" })),
+        Layer.provide(
+          DocumentText.layer.pipe(
+            Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+          ),
+        ),
+        Layer.provide(NodeCrypto.layer),
+      ),
+    ),
+  );
+});
+
 it.effect(
   "t3_thread_list settled:false with an empty statuses list lists the unsettled threads",
   () => {
@@ -1507,6 +1603,17 @@ it.effect(
 
 let animationRuntimeMode: OrchestrationV2ThreadShell["runtimeMode"] = "full-access";
 const lessonSideChatId = ThreadId.make("course-lesson-side-chat");
+const liveThreadShell = (id: ThreadId) =>
+  ({
+    id: threadId,
+    ...(id === lessonSideChatId ? { sideChat: { lessonThreadId: threadId } } : {}),
+    deletedAt: null,
+    archivedAt: null,
+    activeRunId: RunId.make("mcp-core-run"),
+    providerInstanceId: ProviderInstanceId.make("codex"),
+    runtimeMode: animationRuntimeMode,
+    interactionMode: "default",
+  }) as OrchestrationV2ThreadShell;
 const liveCallerLayer = Layer.mock(ThreadManagement.ThreadManagementService)({
   getThreadShell: (id) =>
     Effect.succeed({
@@ -1695,8 +1802,12 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     const outline = JSON.stringify((yield* callAs("course_read", {})).content);
     expect(outline).toContain("1. One");
     expect(outline).not.toContain("prepThreadIds");
+    // A recap of an earlier unit keeps the saved spot; reading ahead moves it.
     yield* callAs("course_read", { unit: 1 });
-    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 1 });
+    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 2 });
+    yield* callAs("course_update", { position: { unit: 1 } });
+    yield* callAs("course_read", { unit: 2 });
+    expect((yield* service.get({ id: course.id })).position).toEqual({ unit: 2 });
     // The prep turn may call course_read at once, so its id is recorded before it starts.
     expect(recordedAtCreate).toEqual([(yield* service.get({ id: course.id })).prepThreadIds]);
     expect(recordedAtCreate[0]).toHaveLength(1);
@@ -1728,10 +1839,15 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     });
     expect(part.isError).not.toBe(true);
     expect((yield* service.get({ id: course.id })).position).toMatchObject({
-      unit: 1,
+      unit: 2,
       pset: 1,
       problem: "1(a)",
     });
+    const skipped = yield* callAs("course_problems", { courseId: course.id, pset: 1, skip: true });
+    expect(JSON.stringify(skipped.content)).toContain("pset-card");
+    // A later call on the same set without `problem` keeps the saved part.
+    yield* callAs("course_problems", { courseId: course.id, pset: 1 });
+    expect((yield* service.get({ id: course.id })).position).toMatchObject({ problem: "1(a)" });
     const beforeSearch = yield* callAs("course_problems", { courseId: course.id });
     expect(JSON.stringify(beforeSearch.content)).toContain("one web search");
     const invalidPrep = yield* callAs("course_prepare", {
@@ -1867,7 +1983,23 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
         Layer.provideMerge(courseServiceLayer),
         Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-mcp-course-" })),
         Layer.provideMerge(NodeServices.layer),
-        Layer.provide(liveCallerLayer),
+        // The lesson has one unanswered pset card, so a skip closes it.
+        Layer.provide(
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: (id) => Effect.succeed(liveThreadShell(id)),
+            getProjectThreadRecords: () =>
+              Effect.succeed({
+                messages: [
+                  {
+                    id: "pset-card:reply",
+                    role: "assistant",
+                    text: "Problem 1(b).",
+                    createdAt: DateTime.makeUnsafe(0),
+                  },
+                ],
+              } as unknown as OrchestrationV2ThreadProjection),
+          }),
+        ),
       ),
     ),
   );
