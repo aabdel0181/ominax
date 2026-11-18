@@ -686,7 +686,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
             const referencesNote =
               references === undefined
                 ? referencesLoading
-                  ? 'A prep thread is still looking for a published solution. The verdict is provisional: grade against the tutor\'s own working because the published solution is still loading, end the verdict with "Reference still loading.", and call course_problems with this pset again before the next verdict; once references arrive, re-check earlier verdicts on this set against them and correct any that differ. '
+                  ? 'A prep thread is still looking for a published solution. Grade against your own working, tell the learner plainly that this grade is provisional until the published solution arrives, end the verdict with "Reference still loading.", and call course_problems with this pset again before the next verdict; once references arrive, re-check earlier verdicts on this set against them and correct any that differ. '
                   : ""
                 : references.length === 0
                   ? "No published solution was found online. End every verdict on this problem with the cite line. "
@@ -729,7 +729,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
               ...referenceFields,
               ...(input.skip
                 ? {
-                    note: `The learner asked for the answer, so this problem is skipped; the visible reply must begin with the line **Skipped, not graded.**, then the final answer, then every step of the working, then the cite line if there is one. Do not grade it or ask the learner to answer this part again.${referencesLoading ? " The verdict is provisional because the published solution is still loading; work it yourself." : solution === null ? " No official solution exists; work it yourself." : ""}`,
+                    note: `The learner asked for the answer, so this problem is skipped; the visible reply must begin with the line **Skipped, not graded.**, then the final answer, then every step of the working, then the cite line if there is one. Do not grade it or ask the learner to answer this part again.${referencesLoading ? " The published solution is still loading; work it yourself." : solution === null ? " No official solution exists; work it yourself." : ""}`,
                   }
                 : solution === null
                   ? {

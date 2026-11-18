@@ -179,7 +179,10 @@ describe("CourseService", () => {
           skippedWhileLoading.problemSets[0]?.note ?? "",
           "No official solution exists",
         );
-        assert.include(skippedWhileLoading.problemSets[0]?.note ?? "", "verdict is provisional");
+        assert.include(
+          skippedWhileLoading.problemSets[0]?.note ?? "",
+          "published solution is still loading",
+        );
         // A prep thread that died never leaves grading waiting.
         yield* TestClock.adjust("31 minutes");
         const stale = yield* service.problems({ courseId: course.id, pset: 1 });
