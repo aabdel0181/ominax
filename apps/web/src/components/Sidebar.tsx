@@ -203,6 +203,7 @@ import {
   searchSidebarThreads,
   shouldCreateNewThreadInCurrentProject,
   shouldNavigateAfterThreadPark,
+  sidebarEmptyListNotice,
   sidebarListItemId,
   sidebarThreadKeyAtY,
   sortInboxThreadsByReturn,
@@ -3018,6 +3019,20 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     canCreateLesson &&
     lessonEnvironment !== undefined &&
     supportsLessons(lessonEnvironment);
+  const emptyListNotice = sidebarEmptyListNotice({
+    hasProjects: projects.length > 0,
+    lessonsOnly,
+    scopedProjectNames: scopedProjectGroups.map((project) => project.displayName),
+    settledCount,
+    scopeIsLearning:
+      scopedProjectGroups.length > 0 &&
+      scopedProjectGroups.every((group) =>
+        group.memberProjectRefs.some((ref) =>
+          learningProjectKeys.has(`${ref.environmentId}:${ref.projectId}`),
+        ),
+      ),
+    canStartLesson: showNewLesson,
+  });
 
   const newThreadShortcutLabel =
     shortcutLabelForCommand(keybindings, "chat.new") ??
@@ -3366,9 +3381,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             workingThreads.length +
             snoozedThreads.length ===
             0 &&
-          (settledCount === 0 || scopedProjectGroups.length > 0) ? (
+          emptyListNotice !== null ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
-              {projects.length === 0 ? (
+              {emptyListNotice.kind === "no-projects" ? (
                 <>
                   <span>No projects yet</span>
                   <button
@@ -3380,14 +3395,50 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     Add project
                   </button>
                 </>
-              ) : scopedProjectGroups.length > 0 ? (
+              ) : emptyListNotice.kind === "no-lessons" ? (
+                <>
+                  <span>{emptyListNotice.message}</span>
+                  {emptyListNotice.offerSettings ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void router.navigate({
+                          to: "/settings/threads",
+                          hash: "learning-project",
+                          ...(scopedProjectGroups.length === 1
+                            ? {
+                                search: {
+                                  project: getSidebarProjectSettingsKey(
+                                    scopedProjectGroups[0]!,
+                                    projectGroupingSettings,
+                                    projects,
+                                  ),
+                                },
+                              }
+                            : {}),
+                        })
+                      }
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                    >
+                      Open Settings
+                    </button>
+                  ) : null}
+                  {showNewLesson ? (
+                    <button
+                      type="button"
+                      onClick={handleNewLesson}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                    >
+                      New lesson
+                    </button>
+                  ) : null}
+                </>
+              ) : emptyListNotice.kind === "no-active-lessons" ? (
+                "No active lessons"
+              ) : emptyListNotice.kind === "project" ? (
                 <>
                   <span>
-                    {`No ${settledCount > 0 ? "active threads" : "threads"} in ${
-                      scopedProjectGroups.length > 1
-                        ? "these projects"
-                        : scopedProjectGroups[0]!.displayName
-                    }${settledCount > 0 ? "" : " yet"}`}
+                    {`No ${emptyListNotice.hasSettled ? "active threads" : "threads"} in ${emptyListNotice.label}${emptyListNotice.hasSettled ? "" : " yet"}`}
                   </span>
                   <button
                     type="button"

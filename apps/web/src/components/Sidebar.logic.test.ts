@@ -37,6 +37,7 @@ import {
   groupSidebarThreadsByProject,
   resolveSidebarFolderDot,
   sidebarFolderExpansionKeys,
+  sidebarEmptyListNotice,
 } from "./Sidebar.logic";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -72,6 +73,89 @@ import {
 } from "./sidebar/routeReveal";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+describe("sidebarEmptyListNotice", () => {
+  const base = {
+    hasProjects: true,
+    lessonsOnly: true,
+    scopedProjectNames: [] as string[],
+    settledCount: 0,
+    scopeIsLearning: false,
+    canStartLesson: true,
+  };
+  it.each([
+    {
+      name: "lessons with no scoped project",
+      input: base,
+      expected: {
+        kind: "no-lessons",
+        offerSettings: true,
+        message:
+          "No lessons. Mark a project as a Learning project in Settings, or start a New lesson.",
+      },
+    },
+    {
+      name: "lessons with one scoped project",
+      input: { ...base, scopedProjectNames: ["post-training"] },
+      expected: {
+        kind: "no-lessons",
+        offerSettings: true,
+        message:
+          "No lessons in post-training. Mark it as a Learning project in Settings, or start a New lesson.",
+      },
+    },
+    {
+      name: "lessons with multiple scoped projects",
+      input: { ...base, scopedProjectNames: ["post-training", "research"] },
+      expected: {
+        kind: "no-lessons",
+        offerSettings: true,
+        message:
+          "No lessons. Mark a project as a Learning project in Settings, or start a New lesson.",
+      },
+    },
+    {
+      name: "lessons in a scoped project already marked",
+      input: { ...base, scopedProjectNames: ["post-training"], scopeIsLearning: true },
+      expected: {
+        kind: "no-lessons",
+        offerSettings: false,
+        message: "No lessons in post-training yet. Start a New lesson.",
+      },
+    },
+    {
+      name: "lessons when New lesson is unavailable",
+      input: { ...base, canStartLesson: false },
+      expected: {
+        kind: "no-lessons",
+        offerSettings: true,
+        message: "No lessons. Mark a project as a Learning project in Settings.",
+      },
+    },
+    {
+      name: "lessons with settled lessons",
+      input: { ...base, settledCount: 3 },
+      expected: { kind: "no-active-lessons" },
+    },
+    {
+      name: "scoped threads with settled threads",
+      input: { ...base, lessonsOnly: false, scopedProjectNames: ["project"], settledCount: 2 },
+      expected: { kind: "project", label: "project", hasSettled: true },
+    },
+    {
+      name: "settled threads without a scope",
+      input: { ...base, lessonsOnly: false, settledCount: 2 },
+      expected: null,
+    },
+    {
+      name: "no projects",
+      input: { ...base, hasProjects: false, lessonsOnly: false },
+      expected: { kind: "no-projects" },
+    },
+  ])("returns the right notice for $name", ({ input, expected }) => {
+    expect(sidebarEmptyListNotice(input)).toEqual(expected);
+  });
+});
 
 describe("deleteSelectedThreadEntries", () => {
   const entries = [{ threadKey: "one" }, { threadKey: "two" }, { threadKey: "three" }] as const;

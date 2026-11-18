@@ -1960,7 +1960,7 @@ export function ThreadsSettingsPanel() {
             <SettingsRow
               serverScoped
               settingKeys={["learningProject"]}
-              title="Learning project"
+              {...searchableSetting("learning-project")}
               description="Chats here count as lessons: they never auto-settle, and the sidebar's Lessons filter shows them."
               resetAction={
                 settings.learningProject !== DEFAULT_UNIFIED_SETTINGS.learningProject ? (
