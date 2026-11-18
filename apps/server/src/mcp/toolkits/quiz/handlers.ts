@@ -14,8 +14,11 @@ import {
   withoutCardAnswerTag,
   withoutShownParagraphs,
   openLessonCardItemId,
+  lessonCardAnswers,
+  statesAnswer,
 } from "@t3tools/shared/quizCard";
-import { lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
+import { htmlRenderFromToolItem, lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
+import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
 
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { loadCaller, readThread } from "../../threadAccess.ts";
@@ -181,6 +184,73 @@ const skippedCardNotice = (shown: { readonly skippedCardId: string | undefined }
     ? undefined
     : "An older open card was closed as skipped by the learner's free message. Do not point back to that card; re-ask it as a new card if it is still needed.";
 
+const pictureAnswers = (
+  card: ReturnType<typeof readQuestionCard> | ReturnType<typeof readQuizCard>,
+) => {
+  if (card === undefined) return [];
+  const answerText =
+    "answer" in card ? card.answer : card.number === undefined ? "" : String(card.number.answer);
+  const numbers = `${card.question}\n${answerText}`.match(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu) ?? [];
+  return [...lessonCardAnswers(card), ...numbers];
+};
+
+const statesNumber = (text: string, value: string) => {
+  if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(value)) return false;
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}_])${value.replace(/[.-]/gu, "\\$&")}(?![\\p{L}\\p{N}_])`,
+    "u",
+  ).test(text.replace(/[−–]/gu, "-"));
+};
+
+const checkEarlierPictures = Effect.fn("quiz.checkEarlierPictures")(function* (
+  card: ReturnType<typeof readQuestionCard> | ReturnType<typeof readQuizCard>,
+) {
+  const context = yield* loadCaller();
+  const runId = context.caller?.activeRunId;
+  if (card === undefined || context.caller === undefined) return false;
+  if (context.caller.tags?.includes("lesson") !== true) return true;
+  if (runId === null || runId === undefined) return false;
+  const records = yield* context.threads
+    .getProjectThreadRecords(
+      { projectId: context.caller.projectId, threadId: context.caller.id },
+      ["turnItems"],
+      { runIds: [runId] },
+    )
+    .pipe(Effect.orElseSucceed(() => ({ turnItems: [] as const })));
+  const pictures = records.turnItems.flatMap((item) => {
+    if (item.type !== "dynamic_tool" || item.status !== "completed") return [];
+    if (resolveT3McpToolId(item.toolName) === "animation_render") return [undefined];
+    const reference = htmlRenderFromToolItem(item);
+    return resolveT3McpToolId(item.toolName) === "html_render" && reference !== undefined
+      ? [reference]
+      : [];
+  });
+  if (pictures.length === 0) return true;
+  let checked = true;
+  for (const picture of pictures) {
+    if (picture === undefined) {
+      checked = false;
+      continue;
+    }
+    if (picture.checkText === undefined) {
+      checked = false;
+      continue;
+    }
+    const answer = pictureAnswers(card).find(
+      (candidate) =>
+        statesAnswer(picture.checkText!, candidate) || statesNumber(picture.checkText!, candidate),
+    );
+    if (answer !== undefined) {
+      return yield* new OrchestratorMcpFailure({
+        code: "invalid_request",
+        message:
+          "This card is refused because an earlier picture shows its answer or one of its numbers. Ask something the picture does not show, or redraw the picture without those numbers.",
+      });
+    }
+  }
+  return checked;
+});
+
 const handlers = {
   quiz_card: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
@@ -202,8 +272,13 @@ const handlers = {
         verdict: input.verdict,
         answers: [input.answer],
       });
+      const picturesChecked = yield* checkEarlierPictures(card);
       return {
-        quizCard: { ...card, reply: shownReply(input, shown) },
+        quizCard: {
+          ...card,
+          reply: shownReply(input, shown),
+          ...(picturesChecked === true ? { picturesChecked: true as const } : {}),
+        },
         message: [QUIZ_CARD_SHOWN, skippedCardNotice(shown)].filter(Boolean).join("\n"),
       };
     }),
@@ -234,8 +309,13 @@ const handlers = {
               ],
             }),
       });
+      const picturesChecked = yield* checkEarlierPictures(card);
       return {
-        questionCard: { ...card, reply: shownReply(input, shown) },
+        questionCard: {
+          ...card,
+          reply: shownReply(input, shown),
+          ...(picturesChecked === true ? { picturesChecked: true as const } : {}),
+        },
         message: [QUESTION_CARD_SHOWN, skippedCardNotice(shown)].filter(Boolean).join("\n"),
       };
     }),

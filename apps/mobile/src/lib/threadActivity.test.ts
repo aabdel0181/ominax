@@ -220,6 +220,30 @@ it("hides a lesson picture before an unanswered card until the card is answered"
     type: "html-render",
     picturePending: true,
   });
+  const flaggedCard = {
+    ...card,
+    output: { quizCard: { ...card.output.quizCard, picturesChecked: true } },
+  };
+  const flaggedRows = deriveThreadFeedPresentation(
+    buildThreadFeed([
+      projected(userMessage(), 0),
+      projected({ ...assistantMessage(), id: TurnItemId.make("text-before") }, 1),
+      projected(visual, 2),
+      projected({ ...assistantMessage(), id: TurnItemId.make("text-after") }, 3),
+      projected(flaggedCard, 4),
+    ]),
+    null,
+    new Set(),
+    new Set(),
+    null,
+    false,
+    undefined,
+    undefined,
+    true,
+  );
+  expect(flaggedRows.find((entry) => entry.type === "html-render")).not.toMatchObject({
+    picturePending: true,
+  });
   const answer = projected(
     {
       ...userMessage("2026-06-20T00:00:05.000Z"),

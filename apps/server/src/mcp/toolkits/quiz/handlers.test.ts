@@ -2,6 +2,7 @@ import {
   EnvironmentId,
   ProviderInstanceId,
   ThreadId,
+  TurnItemId,
   type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -526,3 +527,84 @@ it.effect(
     );
   },
 );
+
+it.effect("refuses picture spoilers and flags a clean teaching picture", () => {
+  const shell = {
+    ...McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-picture-test")),
+    tags: ["lesson"],
+  };
+  const projection = McpToolAccessTestkit.idleThreadProjection(shell);
+  const picture = {
+    id: TurnItemId.make("picture"),
+    threadId: shell.id,
+    runId: shell.activeRunId,
+    nodeId: null,
+    providerThreadId: null,
+    providerTurnId: null,
+    nativeItemRef: null,
+    parentItemId: null,
+    ordinal: 1,
+    status: "completed",
+    title: null,
+    startedAt: null,
+    completedAt: null,
+    updatedAt: DateTime.makeUnsafe("2026-01-01T00:00:01Z"),
+    type: "dynamic_tool",
+    toolName: "html_render",
+    input: {},
+    output: {
+      htmlRender: {
+        attachmentId: "picture-00000000-0000-0000-0000-000000000000-html",
+        title: "Weight split",
+        height: 200,
+        checkText: "The split is 20 N along the slope.",
+      },
+    },
+  } as never;
+  const provide = (turnItems: ReadonlyArray<unknown>) =>
+    Layer.mergeAll(
+      McpToolAccess.HandlersLayer.layer(QuizHandlers.layer),
+      Layer.succeed(McpInvocationContext.McpInvocationContext, {
+        environmentId: EnvironmentId.make("quiz-handler-environment"),
+        requestNamespace: "quiz-handler-provider-session",
+        thread: {
+          threadId: shell.id,
+          providerSessionId: "quiz-handler-provider-session",
+          providerInstanceId: ProviderInstanceId.make("codex"),
+        },
+        client: undefined,
+        capabilities: new Set(["orchestration" as const]),
+        issuedAt: 0,
+      }),
+      Layer.mock(ThreadManagement.ThreadManagementService)({
+        getThreadShell: () => Effect.succeed(shell),
+        getProjectThreadRecords: () =>
+          Effect.succeed({
+            ...projection,
+            turnItems,
+          } as unknown as OrchestrationV2ThreadProjection),
+      }),
+    );
+  const card = {
+    reply:
+      "The force split uses the ramp angle and separates the weight into components. " +
+      "x".repeat(220),
+    source: "",
+    question: "What is the force along the slope?",
+    number: { answer: 20, tolerance: 0, unit: "N" },
+  };
+  return Effect.gen(function* () {
+    const toolkit = yield* QuizToolkit;
+    const refused = yield* toolkit
+      .handle("question_card", card)
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(refused.at(-1)?.result).toMatchObject({
+      code: "invalid_request",
+      message: expect.stringContaining("earlier picture shows"),
+    });
+    const clean = yield* toolkit
+      .handle("question_card", { ...card, number: { ...card.number, answer: 30 } })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(clean.at(-1)?.result).toMatchObject({ questionCard: { picturesChecked: true } });
+  }).pipe(Effect.provide(provide([picture])));
+});

@@ -22,6 +22,8 @@ export interface HtmlRenderReference {
   readonly height: number;
   readonly heights?: ReadonlyArray<readonly [width: number, height: number]>;
   readonly forCard?: string;
+  /** Visible source text retained for lesson card spoiler checks. */
+  readonly checkText?: string;
 }
 
 export const HTML_RENDER_MEASURE_WIDTHS = [320, 375, 430, 520, 640, 728, 860, 1000, 1144] as const;
@@ -52,7 +54,10 @@ function readMeasuredHeights(value: unknown) {
 
 export function readHtmlRenderReference(value: unknown): HtmlRenderReference | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const { attachmentId, title, height, heights, forCard } = value as Record<string, unknown>;
+  const { attachmentId, title, height, heights, forCard, checkText } = value as Record<
+    string,
+    unknown
+  >;
   if (
     typeof attachmentId !== "string" ||
     attachmentId.length === 0 ||
@@ -71,6 +76,9 @@ export function readHtmlRenderReference(value: unknown): HtmlRenderReference | u
     ...(measured === undefined ? {} : { heights: measured }),
     ...(typeof forCard === "string" && forCard.length > 0 && forCard.length <= 256
       ? { forCard }
+      : {}),
+    ...(typeof checkText === "string" && checkText.length > 0 && checkText.length <= 4_000
+      ? { checkText }
       : {}),
   };
 }

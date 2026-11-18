@@ -169,6 +169,9 @@ it("keeps valid quiz cards and drops invalid cards", () => {
     ],
   };
   expect(compactDynamicToolOutput({ quizCard })).toEqual({ quizCard });
+  expect(compactDynamicToolOutput({ quizCard: { ...quizCard, picturesChecked: true } })).toEqual({
+    quizCard: { ...quizCard, picturesChecked: true },
+  });
   expect(
     compactDynamicToolOutput({ quizCard: { ...quizCard, wrongOptions: [{ option: "B" }] } }),
   ).toBeUndefined();

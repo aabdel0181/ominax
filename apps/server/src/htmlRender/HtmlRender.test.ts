@@ -215,6 +215,7 @@ describe("HtmlRender", () => {
         attachmentId: expect.any(String),
         title: "Revenue",
         height: 2_000,
+        checkText: "Quarterly revenue",
       });
       const stored = resolveAttachmentPathById({
         attachmentsDir: config.attachmentsDir,

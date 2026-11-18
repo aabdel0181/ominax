@@ -1753,6 +1753,7 @@ export function deriveMessagesTimelineRows(input: {
           if (pendingCard && effectiveAnsweredCardAnswers.has(pendingCard.id)) {
             pendingCard = undefined;
           }
+          if (pendingCard?.quizCard.picturesChecked === true) return [];
           return pendingCard === undefined ? [] : [entry.id];
         })
       : [],

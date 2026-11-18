@@ -1794,6 +1794,15 @@ export function deriveThreadFeedPresentation(
           }
         }
         const pending = pendingCardId !== undefined && !answeredCards.has(pendingCardId);
+        const pendingCard =
+          pendingCardId === undefined
+            ? undefined
+            : sourceFeed.find(
+                (candidate) => candidate.type === "quiz-card" && candidate.id === pendingCardId,
+              );
+        if (pendingCard?.type === "quiz-card" && pendingCard.quizCard.picturesChecked === true) {
+          return entry;
+        }
         return pending ? { ...entry, picturePending: true } : entry;
       })
     : sourceFeed;
