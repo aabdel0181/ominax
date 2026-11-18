@@ -58,6 +58,7 @@ import {
   cardReplyProblem,
   explainBackClaimsProblem,
   foldCardReply,
+  lessonCardAnswers,
   replyCoverage,
   quizCardProblem,
   readQuestionCard,
@@ -1909,10 +1910,15 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
         answeredCard: withoutCardAnswerTag(testCase.prompt) !== testCase.prompt,
         visibleSinceAnswer: sample.visibleSinceAnswer,
         ...(typeof input.verdict === "string" ? { verdict: input.verdict } : {}),
-        ...(quiz === undefined ? {} : { answer: quiz.answer }),
-        ...(question?.number?.unit === undefined
+        answers: lessonCardAnswers(quiz ?? question!),
+        ...(quiz === undefined
           ? {}
-          : { answer: `${question.number.answer} ${question.number.unit}` }),
+          : {
+              quiz: {
+                question: quiz.question,
+                wrongOptions: quiz.wrongOptions.map((wrong) => wrong.option),
+              },
+            }),
       });
       if (replyProblem !== undefined) return failed(replyProblem);
       // The app shows a card's reply as the tutor's message text.

@@ -443,6 +443,7 @@ it.effect(
                       }) as unknown as OrchestrationV2ThreadProjection,
                   ),
                 ),
+              getTurnItem: () => Effect.succeed({ item: null as never }),
             }),
           ),
         ),
@@ -522,6 +523,88 @@ it.effect(
               Effect.succeed({
                 item: (itemId === "card-n" ? numberCard : null) as never,
               }),
+          }),
+        ),
+      ),
+    );
+  },
+);
+
+it.effect(
+  "a check after an unsaved explain-back needs an answer the app can check (r14 cw2)",
+  () => {
+    const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
+    const projection = McpToolAccessTestkit.idleThreadProjection(shell);
+    const explained = at(
+      26,
+      "user",
+      "A dead fail caps the reward at about 0.499.\n\n(card card-e)",
+    );
+    const explainBack = {
+      type: "dynamic_tool",
+      toolName: "question_card",
+      input: { purpose: "explain-back" },
+    };
+    const save = {
+      type: "dynamic_tool",
+      toolName: "mcp__t3-code__knowledge_map_mark_done",
+      status: "completed",
+      output: { content: [{ type: "text", text: '{"saved":"CW2"}' }] },
+    };
+    let saved = false;
+    return Effect.gen(function* () {
+      const toolkit = yield* QuizToolkit;
+      const ask = (extra: object) =>
+        toolkit
+          .handle("question_card", {
+            verdict: "Not saved yet: a dead failure lands in 0.01 to 0.25, about 0.248 here.",
+            reply: "x".repeat(250),
+            source: "",
+            question: "Give run A's and run B's verdict and reward.",
+            ...extra,
+          })
+          .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+      const freeText = yield* ask({});
+      yield* TestClock.adjust("1 second");
+      expect((yield* Fiber.join(freeText)).at(-1)?.result).toMatchObject({
+        code: "invalid_request",
+        message: expect.stringMatching(/explain-back you didn't save/u),
+      });
+      const copied = yield* ask({ number: { answer: 0.248, tolerance: 0.002 } });
+      yield* TestClock.adjust("1 second");
+      expect((yield* Fiber.join(copied)).at(-1)?.result).toMatchObject({ code: "invalid_request" });
+      const newCase = yield* ask({ number: { answer: 0.4975, tolerance: 0.002 } });
+      expect((yield* Fiber.join(newCase)).at(-1)?.result).toMatchObject({ questionCard: {} });
+      // Saved this turn: the next card is a choice, not a check.
+      saved = true;
+      const afterSave = yield* ask({});
+      expect((yield* Fiber.join(afterSave)).at(-1)?.result).toMatchObject({ questionCard: {} });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          McpToolAccess.HandlersLayer.layer(QuizHandlers.layer),
+          Layer.succeed(McpInvocationContext.McpInvocationContext, {
+            environmentId: EnvironmentId.make("quiz-handler-environment"),
+            requestNamespace: "quiz-handler-provider-session",
+            thread: {
+              threadId: ThreadId.make("quiz-handler-test"),
+              providerSessionId: "quiz-handler-provider-session",
+              providerInstanceId: ProviderInstanceId.make("codex"),
+            },
+            client: undefined,
+            capabilities: new Set(["orchestration" as const]),
+            issuedAt: 0,
+          }),
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: () => Effect.succeed(shell),
+            getProjectThreadRecords: () =>
+              Effect.succeed({
+                ...projection,
+                messages: [explained],
+                turnItems: saved ? [save] : [],
+              } as unknown as OrchestrationV2ThreadProjection),
+            getTurnItem: ({ itemId }) =>
+              Effect.succeed({ item: (itemId === "card-e" ? explainBack : null) as never }),
           }),
         ),
       ),

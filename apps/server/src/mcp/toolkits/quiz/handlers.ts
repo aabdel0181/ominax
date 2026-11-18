@@ -18,7 +18,11 @@ import {
   lessonCardAnswers,
   statesAnswer,
 } from "@t3tools/shared/quizCard";
-import { htmlRenderFromToolItem, lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
+import {
+  compactDynamicToolOutput,
+  htmlRenderFromToolItem,
+  lessonCardFromToolItem,
+} from "@t3tools/shared/toolOutput";
 import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
@@ -121,28 +125,45 @@ const readShownTutor = readThread(undefined, ["messages"]).pipe(
 const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: {
   readonly reply: string;
   readonly purpose: CardPurpose | undefined;
-  readonly answers?: ReadonlyArray<string>;
+  readonly answers: ReadonlyArray<string>;
+  readonly quiz?: { readonly question: string; readonly wrongOptions: ReadonlyArray<string> };
   readonly verdict: string | undefined;
 }) {
   const check = Effect.gen(function* () {
     const shown = yield* readShownTutor;
     if (shown === undefined) return { shown, problem: undefined };
     let unknownNumber: { answer: number; tolerance: number } | undefined;
-    if (
+    let checksExplainBack = false;
+    const skipped =
       shown.answeredCardText !== undefined &&
-      parseCardAnswer(shown.answeredCardText)?.kind === "skipped" &&
-      shown.answeredCardId !== undefined
-    ) {
+      parseCardAnswer(shown.answeredCardText)?.kind === "skipped";
+    const unkeyed = input.purpose === undefined && input.answers.length === 0;
+    if (shown.answeredCardId !== undefined && (skipped || unkeyed)) {
       const { caller, threads } = yield* loadCaller();
       if (caller !== undefined) {
         const result = yield* threads.getTurnItem({
           threadId: caller.id,
           itemId: TurnItemId.make(shown.answeredCardId),
         });
-        const card =
-          result.item?.type === "dynamic_tool" ? lessonCardFromToolItem(result.item) : undefined;
-        if (card !== undefined && "number" in card && card.number !== undefined)
+        const item = result.item?.type === "dynamic_tool" ? result.item : undefined;
+        const card = item === undefined ? undefined : lessonCardFromToolItem(item);
+        if (skipped && card !== undefined && "number" in card && card.number !== undefined)
           unknownNumber = { answer: card.number.answer, tolerance: card.number.tolerance };
+        const purpose = (item?.input as { readonly purpose?: unknown } | null)?.purpose;
+        if (!skipped && purpose === "explain-back" && caller.activeRunId) {
+          const records = yield* threads.getProjectThreadRecords(
+            { projectId: caller.projectId, threadId: caller.id },
+            ["turnItems"],
+            { runIds: [caller.activeRunId] },
+          );
+          checksExplainBack = !records.turnItems.some(
+            (turnItem) =>
+              turnItem.type === "dynamic_tool" &&
+              resolveT3McpToolId(turnItem.toolName) === "knowledge_map_mark_done" &&
+              turnItem.status === "completed" &&
+              !compactDynamicToolOutput(turnItem.output)?.isError,
+          );
+        }
       }
     }
     const problemInput = {
@@ -152,6 +173,7 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
       previousText: shown.previousText,
       answeredCard: shown.answeredCard,
       visibleSinceAnswer: shown.visibleSinceAnswer,
+      checksExplainBack,
       ...(unknownNumber === undefined ? {} : { unknownNumber }),
     };
     return {
@@ -301,7 +323,11 @@ const handlers = {
         reply: input.reply,
         purpose: input.purpose,
         verdict: input.verdict,
-        answers: [input.answer],
+        answers: lessonCardAnswers(card),
+        quiz: {
+          question: card.question,
+          wrongOptions: card.wrongOptions.map((wrong) => wrong.option),
+        },
       });
       const picturesChecked = yield* checkEarlierPictures(card);
       return {
@@ -329,16 +355,7 @@ const handlers = {
         reply: input.reply,
         purpose: input.purpose,
         verdict: input.verdict,
-        ...(input.number === undefined
-          ? {}
-          : {
-              answers: [
-                String(input.number.answer),
-                ...(input.number.unit === undefined
-                  ? []
-                  : [`${input.number.answer} ${input.number.unit}`]),
-              ],
-            }),
+        answers: lessonCardAnswers(card),
       });
       const picturesChecked = yield* checkEarlierPictures(card);
       return {
