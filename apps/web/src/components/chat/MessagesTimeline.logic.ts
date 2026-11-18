@@ -66,7 +66,11 @@ import {
 import type { ThreadRunSummary } from "@t3tools/client-runtime/state/shell";
 import type { ToolCallVisibility } from "@t3tools/contracts/settings";
 import { resolveT3McpToolDefinition } from "@t3tools/shared/t3McpToolPresentation";
-import { compactDynamicToolOutput, lessonCardReplyMessageId } from "@t3tools/shared/toolOutput";
+import {
+  compactDynamicToolOutput,
+  courseProblemSkippedCardId,
+  lessonCardReplyMessageId,
+} from "@t3tools/shared/toolOutput";
 import { htmlRenderReferencesEqual, type HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import { isCardAnswered, type LessonCard } from "@t3tools/shared/quizCard";
 import { mcpAppReferencesEqual, type McpAppReference } from "@t3tools/shared/mcpApp";
@@ -1720,14 +1724,21 @@ export function deriveMessagesTimelineRows(input: {
       })
     : new Map<MessageId, number>();
   const nextRows: MessagesTimelineRow[] = [];
+  const effectiveAnsweredCardAnswers = new Map(input.answeredCardAnswers ?? []);
+  for (const entry of timelineEntries) {
+    if (entry.kind !== "work") continue;
+    const item = entry.entry.projectedItem?.item ?? entry.entry.structuredPayload;
+    if (item?.type !== "dynamic_tool" || item.status !== "completed") continue;
+    const id = courseProblemSkippedCardId(item);
+    if (id !== undefined) effectiveAnsweredCardAnswers.set(id, "Skipped.");
+  }
   const pendingPictureIds = new Set(
     input.lesson === true
       ? timelineEntries.flatMap((entry, index) => {
           if (entry.kind !== "html-render" || entry.runId === null) return [];
           if (
             entry.htmlRender.forCard !== undefined &&
-            input.answeredCardAnswers !== undefined &&
-            isCardAnswered(input.answeredCardAnswers, entry.htmlRender.forCard)
+            isCardAnswered(effectiveAnsweredCardAnswers, entry.htmlRender.forCard)
           )
             return [];
           let pendingCard: Extract<TimelineEntry, { kind: "quiz-card" }> | undefined;
@@ -1739,7 +1750,7 @@ export function deriveMessagesTimelineRows(input: {
               break;
             }
           }
-          if (pendingCard && input.answeredCardAnswers?.has(pendingCard.id) === true) {
+          if (pendingCard && effectiveAnsweredCardAnswers.has(pendingCard.id)) {
             pendingCard = undefined;
           }
           return pendingCard === undefined ? [] : [entry.id];
@@ -2304,16 +2315,16 @@ export function deriveMessagesTimelineRows(input: {
     }
 
     if (timelineEntry.kind === "quiz-card") {
-      const answered = input.answeredCardAnswers?.has(timelineEntry.id) === true;
+      const answered = effectiveAnsweredCardAnswers.has(timelineEntry.id);
       nextRows.push({
         kind: "quiz-card",
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
         quizCard: timelineEntry.quizCard,
         answered,
-        ...(input.answeredCardAnswers?.get(timelineEntry.id) === undefined
+        ...(effectiveAnsweredCardAnswers.get(timelineEntry.id) === undefined
           ? {}
-          : { answer: input.answeredCardAnswers.get(timelineEntry.id) }),
+          : { answer: effectiveAnsweredCardAnswers.get(timelineEntry.id) }),
       });
       continue;
     }

@@ -245,6 +245,7 @@ import {
   type ThreadFeedEntry,
   type ThreadFeedLatestRun,
   messageFoldRunId,
+  skippedCardIds,
 } from "../../lib/threadActivity";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
 import { type ThreadWorkGroupScrollPosition } from "./thread-feed-scroll-position";
@@ -3815,6 +3816,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const answeredCardAnswers = readAnsweredCardAnswers(
     threadProjection?.messages ??
       presentedFeed.flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
+    skippedCardIds(props.feed),
   );
   const pendingFoldMessageId =
     presentedFeed.findLast((entry) => entry.type === "pending-fold")?.messageId ?? null;

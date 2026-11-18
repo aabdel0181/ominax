@@ -80,6 +80,7 @@ import {
   courseOutlineMessageId,
   htmlRenderFromToolItem,
   lessonCardFromToolItem,
+  courseProblemSkippedCardId,
   sentMessageFromToolItem,
   mcpAppFromToolItem,
 } from "@t3tools/shared/toolOutput";
@@ -1682,6 +1683,20 @@ const DEFAULT_THREAD_FEED_DISPLAY: ThreadFeedDisplay = {
   revealedMessageId: null,
 };
 
+/** Cards a `course_problems` skip closed ("just tell me"). */
+export function skippedCardIds(feed: ReadonlyArray<ThreadFeedEntry>): string[] {
+  return feed.flatMap((entry) =>
+    entry.type !== "activity-group"
+      ? []
+      : entry.activities.flatMap((activity) => {
+          const item = activity.projectedItem.item;
+          if (item.type !== "dynamic_tool" || item.status !== "completed") return [];
+          const id = courseProblemSkippedCardId(item);
+          return id === undefined ? [] : [id];
+        }),
+  );
+}
+
 export function deriveThreadFeedPresentation(
   feed: ReadonlyArray<ThreadFeedEntry>,
   latestRun: ThreadFeedLatestRun | null,
@@ -1770,6 +1785,7 @@ export function deriveThreadFeedPresentation(
   const answeredCards = lesson
     ? answeredCardAnswers(
         sourceFeed.flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
+        skippedCardIds(sourceFeed),
       )
     : new Map<string, string>();
   const feedWithPictureState = lesson

@@ -76,6 +76,7 @@ interface CompactToolOutput {
   linkedCount?: number;
   unlinkedCount?: number;
   sentMessage?: string;
+  closedCardItemId?: string;
 }
 
 function readResult(value: unknown, budget: ResultReadBudget, depth = 0): ResultEnvelope {
@@ -194,6 +195,8 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
     ) {
       output.sentMessage = data.sentMessage;
     }
+    const closedCardItemId = boundedId(data.closedCardItemId);
+    if (closedCardItemId !== undefined) output.closedCardItemId = closedCardItemId;
     const htmlRender = readHtmlRenderReference(data.htmlRender);
     if (htmlRender !== undefined) output.htmlRender = htmlRender;
     const quizCard = readQuizCard(data.quizCard);
@@ -249,6 +252,14 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
   }
   if (oversized()) delete output[MCP_APP_OUTPUT_KEY];
   return Object.keys(output).length === 0 ? undefined : output;
+}
+
+export function courseProblemSkippedCardId(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): string | undefined {
+  if (resolveT3McpToolId(item.toolName) !== "course_problems") return undefined;
+  return compactDynamicToolOutput(item.output)?.closedCardItemId;
 }
 
 export function lessonCardFromToolItem(item: {

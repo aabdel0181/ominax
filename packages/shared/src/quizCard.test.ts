@@ -130,6 +130,15 @@ describe("quiz cards", () => {
     expect(replies.has("new")).toBe(false);
   });
 
+  it("closes a card from an explicit skip signal", () => {
+    const answers = answeredCardAnswers(
+      [{ role: "assistant", id: "pset:reply", text: "pset", createdAt: "2026-01-01T00:00:00Z" }],
+      ["pset"],
+    );
+    expect(answers.get("pset")).toBe("Skipped.");
+    expect(parseCardAnswer(answers.get("pset")!)).toEqual({ kind: "skipped", label: "Skipped." });
+  });
+
   it("orders out-of-order projection replies by creation time", () => {
     const replies = answeredCardAnswers([
       {
