@@ -58,7 +58,7 @@ import { isLessonThread } from "@t3tools/client-runtime/state/threads";
 
 export type SidebarEmptyListNotice =
   | { readonly kind: "no-projects" }
-  | { readonly kind: "no-lessons"; readonly projectName: string | null }
+  | { readonly kind: "no-lessons"; readonly message: string; readonly offerSettings: boolean }
   | { readonly kind: "no-active-lessons" }
   | { readonly kind: "project"; readonly label: string; readonly hasSettled: boolean }
   | { readonly kind: "no-threads" };
@@ -68,15 +68,28 @@ export function sidebarEmptyListNotice(input: {
   readonly lessonsOnly: boolean;
   readonly scopedProjectNames: readonly string[];
   readonly settledCount: number;
+  /** Every scoped project is already a Learning project, so there is nothing to mark. */
+  readonly scopeIsLearning: boolean;
+  readonly canStartLesson: boolean;
 }): SidebarEmptyListNotice | null {
   if (!input.hasProjects) return input.settledCount === 0 ? { kind: "no-projects" } : null;
   if (input.lessonsOnly) {
-    return input.settledCount > 0
-      ? { kind: "no-active-lessons" }
-      : {
-          kind: "no-lessons",
-          projectName: input.scopedProjectNames.length === 1 ? input.scopedProjectNames[0]! : null,
-        };
+    if (input.settledCount > 0) return { kind: "no-active-lessons" };
+    const name = input.scopedProjectNames.length === 1 ? input.scopedProjectNames[0]! : null;
+    const offerSettings = !input.scopeIsLearning;
+    const mark = `Mark ${name === null ? "a project" : "it"} as a Learning project in Settings`;
+    const next = offerSettings
+      ? input.canStartLesson
+        ? ` ${mark}, or start a New lesson.`
+        : ` ${mark}.`
+      : input.canStartLesson
+        ? " Start a New lesson."
+        : "";
+    return {
+      kind: "no-lessons",
+      offerSettings,
+      message: `No lessons${name === null ? "" : ` in ${name}`}${offerSettings ? "." : " yet."}${next}`,
+    };
   }
   if (input.scopedProjectNames.length > 0) {
     return {

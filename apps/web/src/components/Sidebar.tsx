@@ -3024,6 +3024,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     lessonsOnly,
     scopedProjectNames: scopedProjectGroups.map((project) => project.displayName),
     settledCount,
+    scopeIsLearning:
+      scopedProjectGroups.length > 0 &&
+      scopedProjectGroups.every((group) =>
+        group.memberProjectRefs.some((ref) =>
+          learningProjectKeys.has(`${ref.environmentId}:${ref.projectId}`),
+        ),
+      ),
+    canStartLesson: showNewLesson,
   });
 
   const newThreadShortcutLabel =
@@ -3389,26 +3397,32 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 </>
               ) : emptyListNotice.kind === "no-lessons" ? (
                 <>
-                  <span>
-                    {emptyListNotice.projectName === null
-                      ? "No lessons. Mark a project as a Learning project in Settings, or start a New lesson."
-                      : `No lessons in ${emptyListNotice.projectName}. Mark it as a Learning project in Settings, or start a New lesson.`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void router.navigate({
-                        to: "/settings/threads",
-                        hash: "learning-project",
-                        ...(emptyListNotice.projectName === null
-                          ? {}
-                          : { search: { project: scopedProjectGroups[0]!.projectKey } }),
-                      })
-                    }
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                  >
-                    Open Settings
-                  </button>
+                  <span>{emptyListNotice.message}</span>
+                  {emptyListNotice.offerSettings ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void router.navigate({
+                          to: "/settings/threads",
+                          hash: "learning-project",
+                          ...(scopedProjectGroups.length === 1
+                            ? {
+                                search: {
+                                  project: getSidebarProjectSettingsKey(
+                                    scopedProjectGroups[0]!,
+                                    projectGroupingSettings,
+                                    projects,
+                                  ),
+                                },
+                              }
+                            : {}),
+                        })
+                      }
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                    >
+                      Open Settings
+                    </button>
+                  ) : null}
                   {showNewLesson ? (
                     <button
                       type="button"

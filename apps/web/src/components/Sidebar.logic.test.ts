@@ -75,55 +75,81 @@ import {
 const localEnvironmentId = EnvironmentId.make("environment-local");
 
 describe("sidebarEmptyListNotice", () => {
+  const base = {
+    hasProjects: true,
+    lessonsOnly: true,
+    scopedProjectNames: [] as string[],
+    settledCount: 0,
+    scopeIsLearning: false,
+    canStartLesson: true,
+  };
   it.each([
     {
       name: "lessons with no scoped project",
-      input: { hasProjects: true, lessonsOnly: true, scopedProjectNames: [], settledCount: 0 },
-      expected: { kind: "no-lessons", projectName: null },
+      input: base,
+      expected: {
+        kind: "no-lessons",
+        offerSettings: true,
+        message:
+          "No lessons. Mark a project as a Learning project in Settings, or start a New lesson.",
+      },
     },
     {
       name: "lessons with one scoped project",
-      input: {
-        hasProjects: true,
-        lessonsOnly: true,
-        scopedProjectNames: ["post-training"],
-        settledCount: 0,
+      input: { ...base, scopedProjectNames: ["post-training"] },
+      expected: {
+        kind: "no-lessons",
+        offerSettings: true,
+        message:
+          "No lessons in post-training. Mark it as a Learning project in Settings, or start a New lesson.",
       },
-      expected: { kind: "no-lessons", projectName: "post-training" },
     },
     {
       name: "lessons with multiple scoped projects",
-      input: {
-        hasProjects: true,
-        lessonsOnly: true,
-        scopedProjectNames: ["post-training", "research"],
-        settledCount: 0,
+      input: { ...base, scopedProjectNames: ["post-training", "research"] },
+      expected: {
+        kind: "no-lessons",
+        offerSettings: true,
+        message:
+          "No lessons. Mark a project as a Learning project in Settings, or start a New lesson.",
       },
-      expected: { kind: "no-lessons", projectName: null },
+    },
+    {
+      name: "lessons in a scoped project already marked",
+      input: { ...base, scopedProjectNames: ["post-training"], scopeIsLearning: true },
+      expected: {
+        kind: "no-lessons",
+        offerSettings: false,
+        message: "No lessons in post-training yet. Start a New lesson.",
+      },
+    },
+    {
+      name: "lessons when New lesson is unavailable",
+      input: { ...base, canStartLesson: false },
+      expected: {
+        kind: "no-lessons",
+        offerSettings: true,
+        message: "No lessons. Mark a project as a Learning project in Settings.",
+      },
     },
     {
       name: "lessons with settled lessons",
-      input: { hasProjects: true, lessonsOnly: true, scopedProjectNames: [], settledCount: 3 },
+      input: { ...base, settledCount: 3 },
       expected: { kind: "no-active-lessons" },
     },
     {
       name: "scoped threads with settled threads",
-      input: {
-        hasProjects: true,
-        lessonsOnly: false,
-        scopedProjectNames: ["project"],
-        settledCount: 2,
-      },
+      input: { ...base, lessonsOnly: false, scopedProjectNames: ["project"], settledCount: 2 },
       expected: { kind: "project", label: "project", hasSettled: true },
     },
     {
       name: "settled threads without a scope",
-      input: { hasProjects: true, lessonsOnly: false, scopedProjectNames: [], settledCount: 2 },
+      input: { ...base, lessonsOnly: false, settledCount: 2 },
       expected: null,
     },
     {
       name: "no projects",
-      input: { hasProjects: false, lessonsOnly: false, scopedProjectNames: [], settledCount: 0 },
+      input: { ...base, hasProjects: false, lessonsOnly: false },
       expected: { kind: "no-projects" },
     },
   ])("returns the right notice for $name", ({ input, expected }) => {
