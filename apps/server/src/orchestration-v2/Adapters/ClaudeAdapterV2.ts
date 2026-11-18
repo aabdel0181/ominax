@@ -2727,7 +2727,7 @@ function withoutLessonCommitment(text: string) {
 }
 
 // Table rows, list items, headings, quotes and display formulas are teaching structure, never repeats (APP-139).
-const NON_PROSE_LINE = /^\s*(?:\||[-*+]\s|\d+[.)]\s|#|>|\$\$|\\\[)/u;
+const NON_PROSE_LINE = /^\s*(?:\||[-*+]\s|\d+[.)]\s|#|>|\$\$|\\\[)|\s\|\s/u;
 
 // Drops prose sentences of held text that the card's reply or verdict already says.
 function stripCardReplyCoveredSentences(
@@ -2746,9 +2746,15 @@ function stripCardReplyCoveredSentences(
     .map((line) => {
       const trimmed = line.trim();
       if (trimmed.startsWith("```")) inCode = !inCode;
-      // A lone "$$" or "\[" / "\]" line opens or closes a display formula block.
-      if (!inCode && (trimmed === "$$" || trimmed === "\\[" || trimmed === "\\]")) inMath = !inMath;
-      if (inCode || inMath || trimmed.startsWith("```") || NON_PROSE_LINE.test(line)) return line;
+      const wasInMath = inMath;
+      // A display formula spans lines until its "$$" or "\]" closes it.
+      if (!inCode) {
+        if ((trimmed.match(/\$\$/gu) ?? []).length % 2 === 1) inMath = !inMath;
+        else if (trimmed.includes("\\[") && !trimmed.includes("\\]")) inMath = true;
+        else if (trimmed.includes("\\]") && !trimmed.includes("\\[")) inMath = false;
+      }
+      if (inCode || wasInMath || inMath || trimmed.startsWith("```") || NON_PROSE_LINE.test(line))
+        return line;
       return line
         .split(/(?<=[^\s\d][.!?])\s+/u)
         .filter(

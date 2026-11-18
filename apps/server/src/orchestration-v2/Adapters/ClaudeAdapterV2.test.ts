@@ -4749,13 +4749,13 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     {
       tool: "mcp__t3-code__question_card",
       reply:
-        "Use exp(2)=7.39, exp(1)=2.72 and exp(0)=1. What is exp(3), to two decimals, given exp(3) = exp(2) × exp(1)?",
+        "Use exp(2)=7.39, exp(1)=2.72 and exp(0)=1. What is exp(3) to two decimals, given exp(2) and exp(1)?",
       lesson: true,
       heldText:
-        "Here is exp at a few values of z.\n\n| $z$ | $-1$ | $0$ | $1$ | $2$ | $3$ |\n|---|---|---|---|---|---|\n| $\\exp(z)$ | 0.37 | 1 | 2.72 | 7.39 | 20.09 |\n\n- exp(0) is 1, exp(1) is 2.72 and exp(2) is 7.39 here.\n\n$$\\exp(2) \\approx 7.39, \\quad \\exp(1) \\approx 2.72, \\quad \\exp(3) \\approx 20.09$$",
+        "Here is exp at a few values of z.\n\n| $z$ | $-1$ | $0$ | $1$ | $2$ | $3$ |\n|---|---|---|---|---|---|\n| $\\exp(z)$ | 0.37 | 1 | 2.72 | 7.39 | 20.09 |\n\n- exp(0) is 1, exp(1) is 2.72 and exp(2) is 7.39 here.\n\n$$\n\\text{What is exp(3) to two decimals, given exp(2) and exp(1)}\n$$\n\nWhat is exp(3) to two decimals, given exp(2) and exp(1)?",
       thinking: "",
       shownText: [
-        "Here is exp at a few values of z.\n\n| $z$ | $-1$ | $0$ | $1$ | $2$ | $3$ |\n|---|---|---|---|---|---|\n| $\\exp(z)$ | 0.37 | 1 | 2.72 | 7.39 | 20.09 |\n\n- exp(0) is 1, exp(1) is 2.72 and exp(2) is 7.39 here.\n\n$$\\exp(2) \\approx 7.39, \\quad \\exp(1) \\approx 2.72, \\quad \\exp(3) \\approx 20.09$$",
+        "Here is exp at a few values of z.\n\n| $z$ | $-1$ | $0$ | $1$ | $2$ | $3$ |\n|---|---|---|---|---|---|\n| $\\exp(z)$ | 0.37 | 1 | 2.72 | 7.39 | 20.09 |\n\n- exp(0) is 1, exp(1) is 2.72 and exp(2) is 7.39 here.\n\n$$\n\\text{What is exp(3) to two decimals, given exp(2) and exp(1)}\n$$",
       ],
       expected: ["reasoning", "assistant_message"],
     },
