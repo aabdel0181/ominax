@@ -640,6 +640,16 @@ const GUARDED_LESSON_TOOLS = new Set([
   QUIZ_CARD_TOOL_NAME,
   QUESTION_CARD_TOOL_NAME,
   HTML_RENDER_TOOL_NAME,
+  "course_read",
+  "course_problems",
+  "course_reference_fetch",
+  "course_update",
+]);
+const COMPLETED_COURSE_TOOLS = new Set([
+  "course_read",
+  "course_problems",
+  "course_reference_fetch",
+  "course_update",
 ]);
 
 /** Lesson thoughts and refused cards' or pictures' inputs can hold an open card's answer. */
@@ -651,10 +661,21 @@ function withoutLessonSecrets(
   if (item.type === "reasoning") return { ...event, turnItem: { ...item, text: "", title: null } };
   if (
     item.type === "dynamic_tool" &&
-    GUARDED_LESSON_TOOLS.has(resolveT3McpToolId(item.toolName) ?? "") &&
-    (item.status === "failed" || compactDynamicToolOutput(item.output)?.isError === true)
-  )
-    return { ...event, turnItem: { ...item, input: null } };
+    GUARDED_LESSON_TOOLS.has(resolveT3McpToolId(item.toolName) ?? "")
+  ) {
+    const toolId = resolveT3McpToolId(item.toolName);
+    if (item.status === "completed" && COMPLETED_COURSE_TOOLS.has(toolId ?? ""))
+      return {
+        ...event,
+        turnItem: {
+          ...item,
+          output: compactDynamicToolOutput(item.output) ?? null,
+          ...(toolId === "course_update" ? { input: null } : {}),
+        },
+      };
+    if (item.status === "failed" || compactDynamicToolOutput(item.output)?.isError === true)
+      return { ...event, turnItem: { ...item, input: null } };
+  }
   return event;
 }
 
@@ -1285,7 +1306,9 @@ export const layer: Layer.Layer<
         let rootTurnOwnershipChecked = false;
         const assistantStreaming = makeAssistantStreamingFilter(responseStreamingMode);
         const lessonThread =
-          input.appThread.lesson !== undefined || isSideChatThread(input.appThread);
+          input.appThread.lesson !== undefined ||
+          isSideChatThread(input.appThread) ||
+          input.appThread.title?.startsWith("Prep: ") === true;
         // Set when ingestion ends or finalization settles the run's open items, which a later
         // streaming snapshot must not reopen.
         let idleFlushClosed = false;

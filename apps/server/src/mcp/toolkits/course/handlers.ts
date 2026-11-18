@@ -295,9 +295,7 @@ const handlers = {
               .pipe(Effect.mapError(fail));
         }
       }
-      const first = units[0];
-      const last = units[units.length - 1];
-      const title = `Prep: ${course.title} L${first}–${last}`;
+      const title = `Prep: ${course.title}`;
       const pendingSolutionPsets =
         input.solutionLeads !== undefined
           ? (course.problemSets ?? [])
@@ -317,13 +315,6 @@ const handlers = {
         .replace("{{units}}", units.join(", "))
         .replace("{{solutionLeads}}", solutionBrief);
       const clientRequestId = `course-prep:${course.id}:${DateTime.toEpochMillis(yield* DateTime.now)}`;
-      // Recorded before the prep turn starts, so its first course_read is already allowed.
-      yield* service
-        .recordPrepThread(
-          course.id,
-          OrchestratorMcpService.stableThreadId({ scope, requestKey: clientRequestId, index: 0 }),
-        )
-        .pipe(Effect.mapError(fail));
       // Unattended, so an approval prompt would stall it; it reads third-party scans, so never full access.
       const { limits } = yield* loadCaller();
       const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
@@ -332,7 +323,7 @@ const handlers = {
           clientRequestId,
           threads: [{ title, prompt, ...(runtimeMode ? { runtimeMode } : {}) }],
         });
-      yield* (
+      const createPrepWithRuntimeMode =
         limits.runtimeMode === "full-access"
           ? createPrep("auto").pipe(
               // Providers without Auto (Pi, Kiro, Muse, Antigravity) get the narrowest mode instead.
@@ -341,8 +332,33 @@ const handlers = {
                 () => createPrep("approval-required"),
               ),
             )
-          : createPrep()
-      ).pipe(Effect.mapError(fail));
+          : createPrep();
+      const existingPrepThreadId = course.prepThreadIds.at(-1);
+      const sentToExisting =
+        existingPrepThreadId === undefined
+          ? false
+          : yield* orchestrator
+              .sendToThread(scope, {
+                threadId: existingPrepThreadId,
+                message: prompt,
+                mode: "queue",
+                freshContext: true,
+                clientRequestId,
+              })
+              .pipe(
+                Effect.as(true),
+                Effect.orElseSucceed(() => false),
+              );
+      if (!sentToExisting) {
+        const prepThreadId = OrchestratorMcpService.stableThreadId({
+          scope,
+          requestKey: clientRequestId,
+          index: 0,
+        });
+        // Recorded before the prep turn starts, so its first course_read is already allowed.
+        yield* service.recordPrepThread(course.id, prepThreadId).pipe(Effect.mapError(fail));
+        yield* createPrepWithRuntimeMode.pipe(Effect.mapError(fail));
+      }
       // Stamped once the prep thread exists, so a failed start never shows "Reference still loading."
       if (input.solutionLeads !== undefined)
         yield* service

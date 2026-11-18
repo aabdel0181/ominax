@@ -690,7 +690,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
                   : ""
                 : references.length === 0
                   ? "No published solution was found online. End every verdict on this problem with the cite line. "
-                  : 'Published references (hidden from the learner until their final answer) are a check, not the truth. End every verdict on this problem, even a quick "correct", with the cite line. If your worked answer differs, say "the posted solution disagrees; here\'s why mine differs" and grade against your own working, never the reference. If a reference\'s numbers differ from the problem\'s own, treat it as a likely transcription misread; never say its author used wrong numbers. ';
+                  : 'Published references are hidden from the learner until they finish the problem set or ask for them. They are a check, not the truth. End every verdict on this problem, even a quick "correct", with the cite line. If your worked answer differs, say "the posted solution disagrees; here\'s why mine differs" and grade against your own working, never the reference. If a reference\'s numbers differ from the problem\'s own, treat it as a likely transcription misread; never say its author used wrong numbers. ';
             const referenceFields =
               references === undefined
                 ? referencesLoading
@@ -701,7 +701,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
                     cite:
                       references.length === 0
                         ? "No published solution was found online."
-                        : `Checked against ${references.map(({ label, url }) => `[${label}](${url})`).join(", ")}.`,
+                        : `Checked against ${references.map(({ label }) => label).join(", ")}.`,
                     note: referencesNote.trim(),
                   };
             if ((!input.reveal && !input.skip) || input.pset === undefined) {
