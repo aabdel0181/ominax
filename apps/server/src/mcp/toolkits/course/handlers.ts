@@ -304,9 +304,16 @@ const handlers = {
               .map((pset, index) => ({ pset, number: index + 1 }))
               .filter(({ pset }) => !pset.hasSolution && pset.references === undefined)
           : [];
+      const orderedPendingSolutionPsets =
+        course.position?.pset === undefined
+          ? pendingSolutionPsets
+          : [
+              ...pendingSolutionPsets.filter(({ number }) => number === course.position?.pset),
+              ...pendingSolutionPsets.filter(({ number }) => number !== course.position?.pset),
+            ];
       const solutionBrief =
         solutionLeads.length > 0
-          ? ` Problem sets to find solutions for: ${pendingSolutionPsets.map(({ number, pset }) => `${number} (${pset.title})`).join(", ") || "none"}. Open each solution lead with course_reference_fetch (follow index-page links to the matching named pset's solution file), read PDF page images, and for each problem record the given values exactly as read from the scan with page numbers. Compare them with the pset text from course_problems for that pset; when they differ, re-fetch that page with course_reference_fetch {pages} and read it again. If they still differ, write "values differ from the pset text (scan may be misread): …" in answers instead of silently using them. Transcribe each problem's final answers and key steps, and save them with course_update {pset, references} for each named pset you find. Save references [] for each named pset you do not find. Leads: ${solutionLeads.join(", ")}.`
+          ? ` Problem sets to find solutions for: ${orderedPendingSolutionPsets.map(({ number, pset }) => `${number} (${pset.title})`).join(", ") || "none"}. Handle psets in the listed order, and call course_update {pset, references} for each pset as soon as that pset's solution is read, before opening the next one. Open each solution lead with course_reference_fetch (follow index-page links to the matching named pset's solution file), read PDF page images, and for each problem record the given values exactly as read from the scan with page numbers. Compare them with the pset text from course_problems for that pset; when they differ, re-fetch that page with course_reference_fetch {pages} and read it again. If they still differ, write "values differ from the pset text (scan may be misread): …" in answers instead of silently using them. Transcribe each problem's final answers and key steps, and save them with course_update {pset, references} for each named pset you find. Save references [] for each named pset you do not find. Leads: ${solutionLeads.join(", ")}.`
           : "";
       const prompt = PREP_BRIEF.replace("{{courseId}}", course.id)
         .replace("{{units}}", units.join(", "))

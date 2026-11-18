@@ -1828,7 +1828,7 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
         units: [{ title: "One", section: "Video Introduction" }],
         problemSets: [
           { title: "Pset 1", section: "Different section", text: "Problem" },
-          { title: "Pset 2", section: "Different section", text: "Problem 2", solution: "Answer" },
+          { title: "Pset 2", section: "Different section", text: "Problem 2" },
         ],
       },
     });
@@ -1850,6 +1850,7 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     expect((yield* service.get({ id: course.id })).position).toMatchObject({ problem: "1(a)" });
     const beforeSearch = yield* callAs("course_problems", { courseId: course.id });
     expect(JSON.stringify(beforeSearch.content)).toContain("one web search");
+    yield* callAs("course_problems", { courseId: course.id, pset: 2 });
     const invalidPrep = yield* callAs("course_prepare", {
       courseId: course.id,
       units: [99],
@@ -1864,9 +1865,16 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
     expect(leadResult.isError).not.toBe(true);
     expect(requests.at(-1)).toMatchObject({
       threads: [
-        { prompt: expect.stringContaining("Problem sets to find solutions for: 1 (Pset 1)") },
+        {
+          prompt: expect.stringContaining(
+            "Problem sets to find solutions for: 2 (Pset 2), 1 (Pset 1)",
+          ),
+        },
       ],
     });
+    expect(JSON.stringify(requests.at(-1))).toContain(
+      "Handle psets in the listed order, and call course_update {pset, references} for each pset as soon as that pset's solution is read, before opening the next one.",
+    );
     expect((yield* service.get({ id: course.id })).solutionSearchedAt).toBeDefined();
     const afterSearch = yield* callAs("course_problems", { courseId: course.id });
     expect(JSON.stringify(afterSearch.content)).not.toContain("one web search");
