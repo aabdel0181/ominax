@@ -658,15 +658,18 @@ function withoutLessonSecrets(
   if (item.type === "reasoning") return { ...event, turnItem: { ...item, text: "", title: null } };
   if (item.type !== "dynamic_tool") return event;
   const toolId = resolveT3McpToolId(item.toolName) ?? "";
-  if (COURSE_ANSWER_TOOLS.has(toolId))
+  if (COURSE_ANSWER_TOOLS.has(toolId)) {
+    // A failed call keeps its error text; it holds no answers.
+    const failed = item.status === "failed" || compactDynamicToolOutput(item.output)?.isError;
     return {
       ...event,
       turnItem: {
         ...item,
-        output: compactDynamicToolOutput(item.output) ?? null,
+        ...(failed ? {} : { output: compactDynamicToolOutput(item.output) ?? null }),
         ...(toolId === "course_update" ? { input: null } : {}),
       },
     };
+  }
   if (
     GUARDED_LESSON_TOOLS.has(toolId) &&
     (item.status === "failed" || compactDynamicToolOutput(item.output)?.isError === true)
