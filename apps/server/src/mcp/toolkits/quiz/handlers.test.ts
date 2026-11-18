@@ -592,7 +592,9 @@ it.effect("refuses picture spoilers and flags a clean teaching picture", () => {
           Effect.succeed(
             attachmentId.startsWith("axis-")
               ? "<svg><text>1 2 3</text></svg>"
-              : "<p>The split is 20 N along the slope.</p>",
+              : attachmentId.startsWith("canvas-")
+                ? "<canvas></canvas><script>ctx.fillText('20 N', 0, 0)</script>"
+                : "<p>The split is 20 N along the slope.</p>",
           ),
         preview: () => Effect.die("unused"),
       } as never),
@@ -652,5 +654,20 @@ it.effect("refuses picture spoilers and flags a clean teaching picture", () => {
       .handle("question_card", card)
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(owedResult.at(-1)?.result).toMatchObject({ questionCard: { picturesChecked: true } });
+    // Pictures this check can't read leave the card unflagged, so clients keep them hidden.
+    for (const unread of [
+      { ...picture, status: "running", output: null },
+      {
+        ...picture,
+        output: { htmlRender: { ...picture.output.htmlRender, attachmentId: "canvas-0-html" } },
+      },
+    ]) {
+      turnItems = [unread];
+      const result = yield* toolkit
+        .handle("question_card", card)
+        .pipe(Stream.unwrap, Stream.runCollect);
+      expect(result.at(-1)?.result).not.toHaveProperty("questionCard.picturesChecked");
+      expect(result.at(-1)?.result).toHaveProperty("questionCard");
+    }
   }).pipe(Effect.provide(provide()));
 });

@@ -200,6 +200,13 @@ it("keeps valid quiz cards and drops invalid cards", () => {
       output: { questionCard: { question: "___", blanks: [{ answers: ["x"] }] } },
     }),
   ).toEqual({ question: "___", blanks: [{ answers: ["x"] }] });
+  const numberCard = { question: "Speed?", number: { answer: 9.8, tolerance: 0.1 } };
+  expect(
+    lessonCardFromToolItem({
+      toolName: "question_card",
+      output: { questionCard: { ...numberCard, picturesChecked: true } },
+    }),
+  ).toEqual({ ...numberCard, picturesChecked: true });
 });
 
 describe("courseOutlineFromToolItem", () => {

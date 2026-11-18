@@ -191,7 +191,7 @@ const pictureAnswers = (
 ) => {
   if (card === undefined) return [];
   const numbers =
-    `${card.question}`
+    card.question
       .match(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu)
       ?.filter((number) => number.replace(/^-/u, "").length >= 2) ?? [];
   return [...lessonCardAnswers(card), ...numbers];
@@ -232,15 +232,15 @@ const checkEarlierPictures = Effect.fn("quiz.checkEarlierPictures")(function* (
     )
     .pipe(Effect.orElseSucceed(() => undefined));
   if (records === undefined) return false;
+  // undefined = a picture this check can't read (an animation, or one still being drawn).
   const pictures = records.turnItems.flatMap((item) => {
-    if (item.type !== "dynamic_tool" || item.status !== "completed") return [];
-    if (resolveT3McpToolId(item.toolName) === "animation_render") return [undefined];
+    if (item.type !== "dynamic_tool") return [];
+    const tool = resolveT3McpToolId(item.toolName);
+    if (tool === "animation_render") return [undefined];
+    if (tool !== "html_render") return [];
+    if (item.status !== "completed") return [undefined];
     const reference = htmlRenderFromToolItem(item);
-    return resolveT3McpToolId(item.toolName) === "html_render" &&
-      reference !== undefined &&
-      reference.forCard === undefined
-      ? [reference]
-      : [];
+    return reference?.forCard === undefined ? [reference] : [];
   });
   if (pictures.length === 0) return true;
   let checked = true;
@@ -249,22 +249,26 @@ const checkEarlierPictures = Effect.fn("quiz.checkEarlierPictures")(function* (
       checked = false;
       continue;
     }
-    const html = yield* htmlRender.readPublished(picture.attachmentId).pipe(
-      Effect.map(stripHtmlText),
-      Effect.orElseSucceed(() => undefined),
-    );
-    if (html === undefined) {
+    const html = yield* htmlRender
+      .readPublished(picture.attachmentId)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    // Script- or canvas-drawn labels never reach the markup this check reads.
+    if (html === undefined || /<(?:script|canvas)\b/iu.test(html)) {
       checked = false;
       continue;
     }
+    const text = stripHtmlText(html);
+    // Single digits are axis ticks and step numbers far more often than the answer.
     const answer = pictureAnswers(card).find(
-      (candidate) => statesAnswer(html, candidate) || statesNumber(html, candidate),
+      (candidate) =>
+        statesAnswer(html, candidate) ||
+        (candidate.replace(/^-/u, "").length >= 2 && statesNumber(text, candidate)),
     );
     if (answer !== undefined) {
       return yield* new OrchestratorMcpFailure({
         code: "invalid_request",
         message:
-          "This card is refused because an earlier picture shows its answer or one of its numbers. Ask something the picture does not show, or redraw the picture without those numbers.",
+          "This card is refused because an earlier picture shows its answer or one of its numbers. Ask something the picture does not show.",
       });
     }
   }
