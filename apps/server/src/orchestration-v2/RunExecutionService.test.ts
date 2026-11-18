@@ -4926,16 +4926,18 @@ it.effect("redacts completed course answers and prep reasoning", () =>
       ],
       {
         appThreadTitle: "Prep: Mechanics",
-        onIngest: (event) =>
-          event.type === "turn_item.updated" &&
-          (event.turnItem.type === "reasoning" || event.turnItem.type === "dynamic_tool")
-            ? Ref.update(observed, (current) => [
-                ...current,
-                event.turnItem.type === "reasoning"
-                  ? event.turnItem.text
-                  : { output: event.turnItem.output, input: event.turnItem.input },
-              ])
-            : Effect.void,
+        onIngest: (event) => {
+          if (event.type !== "turn_item.updated") return Effect.void;
+          const item = event.turnItem;
+          if (item.type === "reasoning")
+            return Ref.update(observed, (current) => [...current, item.text]);
+          if (item.type === "dynamic_tool")
+            return Ref.update(observed, (current) => [
+              ...current,
+              { output: item.output, input: item.input },
+            ]);
+          return Effect.void;
+        },
       },
     );
     assert.deepEqual(yield* Ref.get(observed), [
