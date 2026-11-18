@@ -85,10 +85,7 @@ describe("CourseService", () => {
         const plain = yield* service.problems({ courseId: course.id, pset: 1 });
         assert.deepStrictEqual(plain.problemSets[0]?.references, [reference]);
         assert.include(plain.problemSets[0]?.note ?? "", "a check, not the truth");
-        assert.strictEqual(
-          plain.problemSets[0]?.cite,
-          "Checked against [Posted solution](https://example.com/solution).",
-        );
+        assert.strictEqual(plain.problemSets[0]?.cite, "Checked against Posted solution.");
         const revealed = yield* service.problems({ courseId: course.id, pset: 1, reveal: true });
         assert.strictEqual(revealed.problemSets[0]?.solution, "Solution");
         assert.strictEqual(revealed.attribution, "MIT OpenCourseWare, Mechanics, CC BY-NC-SA 4.0");
@@ -168,6 +165,20 @@ describe("CourseService", () => {
         assert.include(
           loading.problemSets[0]?.note ?? "",
           "call course_problems with this pset again",
+        );
+        const skippedWhileLoading = yield* service.problems({
+          courseId: course.id,
+          pset: 1,
+          reveal: true,
+          skip: true,
+        });
+        assert.notInclude(
+          skippedWhileLoading.problemSets[0]?.note ?? "",
+          "No official solution exists",
+        );
+        assert.include(
+          skippedWhileLoading.problemSets[0]?.note ?? "",
+          "published solution is still loading",
         );
         // A prep thread that died never leaves grading waiting.
         yield* TestClock.adjust("31 minutes");

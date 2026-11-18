@@ -4635,6 +4635,7 @@ function runBackgroundItemScenario(
     ) => Effect.Effect<void>;
     readonly lesson?: boolean;
     readonly sideChat?: boolean;
+    readonly appThreadTitle?: string;
   },
 ) {
   return Effect.gen(function* () {
@@ -4730,6 +4731,7 @@ function runBackgroundItemScenario(
         commandId: CommandId.make(`command:${key}`),
         appThread: {
           ...rootAppThread(ids.threadId),
+          ...(options?.appThreadTitle === undefined ? {} : { title: options.appThreadTitle }),
           ...(options?.lesson === true
             ? { lesson: { topic: "forces", depth: "working", purpose: "outcome" } as const }
             : {}),
@@ -4881,6 +4883,67 @@ it.effect.each([
       },
     );
     assert.deepEqual(yield* Ref.get(texts), expected);
+  }),
+);
+
+it.effect("redacts completed course answers and prep reasoning", () =>
+  Effect.gen(function* () {
+    const observed = yield* Ref.make<ReadonlyArray<unknown>>([]);
+    yield* runBackgroundItemScenario(
+      "course-answer-leaks",
+      (ids) => [
+        {
+          type: "turn_item.updated",
+          driver,
+          turnItem: {
+            ...makeLinkedChildTurnItemFixture({ ids, driver, type: "reasoning" }),
+            id: ids.itemId,
+            threadId: ids.threadId,
+            runId: ids.runId,
+            nodeId: ids.rootNodeId,
+            status: "completed",
+            text: "answer 30 N",
+            streaming: false,
+          },
+        } as ProviderAdapter.ProviderAdapterV2Event,
+        {
+          type: "turn_item.updated",
+          driver,
+          turnItem: {
+            ...makeLinkedChildTurnItemFixture({ ids, driver, type: "command_execution" }),
+            id: TurnItemId.make(`${ids.itemId}:problems`),
+            threadId: ids.threadId,
+            runId: ids.runId,
+            nodeId: ids.rootNodeId,
+            status: "completed",
+            type: "dynamic_tool",
+            toolName: "course_problems",
+            input: { pset: 1 },
+            output: { references: [{ answers: "30 N" }], closedCardItemId: "card-1" },
+          },
+        } as ProviderAdapter.ProviderAdapterV2Event,
+        rootTerminalEvent(ids, "completed"),
+      ],
+      {
+        appThreadTitle: "Prep: Mechanics",
+        onIngest: (event) => {
+          if (event.type !== "turn_item.updated") return Effect.void;
+          const item = event.turnItem;
+          if (item.type === "reasoning")
+            return Ref.update(observed, (current) => [...current, item.text]);
+          if (item.type === "dynamic_tool")
+            return Ref.update(observed, (current) => [
+              ...current,
+              { output: item.output, input: item.input },
+            ]);
+          return Effect.void;
+        },
+      },
+    );
+    assert.deepEqual(yield* Ref.get(observed), [
+      "",
+      { output: { closedCardItemId: "card-1" }, input: { pset: 1 } },
+    ]);
   }),
 );
 
