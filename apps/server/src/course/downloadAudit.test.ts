@@ -13,6 +13,7 @@ describe("course download audit", () => {
         { stateDir: dir, threadId: "thread-1", courseId: null },
         {
           url: "https://example.com/a?access_token=X&pwd=Y&id=1#token=Z",
+          kind: "course",
           status: 200,
           body: Buffer.from("ok"),
           contentType: "text/plain",
@@ -20,7 +21,7 @@ describe("course download audit", () => {
       );
       await auditDownload(
         { stateDir: dir, threadId: "thread-1", courseId: null },
-        { url: "http://127.0.0.1/", blocked: "private host" },
+        { url: "http://127.0.0.1/", kind: "course", blocked: "private host" },
       );
       const files = await NodeFSP.readdir(NodePath.join(dir, "audit"));
       const lines = (await NodeFSP.readFile(NodePath.join(dir, "audit", files[0]!)))
@@ -29,12 +30,13 @@ describe("course download audit", () => {
         .split("\n")
         .map((line) => JSON.parse(line));
       assert.strictEqual(lines.length, 2);
+      assert.strictEqual(lines[0].kind, "course");
       assert.include(lines[0].url, "token=REDACTED");
       assert.include(lines[0].url, "pwd=REDACTED");
       assert.notInclude(lines[0].url, "#token");
       await auditDownload(
         { stateDir: dir, threadId: "thread-1", courseId: null },
-        { url: "https://user:pw@example.com/a", status: 200 },
+        { url: "https://user:pw@example.com/a", kind: "course", status: 200 },
       );
       const withUserinfo = JSON.parse(
         (await NodeFSP.readFile(NodePath.join(dir, "audit", files[0]!)))
@@ -70,7 +72,7 @@ describe("course download audit", () => {
       const threeMonthsAgo = monthName(3);
       await NodeFSP.writeFile(NodePath.join(auditDir, twoMonthsAgo), "old\n");
       await NodeFSP.writeFile(NodePath.join(auditDir, threeMonthsAgo), "old\n");
-      await auditDownload({ stateDir: dir }, { url: "https://example.com/ok" });
+      await auditDownload({ stateDir: dir }, { url: "https://example.com/ok", kind: "course" });
       const currentName = monthName(0);
       assert.include(await NodeFSP.readdir(auditDir), currentName);
       assert.include(await NodeFSP.readdir(auditDir), twoMonthsAgo);
@@ -78,7 +80,7 @@ describe("course download audit", () => {
       const current = NodePath.join(auditDir, currentName);
       await NodeFSP.truncate(current, 100 * 1024 * 1024 + 1);
       await NodeFSP.utimes(current, 0, 0);
-      await auditDownload({ stateDir: dir }, { url: "https://example.com/capped" });
+      await auditDownload({ stateDir: dir }, { url: "https://example.com/capped", kind: "course" });
       assert.include((await NodeFSP.readFile(current, "utf8")).slice(-30), '"capped":true');
     }),
   );

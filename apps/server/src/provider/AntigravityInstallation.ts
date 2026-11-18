@@ -34,7 +34,7 @@ import * as NodeFSP from "node:fs/promises";
 import * as EffectAcpErrors from "effect-acp/errors";
 
 import * as ServerConfig from "../config.ts";
-import { auditDownload } from "../course/downloadAudit.ts";
+import { auditDownload, withAuditHops, type DownloadAuditHop } from "../course/downloadAudit.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import {
   ANTIGRAVITY_CLI_MANIFEST_BASE,
@@ -649,9 +649,10 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       yield* fs.makeDirectory(pairDirectory);
       const hash = NodeCrypto.createHash(cli ? "sha512" : "sha256");
       let downloadedBytes = 0;
+      const hops: DownloadAuditHop[] = [];
       let lastProgressAt = yield* Clock.currentTimeMillis;
       yield* Effect.gen(function* () {
-        const response = yield* http
+        const response = yield* withAuditHops(http, hops)
           .execute(HttpClientRequest.get(asset.url))
           .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
         // dl.google.com may gzip the zip: content-length is encoded, while byte/hash checks use decoded data.
@@ -707,6 +708,8 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
             { stateDir: options.stateDir },
             {
               url: asset.url,
+              kind: "provider",
+              hops,
               status: response.status,
               bytes: downloadedBytes,
               contentType: response.headers["content-type"] ?? null,
@@ -722,7 +725,13 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
           Effect.promise(() =>
             auditDownload(
               { stateDir: options.stateDir },
-              { url: asset.url, bytes: downloadedBytes, error: Cause.pretty(cause) },
+              {
+                url: asset.url,
+                kind: "provider",
+                hops,
+                bytes: downloadedBytes,
+                error: Cause.pretty(cause),
+              },
             ),
           ),
         ),
