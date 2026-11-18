@@ -84,13 +84,16 @@ function swapMacBundleAfterQuit(zipPath: string): void {
     );
   }
   // A failed swap reopens the old app, so this trace is the only sign of why.
-  const log = NodeFS.openSync(`${Electron.app.getPath("logs")}/update-swap.log`, "w");
+  let log: number | "ignore" = "ignore";
+  try {
+    log = NodeFS.openSync(`${Electron.app.getPath("logs")}/update-swap.log`, "w");
+  } catch {}
   NodeChildProcess.spawn(
     "/bin/sh",
     ["-c", MAC_BUNDLE_SWAP_SCRIPT, "ominax-update", String(process.pid), zipPath, bundlePath],
     { detached: true, stdio: ["ignore", log, log] },
   ).unref();
-  NodeFS.closeSync(log);
+  if (log !== "ignore") NodeFS.closeSync(log);
   Electron.app.quit();
 }
 
