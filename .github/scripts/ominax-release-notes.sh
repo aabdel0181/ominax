@@ -43,6 +43,8 @@ if ((${#new[@]})); then
 else
   echo "- Maintenance and build fixes."
 fi
+# shortcut: REL-87, Mac in-app updates are unproven; drop this line once a Mac updates itself.
+echo "- Mac: if OminaX is still on an older version after Update, run the install command again: https://github.com/aabdel0181/ominax#install"
 cat <<'EOF'
 
 <details>
