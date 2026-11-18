@@ -1873,7 +1873,7 @@ it.effect("course_prepare starts a standalone prep thread and sends nothing to t
       ],
     });
     expect(JSON.stringify(requests.at(-1))).toContain(
-      "Handle psets in the listed order, and call course_update {pset, references} for each pset as soon as that pset's solution is read, before opening the next one.",
+      "As soon as you finish each pset, save it with course_update {pset, references} (references [] if no lead has it) before opening the next one.",
     );
     expect((yield* service.get({ id: course.id })).solutionSearchedAt).toBeDefined();
     const afterSearch = yield* callAs("course_problems", { courseId: course.id });
