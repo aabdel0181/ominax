@@ -169,6 +169,20 @@ describe("CourseService", () => {
           loading.problemSets[0]?.note ?? "",
           "call course_problems with this pset again",
         );
+        const skippedWhileLoading = yield* service.problems({
+          courseId: course.id,
+          pset: 1,
+          reveal: true,
+          skip: true,
+        });
+        assert.notInclude(
+          skippedWhileLoading.problemSets[0]?.note ?? "",
+          "No official solution exists",
+        );
+        assert.include(
+          skippedWhileLoading.problemSets[0]?.note ?? "",
+          "published solution is still loading",
+        );
         // A prep thread that died never leaves grading waiting.
         yield* TestClock.adjust("31 minutes");
         const stale = yield* service.problems({ courseId: course.id, pset: 1 });
