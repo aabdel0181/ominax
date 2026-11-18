@@ -39,6 +39,7 @@ const relaunchWithoutInheritedDescriptors = (updater: AppImageUpdater) => {
 // verified download, under the download's own name (T3 Learn.app becomes
 // OminaX.app), and reopens it. The old bundle is deleted only once the new one is in place.
 export const MAC_BUNDLE_SWAP_SCRIPT = `
+set -x
 pid=$1 zip=$2 app=$3
 while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
 staging=$(mktemp -d "$(dirname "$app")/.ominax-update.XXXXXX") || { open "$app"; exit 1; }
@@ -82,11 +83,14 @@ function swapMacBundleAfterQuit(zipPath: string): void {
       `OminaX cannot replace itself in ${folder}. Run its install command again to update.`,
     );
   }
+  // A failed swap reopens the old app, so this trace is the only sign of why.
+  const log = NodeFS.openSync(`${Electron.app.getPath("logs")}/update-swap.log`, "w");
   NodeChildProcess.spawn(
     "/bin/sh",
     ["-c", MAC_BUNDLE_SWAP_SCRIPT, "ominax-update", String(process.pid), zipPath, bundlePath],
-    { detached: true, stdio: "ignore" },
+    { detached: true, stdio: ["ignore", log, log] },
   ).unref();
+  NodeFS.closeSync(log);
   Electron.app.quit();
 }
 
