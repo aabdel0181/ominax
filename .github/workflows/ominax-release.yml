@@ -8,14 +8,17 @@ name: OminaX Release
 # release after install tests pass and the promote job marks it latest.
 # Builds are unsigned; macOS builds get an ad hoc signature. Upstream's
 # release.yml also matches these tags but only runs in pingdotgg/t3code.
-# Linux jobs run on OminaX KVM runners; Mac jobs never run on GitHub's hosted Macs (med, REL-71). They run only
+# Linux jobs run on OminaX KVM runners labelled ominax-linux-x64-release, which CI jobs never ask
+# for, so a VM started for a release job can only run release jobs (REL-89).
+# Mac jobs never run on GitHub's hosted Macs (med, REL-71). They run only
 # when a repo variable names a self-hosted label: T3_LEARN_MAC_RUNNER for the
 # desktop builds of CI-triggered runs on main and of Mac backfills (a dispatch
 # naming an existing release, which only adds its macOS files) and T3_LEARN_MAC_INSTALL_RUNNER
 # for the macOS install tests. Without one, the release ships without macOS
 # and its notes say so. Only a host that gives each job a clean machine (the
 # rented Mac's throwaway VMs) may take the install tests: they write /Applications.
-# Windows x64 Verify and install tests run on the box's throwaway Windows VMs (ominax-windows-x64).
+# Windows x64 Verify and install tests run on the box's throwaway Windows VMs (ominax-windows-x64,
+# which only this workflow uses).
 
 on:
   push:
@@ -43,7 +46,7 @@ permissions:
 jobs:
   preflight:
     name: Check version
-    runs-on: ominax-linux-x64
+    runs-on: ominax-linux-x64-release
     timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -101,10 +104,10 @@ jobs:
         run: |
           set -euo pipefail
           rows='[
-            {"os":"ominax-linux-x64","scenario":"fresh"},
-            {"os":"ominax-linux-x64","scenario":"next-to-t3-code"},
-            {"os":"ominax-linux-x64","scenario":"appimage"},
-            {"os":"ominax-linux-x64","scenario":"service"},
+            {"os":"ominax-linux-x64-release","scenario":"fresh"},
+            {"os":"ominax-linux-x64-release","scenario":"next-to-t3-code"},
+            {"os":"ominax-linux-x64-release","scenario":"appimage"},
+            {"os":"ominax-linux-x64-release","scenario":"service"},
             {"os":"ominax-windows-x64","scenario":"fresh"},
             {"os":"ominax-windows-x64","scenario":"next-to-t3-code"}]'
           if [ -n "$MAC" ]; then
@@ -128,7 +131,7 @@ jobs:
     if: needs.preflight.outputs.skip != 'true'
     name: Build JS bundle
     needs: preflight
-    runs-on: ominax-linux-x64
+    runs-on: ominax-linux-x64-release
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -236,7 +239,7 @@ jobs:
       clerk_cli_oauth_client_id: ""
       relay_url: ""
       label: Linux x64
-      runner: ominax-linux-x64
+      runner: ominax-linux-x64-release
       platform: linux
       target: AppImage
       arch: x64
@@ -286,7 +289,7 @@ jobs:
       clerk_cli_oauth_client_id: ""
       relay_url: ""
       label: Windows x64
-      runner: ominax-linux-x64
+      runner: ominax-linux-x64-release
       verify_runner: ominax-windows-x64
       platform: win
       target: nsis
@@ -311,7 +314,7 @@ jobs:
       clerk_cli_oauth_client_id: ""
       relay_url: ""
       label: Windows arm64
-      runner: ominax-linux-x64
+      runner: ominax-linux-x64-release
       verify_runner: windows-11-arm
       platform: win
       target: nsis
@@ -337,7 +340,7 @@ jobs:
         desktop_win_x64,
         desktop_win_arm64,
       ]
-    runs-on: ominax-linux-x64
+    runs-on: ominax-linux-x64-release
     timeout-minutes: 15
     permissions:
       contents: write
@@ -562,7 +565,7 @@ jobs:
     name: Promote tested release
     if: ${{ !cancelled() && needs.install_test.result == 'success' && needs.preflight.outputs.skip != 'true' }}
     needs: [preflight, install_test]
-    runs-on: ominax-linux-x64
+    runs-on: ominax-linux-x64-release
     permissions:
       contents: write
     env:
@@ -581,7 +584,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && needs.desktop_mac_arm64.result == 'success' && needs.desktop_mac_x64.result == 'success'
     name: Add macOS build to release
     needs: [preflight, desktop_mac_arm64, desktop_mac_x64]
-    runs-on: ominax-linux-x64
+    runs-on: ominax-linux-x64-release
     timeout-minutes: 15
     permissions:
       contents: write
