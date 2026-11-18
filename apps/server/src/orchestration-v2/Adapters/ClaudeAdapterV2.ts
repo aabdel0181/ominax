@@ -2726,7 +2726,10 @@ function withoutLessonCommitment(text: string) {
     .trim();
 }
 
-// Drops sentences of held text that the card's reply or verdict already says; code blocks stay whole.
+// Table rows, list items, headings, quotes and display formulas are teaching structure, never repeats (APP-139).
+const NON_PROSE_LINE = /^\s*(?:\||[-*+]\s|\d+[.)]\s|#|>|\$\$|\\\[)|\s\|\s/u;
+
+// Drops prose sentences of held text that the card's reply or verdict already says.
 function stripCardReplyCoveredSentences(
   block: { readonly name: string; readonly input: unknown },
   text: string,
@@ -2737,11 +2740,21 @@ function stripCardReplyCoveredSentences(
     .join("\n");
   if (covered === "") return text;
   let inCode = false;
+  let inMath = false;
   return text
     .split("\n")
     .map((line) => {
-      if (line.trimStart().startsWith("```")) inCode = !inCode;
-      if (inCode || line.trimStart().startsWith("```")) return line;
+      const trimmed = line.trim();
+      if (trimmed.startsWith("```")) inCode = !inCode;
+      const wasInMath = inMath;
+      // A display formula spans lines until its "$$" or "\]" closes it.
+      if (!inCode) {
+        if ((trimmed.match(/\$\$/gu) ?? []).length % 2 === 1) inMath = !inMath;
+        else if (trimmed.includes("\\[") && !trimmed.includes("\\]")) inMath = true;
+        else if (trimmed.includes("\\]") && !trimmed.includes("\\[")) inMath = false;
+      }
+      if (inCode || wasInMath || inMath || trimmed.startsWith("```") || NON_PROSE_LINE.test(line))
+        return line;
       return line
         .split(/(?<=[^\s\d][.!?])\s+/u)
         .filter(
