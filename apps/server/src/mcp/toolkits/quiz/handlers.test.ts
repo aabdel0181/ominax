@@ -17,6 +17,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import * as McpToolAccessTestkit from "../../McpToolAccess.testkit.ts";
 import { QuizToolkit } from "./tools.ts";
 import * as QuizHandlers from "./handlers.ts";
@@ -557,12 +558,44 @@ it.effect("refuses picture spoilers and flags a clean teaching picture", () => {
         attachmentId: "picture-00000000-0000-0000-0000-000000000000-html",
         title: "Weight split",
         height: 200,
-        checkText: "The split is 20 N along the slope.",
       },
     },
-  } as never;
-  const provide = (turnItems: ReadonlyArray<unknown>) =>
+  };
+  const axisPicture = {
+    ...picture,
+    id: TurnItemId.make("axis-picture"),
+    output: {
+      htmlRender: {
+        attachmentId: "axis-00000000-0000-0000-0000-000000000000-html",
+        title: "Axis labels",
+        height: 200,
+      },
+    },
+  };
+  const answeredPicture = {
+    ...picture,
+    id: TurnItemId.make("answered-picture"),
+    output: {
+      htmlRender: {
+        ...picture.output.htmlRender,
+        forCard: "card-before",
+      },
+    },
+  };
+  let turnItems: ReadonlyArray<unknown> = [picture, axisPicture];
+  const provide = () =>
     Layer.mergeAll(
+      Layer.succeed(HtmlRender.HtmlRender, {
+        prepare: () => Effect.die("unused"),
+        publish: () => Effect.die("unused"),
+        readPublished: (attachmentId: string) =>
+          Effect.succeed(
+            attachmentId.startsWith("axis-")
+              ? "<svg><text>1 2 3</text></svg>"
+              : "<p>The split is 20 N along the slope.</p>",
+          ),
+        preview: () => Effect.die("unused"),
+      } as never),
       McpToolAccess.HandlersLayer.layer(QuizHandlers.layer),
       Layer.succeed(McpInvocationContext.McpInvocationContext, {
         environmentId: EnvironmentId.make("quiz-handler-environment"),
@@ -606,5 +639,18 @@ it.effect("refuses picture spoilers and flags a clean teaching picture", () => {
       .handle("question_card", { ...card, number: { ...card.number, answer: 30 } })
       .pipe(Stream.unwrap, Stream.runCollect);
     expect(clean.at(-1)?.result).toMatchObject({ questionCard: { picturesChecked: true } });
-  }).pipe(Effect.provide(provide([picture])));
+    const axisLabels = yield* toolkit
+      .handle("question_card", {
+        ...card,
+        question: "How many 2 tokens are in the batch?",
+        number: { answer: 4, tolerance: 0 },
+      })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(axisLabels.at(-1)?.result).toMatchObject({ questionCard: { picturesChecked: true } });
+    turnItems = [answeredPicture];
+    const owedResult = yield* toolkit
+      .handle("question_card", card)
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(owedResult.at(-1)?.result).toMatchObject({ questionCard: { picturesChecked: true } });
+  }).pipe(Effect.provide(provide()));
 });

@@ -1,6 +1,7 @@
 import { OrchestratorMcpFailure, TurnItemId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import {
   type CardPurpose,
   cardAnswerVerdictLength,
@@ -20,6 +21,7 @@ import {
 import { htmlRenderFromToolItem, lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
 import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
 
+import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { loadCaller, readThread } from "../../threadAccess.ts";
 import { QuizToolkit } from "./tools.ts";
@@ -188,11 +190,20 @@ const pictureAnswers = (
   card: ReturnType<typeof readQuestionCard> | ReturnType<typeof readQuizCard>,
 ) => {
   if (card === undefined) return [];
-  const answerText =
-    "answer" in card ? card.answer : card.number === undefined ? "" : String(card.number.answer);
-  const numbers = `${card.question}\n${answerText}`.match(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu) ?? [];
+  const numbers =
+    `${card.question}`
+      .match(/-?(?:\d+(?:\.\d*)?|\.\d+)/gu)
+      ?.filter((number) => number.replace(/^-/u, "").length >= 2) ?? [];
   return [...lessonCardAnswers(card), ...numbers];
 };
+
+const stripHtmlText = (html: string) =>
+  html
+    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/giu, " ")
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/&nbsp;|&#160;/giu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
 
 const statesNumber = (text: string, value: string) => {
   if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(value)) return false;
@@ -210,18 +221,25 @@ const checkEarlierPictures = Effect.fn("quiz.checkEarlierPictures")(function* (
   if (card === undefined || context.caller === undefined) return false;
   if (context.caller.tags?.includes("lesson") !== true) return true;
   if (runId === null || runId === undefined) return false;
+  const htmlRender = yield* Effect.serviceOption(HtmlRender.HtmlRender).pipe(
+    Effect.map(Option.getOrUndefined),
+  );
+  if (htmlRender === undefined) return false;
   const records = yield* context.threads
     .getProjectThreadRecords(
       { projectId: context.caller.projectId, threadId: context.caller.id },
       ["turnItems"],
       { runIds: [runId] },
     )
-    .pipe(Effect.orElseSucceed(() => ({ turnItems: [] as const })));
+    .pipe(Effect.orElseSucceed(() => undefined));
+  if (records === undefined) return false;
   const pictures = records.turnItems.flatMap((item) => {
     if (item.type !== "dynamic_tool" || item.status !== "completed") return [];
     if (resolveT3McpToolId(item.toolName) === "animation_render") return [undefined];
     const reference = htmlRenderFromToolItem(item);
-    return resolveT3McpToolId(item.toolName) === "html_render" && reference !== undefined
+    return resolveT3McpToolId(item.toolName) === "html_render" &&
+      reference !== undefined &&
+      reference.forCard === undefined
       ? [reference]
       : [];
   });
@@ -232,13 +250,16 @@ const checkEarlierPictures = Effect.fn("quiz.checkEarlierPictures")(function* (
       checked = false;
       continue;
     }
-    if (picture.checkText === undefined) {
+    const html = yield* htmlRender.readPublished(picture.attachmentId).pipe(
+      Effect.map(stripHtmlText),
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (html === undefined) {
       checked = false;
       continue;
     }
     const answer = pictureAnswers(card).find(
-      (candidate) =>
-        statesAnswer(picture.checkText!, candidate) || statesNumber(picture.checkText!, candidate),
+      (candidate) => statesAnswer(html, candidate) || statesNumber(html, candidate),
     );
     if (answer !== undefined) {
       return yield* new OrchestratorMcpFailure({

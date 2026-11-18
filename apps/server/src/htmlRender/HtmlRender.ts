@@ -45,15 +45,6 @@ const MAX_PAGE_BYTES = 25 * MIB;
 const HTML_FILE_EXTENSION = /\.html?$/i;
 // Like the image check, judge the bytes: a renamed .env or key does not start like a page.
 const HTML_DOCUMENT_START = /^\s*<(?:!doctype\s+html|html)[\s>]/i;
-const renderCheckText = (html: string) => {
-  const text = html
-    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/giu, " ")
-    .replace(/<[^>]*>/gu, " ")
-    .replace(/&nbsp;|&#160;/giu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-  return text.length <= 4_000 ? text : undefined;
-};
 const formatMib = (bytes: number) => `${(bytes / MIB).toFixed(1)} MiB`;
 
 export class HtmlRenderFileError extends Schema.TaggedError<HtmlRenderFileError>()(
@@ -169,6 +160,7 @@ export class HtmlRender extends Context.Service<
       | HtmlRenderPrepareError
       | HtmlRenderStoreError
     >;
+    readonly readPublished: (attachmentId: string) => Effect.Effect<string, HtmlRenderStoreError>;
     readonly preview: (
       input: HtmlRenderSource & {
         readonly width?: number | undefined;
@@ -528,12 +520,10 @@ const make = Effect.gen(function* () {
     if (attachmentId === null || filePath === null) {
       return yield* new HtmlRenderStoreError({ cause: new Error("Invalid thread id.") });
     }
-    const checkText = renderCheckText(html);
     const baseReference: HtmlRenderReference = {
       attachmentId,
       title: input.title.trim().slice(0, HTML_RENDER_MAX_TITLE_LENGTH) || "HTML",
       height: clampHtmlRenderHeight(input.height),
-      ...(checkText === undefined ? {} : { checkText }),
     };
     return yield* fileSystem.writeFileString(filePath, html).pipe(
       Effect.mapError((cause) => new HtmlRenderStoreError({ cause })),
@@ -568,6 +558,19 @@ const make = Effect.gen(function* () {
         ),
       ),
     );
+  });
+
+  const readPublished = Effect.fn("HtmlRender.readPublished")(function* (attachmentId: string) {
+    const filePath = resolveAttachmentRelativePath({
+      attachmentsDir: config.attachmentsDir,
+      relativePath: `${attachmentId}.html`,
+    });
+    if (filePath === null) {
+      return yield* new HtmlRenderStoreError({ cause: new Error("Invalid attachment id.") });
+    }
+    return yield* fileSystem
+      .readFileString(filePath)
+      .pipe(Effect.mapError((cause) => new HtmlRenderStoreError({ cause })));
   });
 
   const preview = Effect.fn("HtmlRender.preview")(function* (
@@ -607,7 +610,7 @@ const make = Effect.gen(function* () {
     } satisfies HtmlPreview;
   });
 
-  return HtmlRender.of({ prepare, publish, preview });
+  return HtmlRender.of({ prepare, publish, readPublished, preview });
 });
 
 export const layer = Layer.effect(HtmlRender, make);
