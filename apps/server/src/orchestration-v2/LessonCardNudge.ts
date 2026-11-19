@@ -11,9 +11,12 @@ import * as Stream from "effect/Stream";
 import { forkParked } from "../serverActivation.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
+import { ACTIVE_RUN_STATUSES } from "./ThreadManagementService.ts";
 
+// The quiz handler counts only teaching shown since the last user message, which this one becomes,
+// so the card's reply must carry its own case.
 const LESSON_CARD_NUDGE_TEXT =
-  "The learner has nothing to answer: your last reply ended without a card. Ask one card now (quiz_card or question_card) on what you just taught. If the learner asked to stop or not to be quizzed, reply with one short line instead.";
+  "The learner has nothing to answer: your last reply ended without a card. Ask one card now (quiz_card or question_card) that applies what you just taught to a new case, and write that case out in full in the card's reply. If the learner asked to stop or not to be quizzed, reply with one short line instead.";
 
 type NudgeMessage = Pick<
   OrchestrationV2ConversationMessage,
@@ -23,6 +26,7 @@ type NudgeMessage = Pick<
 /**
  * A lesson run the learner started ended with no card open. Runs started by a server message,
  * the nudge's own included, never qualify, so a lesson is nudged at most once per learner turn.
+ * A learner turn continued after a server restart is one of those, and is never nudged.
  */
 export function shouldNudgeLessonCard(input: {
   readonly thread: {
@@ -46,8 +50,9 @@ export function shouldNudgeLessonCard(input: {
     thread.deletedAt === null &&
     started !== undefined &&
     !(started.createdBy === "agent" && started.creationSource === "server") &&
-    !runs.some((run) =>
-      ["queued", "preparing", "starting", "running", "waiting"].includes(run.status),
+    !runs.some(
+      (run) =>
+        run.status === "queued" || ACTIVE_RUN_STATUSES.some((status) => status === run.status),
     ) &&
     openLessonCardItemId(messages) === undefined
   );
@@ -58,14 +63,12 @@ export const make = Effect.gen(function* () {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
 
   const nudge = Effect.fn("LessonCardNudge.nudge")(
-    function* (threadId: OrchestrationV2Run["threadId"], runId: OrchestrationV2Run["id"]) {
+    function* (threadId: OrchestrationV2Run["threadId"], completedRun: OrchestrationV2Run) {
       const thread = yield* projections.findThread(threadId);
       if (thread?.lesson === undefined) return;
       const records = yield* projections.getThreadRecords(threadId, ["runs", "messages"]);
-      const completedRun = records.runs.find((run) => run.id === runId);
-      if (completedRun === undefined || !shouldNudgeLessonCard({ ...records, completedRun })) {
-        return;
-      }
+      if (!shouldNudgeLessonCard({ ...records, completedRun })) return;
+      const runId = completedRun.id;
       yield* orchestrator.dispatch({
         type: "message.dispatch",
         commandId: CommandId.make(`server:lesson-card-nudge:${threadId}:${runId}`),
@@ -90,7 +93,7 @@ export const make = Effect.gen(function* () {
     yield* forkParked(
       Stream.runForEach(orchestrator.streamDomainEvents, (event) =>
         event.type === "run.updated" && event.payload.status === "completed"
-          ? nudge(event.threadId, event.payload.id)
+          ? nudge(event.threadId, event.payload)
           : Effect.void,
       ),
     );
