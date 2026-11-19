@@ -295,30 +295,26 @@ const handlers = {
               .pipe(Effect.mapError(fail));
         }
       }
-      const first = units[0];
-      const last = units[units.length - 1];
-      const title = `Prep: ${course.title} L${first}–${last}`;
+      const title = `Prep: ${course.title}`;
       const pendingSolutionPsets =
         input.solutionLeads !== undefined
           ? (course.problemSets ?? [])
               .map((pset, index) => ({ pset, number: index + 1 }))
               .filter(({ pset }) => !pset.hasSolution && pset.references === undefined)
           : [];
+      // The learner's current pset first, so its reference is in before the first grading.
+      const orderedPendingSolutionPsets = pendingSolutionPsets.toSorted(
+        (a, b) =>
+          Number(b.number === course.position?.pset) - Number(a.number === course.position?.pset),
+      );
       const solutionBrief =
         solutionLeads.length > 0
-          ? ` Problem sets to find solutions for: ${pendingSolutionPsets.map(({ number, pset }) => `${number} (${pset.title})`).join(", ") || "none"}. Open each solution lead with course_reference_fetch (follow index-page links to the matching named pset's solution file), read PDF page images, and for each problem record the given values exactly as read from the scan with page numbers. Compare them with the pset text from course_problems for that pset; when they differ, re-fetch that page with course_reference_fetch {pages} and read it again. If they still differ, write "values differ from the pset text (scan may be misread): …" in answers instead of silently using them. Transcribe each problem's final answers and key steps, and save them with course_update {pset, references} for each named pset you find. Save references [] for each named pset you do not find. Leads: ${solutionLeads.join(", ")}.`
+          ? ` Problem sets to find solutions for: ${orderedPendingSolutionPsets.map(({ number, pset }) => `${number} (${pset.title})`).join(", ") || "none"}. Find these solutions before the unit preparation above, in the listed order. Open each solution lead with course_reference_fetch (follow index-page links to the matching named pset's solution file), read PDF page images, and for each problem record the given values exactly as read from the scan with page numbers. Compare them with the pset text from course_problems for that pset; when they differ, re-fetch that page with course_reference_fetch {pages} and read it again. If they still differ, write "values differ from the pset text (scan may be misread): …" in answers instead of silently using them. Transcribe each problem's final answers and key steps. As soon as you finish each pset, save it with course_update {pset, references} (references [] if no lead has it) before opening the next one. Leads: ${solutionLeads.join(", ")}.`
           : "";
       const prompt = PREP_BRIEF.replace("{{courseId}}", course.id)
         .replace("{{units}}", units.join(", "))
         .replace("{{solutionLeads}}", solutionBrief);
       const clientRequestId = `course-prep:${course.id}:${DateTime.toEpochMillis(yield* DateTime.now)}`;
-      // Recorded before the prep turn starts, so its first course_read is already allowed.
-      yield* service
-        .recordPrepThread(
-          course.id,
-          OrchestratorMcpService.stableThreadId({ scope, requestKey: clientRequestId, index: 0 }),
-        )
-        .pipe(Effect.mapError(fail));
       // Unattended, so an approval prompt would stall it; it reads third-party scans, so never full access.
       const { limits } = yield* loadCaller();
       const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
@@ -327,7 +323,7 @@ const handlers = {
           clientRequestId,
           threads: [{ title, prompt, ...(runtimeMode ? { runtimeMode } : {}) }],
         });
-      yield* (
+      const createPrepWithRuntimeMode =
         limits.runtimeMode === "full-access"
           ? createPrep("auto").pipe(
               // Providers without Auto (Pi, Kiro, Muse, Antigravity) get the narrowest mode instead.
@@ -336,8 +332,33 @@ const handlers = {
                 () => createPrep("approval-required"),
               ),
             )
-          : createPrep()
-      ).pipe(Effect.mapError(fail));
+          : createPrep();
+      const existingPrepThreadId = course.prepThreadIds.at(-1);
+      const sentToExisting =
+        existingPrepThreadId === undefined
+          ? false
+          : yield* orchestrator
+              .sendToThread(scope, {
+                threadId: existingPrepThreadId,
+                message: prompt,
+                mode: "queue",
+                freshContext: true,
+                clientRequestId,
+              })
+              .pipe(
+                Effect.as(true),
+                Effect.orElseSucceed(() => false),
+              );
+      if (!sentToExisting) {
+        const prepThreadId = OrchestratorMcpService.stableThreadId({
+          scope,
+          requestKey: clientRequestId,
+          index: 0,
+        });
+        // Recorded before the prep turn starts, so its first course_read is already allowed.
+        yield* service.recordPrepThread(course.id, prepThreadId).pipe(Effect.mapError(fail));
+        yield* createPrepWithRuntimeMode.pipe(Effect.mapError(fail));
+      }
       // Stamped once the prep thread exists, so a failed start never shows "Reference still loading."
       if (input.solutionLeads !== undefined)
         yield* service

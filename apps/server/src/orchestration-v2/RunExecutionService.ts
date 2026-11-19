@@ -38,6 +38,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -46,6 +47,7 @@ import * as Stream from "effect/Stream";
 
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as McpAppModelContext from "../mcpApps/McpAppModelContext.ts";
+import * as CourseService from "../course/CourseService.ts";
 import * as PreviewAgentActivity from "../preview/PreviewAgentActivity.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as CheckpointService from "./CheckpointService.ts";
@@ -641,17 +643,34 @@ const GUARDED_LESSON_TOOLS = new Set([
   QUESTION_CARD_TOOL_NAME,
   HTML_RENDER_TOOL_NAME,
 ]);
+// Their results (and course_update's input) carry pset answers and prepared quiz keys.
+const COURSE_ANSWER_TOOLS = new Set([
+  "course_read",
+  "course_problems",
+  "course_reference_fetch",
+  "course_update",
+]);
 
-/** Lesson thoughts and refused cards' or pictures' inputs can hold an open card's answer. */
+/** Lesson thoughts, course tool results and refused cards' or pictures' inputs can hold an answer. */
 function withoutLessonSecrets(
   event: ProviderAdapter.ProviderAdapterV2Event,
 ): ProviderAdapter.ProviderAdapterV2Event {
   if (event.type !== "turn_item.updated") return event;
   const item = event.turnItem;
   if (item.type === "reasoning") return { ...event, turnItem: { ...item, text: "", title: null } };
+  if (item.type !== "dynamic_tool") return event;
+  const toolId = resolveT3McpToolId(item.toolName) ?? "";
+  if (COURSE_ANSWER_TOOLS.has(toolId))
+    return {
+      ...event,
+      turnItem: {
+        ...item,
+        output: compactDynamicToolOutput(item.output) ?? null,
+        ...(toolId === "course_update" ? { input: null } : {}),
+      },
+    };
   if (
-    item.type === "dynamic_tool" &&
-    GUARDED_LESSON_TOOLS.has(resolveT3McpToolId(item.toolName) ?? "") &&
+    GUARDED_LESSON_TOOLS.has(toolId) &&
     (item.status === "failed" || compactDynamicToolOutput(item.output)?.isError === true)
   )
     return { ...event, turnItem: { ...item, input: null } };
@@ -746,6 +765,10 @@ export const layer: Layer.Layer<
     const finalizationObserver = yield* RunFinalizationService.RunFinalizationObserver;
     const turnAnalytics = yield* ProviderUsageAnalytics.ProviderTurnAnalytics;
     const threadCommands = yield* ThreadCommandExecutor.ThreadCommandExecutor;
+    const courses = Option.getOrElse(
+      yield* Effect.serviceOption(CourseService.CourseService),
+      () => CourseService.unavailable,
+    );
 
     const writeFinalRunEvents = Effect.fn("RunExecutionService.writeFinalRunEvents")(
       function* (input: {
@@ -1285,7 +1308,9 @@ export const layer: Layer.Layer<
         let rootTurnOwnershipChecked = false;
         const assistantStreaming = makeAssistantStreamingFilter(responseStreamingMode);
         const lessonThread =
-          input.appThread.lesson !== undefined || isSideChatThread(input.appThread);
+          input.appThread.lesson !== undefined ||
+          isSideChatThread(input.appThread) ||
+          (yield* courses.isPrepThread(input.appThread.id).pipe(Effect.orElseSucceed(() => false)));
         // Set when ingestion ends or finalization settles the run's open items, which a later
         // streaming snapshot must not reopen.
         let idleFlushClosed = false;

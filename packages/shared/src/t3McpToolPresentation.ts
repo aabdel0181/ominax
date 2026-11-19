@@ -413,6 +413,10 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   course_update: tool(["Update", "Updating", "Updated", "a course"], "course-update"),
   course_prepare: tool(["Prepare", "Preparing", "Prepared", "course units"], "course-update"),
   course_problems: tool(["Read", "Reading", "Read", "course problems"], "course-read"),
+  course_reference_fetch: tool(
+    ["Fetch", "Fetching", "Fetched", "a course reference"],
+    "course-read",
+  ),
   send_to_user: tool(["Send", "Sending", "Sent", "a message"], "send-to-user"),
 };
 
