@@ -216,6 +216,9 @@ describe("HtmlRender", () => {
         title: "Revenue",
         height: 2_000,
       });
+      expect(yield* htmlRender.readPublished(reference.attachmentId)).toContain(
+        "<p>Quarterly revenue</p>",
+      );
       const stored = resolveAttachmentPathById({
         attachmentsDir: config.attachmentsDir,
         attachmentId: reference.attachmentId,

@@ -2,6 +2,7 @@ import {
   EnvironmentId,
   ProviderInstanceId,
   ThreadId,
+  TurnItemId,
   type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -16,6 +17,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import * as McpToolAccessTestkit from "../../McpToolAccess.testkit.ts";
 import { QuizToolkit } from "./tools.ts";
 import * as QuizHandlers from "./handlers.ts";
@@ -441,6 +443,7 @@ it.effect(
                       }) as unknown as OrchestrationV2ThreadProjection,
                   ),
                 ),
+              getTurnItem: () => Effect.succeed({ item: null as never }),
             }),
           ),
         ),
@@ -526,3 +529,229 @@ it.effect(
     );
   },
 );
+
+it.effect(
+  "a check after an unsaved explain-back needs an answer the app can check (r14 cw2)",
+  () => {
+    const shell = McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-handler-test"));
+    const projection = McpToolAccessTestkit.idleThreadProjection(shell);
+    const explained = at(
+      26,
+      "user",
+      "A dead fail caps the reward at about 0.499.\n\n(card card-e)",
+    );
+    const explainBack = {
+      type: "dynamic_tool",
+      toolName: "question_card",
+      input: { purpose: "explain-back" },
+    };
+    const save = {
+      type: "dynamic_tool",
+      toolName: "mcp__t3-code__knowledge_map_mark_done",
+      status: "completed",
+      output: { content: [{ type: "text", text: '{"saved":"CW2"}' }] },
+    };
+    let saved = false;
+    return Effect.gen(function* () {
+      const toolkit = yield* QuizToolkit;
+      const ask = (extra: object) =>
+        toolkit
+          .handle("question_card", {
+            verdict: "Not saved yet: a dead failure lands in 0.01 to 0.25, about 0.248 here.",
+            reply: "x".repeat(250),
+            source: "",
+            question: "Give run A's and run B's verdict and reward.",
+            ...extra,
+          })
+          .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+      const freeText = yield* ask({});
+      yield* TestClock.adjust("1 second");
+      expect((yield* Fiber.join(freeText)).at(-1)?.result).toMatchObject({
+        code: "invalid_request",
+        message: expect.stringMatching(/explain-back you didn't save/u),
+      });
+      const copied = yield* ask({ number: { answer: 0.248, tolerance: 0.002 } });
+      yield* TestClock.adjust("1 second");
+      expect((yield* Fiber.join(copied)).at(-1)?.result).toMatchObject({ code: "invalid_request" });
+      const newCase = yield* ask({ number: { answer: 0.4975, tolerance: 0.002 } });
+      expect((yield* Fiber.join(newCase)).at(-1)?.result).toMatchObject({ questionCard: {} });
+      // Saved this turn: the next card is a choice, not a check.
+      saved = true;
+      const afterSave = yield* ask({});
+      expect((yield* Fiber.join(afterSave)).at(-1)?.result).toMatchObject({ questionCard: {} });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          McpToolAccess.HandlersLayer.layer(QuizHandlers.layer),
+          Layer.succeed(McpInvocationContext.McpInvocationContext, {
+            environmentId: EnvironmentId.make("quiz-handler-environment"),
+            requestNamespace: "quiz-handler-provider-session",
+            thread: {
+              threadId: ThreadId.make("quiz-handler-test"),
+              providerSessionId: "quiz-handler-provider-session",
+              providerInstanceId: ProviderInstanceId.make("codex"),
+            },
+            client: undefined,
+            capabilities: new Set(["orchestration" as const]),
+            issuedAt: 0,
+          }),
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: () => Effect.succeed(shell),
+            getProjectThreadRecords: () =>
+              Effect.succeed({
+                ...projection,
+                messages: [explained],
+                turnItems: saved ? [save] : [],
+              } as unknown as OrchestrationV2ThreadProjection),
+            getTurnItem: ({ itemId }) =>
+              Effect.succeed({ item: (itemId === "card-e" ? explainBack : null) as never }),
+          }),
+        ),
+      ),
+    );
+  },
+);
+
+it.effect("refuses picture spoilers and flags a clean teaching picture", () => {
+  const shell = {
+    ...McpToolAccessTestkit.liveThreadShell(ThreadId.make("quiz-picture-test")),
+    tags: ["lesson"],
+  };
+  const projection = McpToolAccessTestkit.idleThreadProjection(shell);
+  const picture = {
+    id: TurnItemId.make("picture"),
+    threadId: shell.id,
+    runId: shell.activeRunId,
+    nodeId: null,
+    providerThreadId: null,
+    providerTurnId: null,
+    nativeItemRef: null,
+    parentItemId: null,
+    ordinal: 1,
+    status: "completed",
+    title: null,
+    startedAt: null,
+    completedAt: null,
+    updatedAt: DateTime.makeUnsafe("2026-01-01T00:00:01Z"),
+    type: "dynamic_tool",
+    toolName: "html_render",
+    input: {},
+    output: {
+      htmlRender: {
+        attachmentId: "picture-00000000-0000-0000-0000-000000000000-html",
+        title: "Weight split",
+        height: 200,
+      },
+    },
+  };
+  const axisPicture = {
+    ...picture,
+    id: TurnItemId.make("axis-picture"),
+    output: {
+      htmlRender: {
+        attachmentId: "axis-00000000-0000-0000-0000-000000000000-html",
+        title: "Axis labels",
+        height: 200,
+      },
+    },
+  };
+  const answeredPicture = {
+    ...picture,
+    id: TurnItemId.make("answered-picture"),
+    output: {
+      htmlRender: {
+        ...picture.output.htmlRender,
+        forCard: "card-before",
+      },
+    },
+  };
+  let turnItems: ReadonlyArray<unknown> = [picture, axisPicture];
+  const provide = () =>
+    Layer.mergeAll(
+      Layer.succeed(HtmlRender.HtmlRender, {
+        prepare: () => Effect.die("unused"),
+        publish: () => Effect.die("unused"),
+        readPublished: (attachmentId: string) =>
+          Effect.succeed(
+            attachmentId.startsWith("axis-")
+              ? "<svg><text>1 2 3</text></svg>"
+              : attachmentId.startsWith("canvas-")
+                ? "<canvas></canvas><script>ctx.fillText('20 N', 0, 0)</script>"
+                : '<script>(function(){var s=document.getElementById("t3-theme");})();</script>' +
+                  "<p>The split is 20 N along the slope.</p>",
+          ),
+        preview: () => Effect.die("unused"),
+      } as never),
+      McpToolAccess.HandlersLayer.layer(QuizHandlers.layer),
+      Layer.succeed(McpInvocationContext.McpInvocationContext, {
+        environmentId: EnvironmentId.make("quiz-handler-environment"),
+        requestNamespace: "quiz-handler-provider-session",
+        thread: {
+          threadId: shell.id,
+          providerSessionId: "quiz-handler-provider-session",
+          providerInstanceId: ProviderInstanceId.make("codex"),
+        },
+        client: undefined,
+        capabilities: new Set(["orchestration" as const]),
+        issuedAt: 0,
+      }),
+      Layer.mock(ThreadManagement.ThreadManagementService)({
+        getThreadShell: () => Effect.succeed(shell),
+        getProjectThreadRecords: () =>
+          Effect.succeed({
+            ...projection,
+            turnItems,
+          } as unknown as OrchestrationV2ThreadProjection),
+      }),
+    );
+  const card = {
+    reply:
+      "The force split uses the ramp angle and separates the weight into components. " +
+      "x".repeat(220),
+    source: "",
+    question: "What is the force along the slope?",
+    number: { answer: 20, tolerance: 0, unit: "N" },
+  };
+  return Effect.gen(function* () {
+    const toolkit = yield* QuizToolkit;
+    const refused = yield* toolkit
+      .handle("question_card", card)
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(refused.at(-1)?.result).toMatchObject({
+      code: "invalid_request",
+      message: expect.stringContaining("earlier picture shows"),
+    });
+    const clean = yield* toolkit
+      .handle("question_card", { ...card, number: { ...card.number, answer: 30 } })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(clean.at(-1)?.result).toMatchObject({ questionCard: { picturesChecked: true } });
+    const axisLabels = yield* toolkit
+      .handle("question_card", {
+        ...card,
+        question: "How many 2 tokens are in the batch?",
+        number: { answer: 4, tolerance: 0 },
+      })
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(axisLabels.at(-1)?.result).toMatchObject({ questionCard: { picturesChecked: true } });
+    turnItems = [answeredPicture];
+    const owedResult = yield* toolkit
+      .handle("question_card", card)
+      .pipe(Stream.unwrap, Stream.runCollect);
+    expect(owedResult.at(-1)?.result).toMatchObject({ questionCard: { picturesChecked: true } });
+    // Pictures this check can't read leave the card unflagged, so clients keep them hidden.
+    for (const unread of [
+      { ...picture, status: "running", output: null },
+      {
+        ...picture,
+        output: { htmlRender: { ...picture.output.htmlRender, attachmentId: "canvas-0-html" } },
+      },
+    ]) {
+      turnItems = [unread];
+      const result = yield* toolkit
+        .handle("question_card", card)
+        .pipe(Stream.unwrap, Stream.runCollect);
+      expect(result.at(-1)?.result).not.toHaveProperty("questionCard.picturesChecked");
+      expect(result.at(-1)?.result).toHaveProperty("questionCard");
+    }
+  }).pipe(Effect.provide(provide()));
+});

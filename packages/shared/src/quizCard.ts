@@ -20,8 +20,11 @@ export function cardReplyProblem(input: {
   readonly verdict?: string | undefined;
   readonly previousText?: string | undefined;
   readonly unknownNumber?: { readonly answer: number; readonly tolerance: number };
-  /** A quiz answer, or a number card's bare answer and "<answer> <unit>". */
+  /** What would give the card away (`lessonCardAnswers`); a quiz's right option comes first. */
   readonly answers?: ReadonlyArray<string>;
+  readonly quiz?: { readonly question: string; readonly wrongOptions: ReadonlyArray<string> };
+  /** The learner's last message answered an explain-back card and nothing was saved since. */
+  readonly checksExplainBack?: boolean;
 }): string | undefined {
   if (input.answeredCard && !input.visibleSinceAnswer && !input.verdict?.trim()) {
     return "The learner's last message answered a card, and no verdict on it is visible; they never see your thinking. Put your verdict on that answer (right or wrong, and why, in a line or two) in verdict, then call the card again.";
@@ -40,15 +43,23 @@ export function cardReplyProblem(input: {
   }
   if (input.purpose === undefined && input.shownBefore === 0 && POINTS_BACK.test(input.reply))
     return "Your reply points back to something, but nothing has been taught visibly since the learner's last message, and they never see your thinking or tool output. Write those facts out in reply, defining each term, then call the card again.";
-  const shown = `${input.reply}\n${input.shownText ?? ""}`;
+  const answers = input.answers ?? [];
+  if (input.checksExplainBack && input.purpose === undefined && answers.length === 0)
+    return "Their last answer was an explain-back you didn't save, so this card checks your correction, which is printed right above it. Make the check one the app can verify isn't copied: a quiz_card, or a question_card with number or blanks, on a new case whose answer isn't in your verdict, reply or text above.";
+  const lead = `${input.verdict ?? ""}\n${input.reply}`;
+  const shown = `${lead}\n${input.shownText ?? ""}`;
   // A number may come from the message before the learner's answer; a named idea only from this turn.
-  const answerAppears = (input.answers ?? []).some((answer) =>
+  const answerAppears = answers.some((answer) =>
     /\d/u.test(answer)
       ? statesAnswer(`${shown}\n${input.previousText ?? ""}`, answer)
       : answer.trim().split(/\s+/u).length >= 3 && statesAnswer(shown, answer),
   );
-  if (answerAppears || (input.answers ?? []).some((answer) => answerIsRestated(shown, answer)))
+  if (answerAppears || answers.some((answer) => answerIsRestated(shown, answer)))
     return "The answer is stated just above; pose a new case that needs one more step.";
+  if (input.quiz !== undefined && answers[0] !== undefined) {
+    if (leadPicksOption(lead, input.quiz.question, answers[0], input.quiz.wrongOptions))
+      return "The text right above this card points to its right option and to none of the others, so it can be picked by matching words. Teach the idea without pointing at one option, or ask a case that needs a step the text doesn't do.";
+  }
   if (input.purpose !== undefined) return undefined;
   if (input.shownBefore + input.reply.trim().length >= MIN_CARD_REPLY_CHARS) return undefined;
   return "The learner sees only real message text and this reply; thinking, plans, and anything you wrote while thinking are summarized away and never shown. Give any verdict as visible text before the card, write out the teaching this card tests in full in reply, then call the card again. If this card is the opening check or an explain-back request, set purpose instead.";
@@ -62,6 +73,64 @@ function answerIsRestated(text: string, answer: string): boolean {
     const tokens = new Set(coverageTokens(sentence));
     return [...wanted].filter((token) => tokens.has(token)).length >= 0.75 * wanted.size;
   });
+}
+
+const STOPWORDS = new Set(
+  "about also after because before been could does each every from have into just less more most must only other over same should some such than that their them then there these they this those under very were what when where which while will with would your".split(
+    " ",
+  ),
+);
+// Crude word stems ("divides" meets "divide"); numbers are left to the answer check.
+const stems = (text: string) =>
+  new Set(
+    coverageTokens(text)
+      .filter((token) => !STOPWORDS.has(token) && !/\d/u.test(token))
+      .map((token) => token.replace(/(?<!s)s$/u, "").slice(0, 6)),
+  );
+
+/**
+ * A quiz the lead gives away by words (r13/r14 cw2, r14 math): one sentence holds the two or more
+ * words only the right option has and no wrong option's own words appear, or each part of the right
+ * option is stated in one sentence and no wrong option is.
+ */
+function leadPicksOption(
+  lead: string,
+  question: string,
+  answer: string,
+  wrongOptions: ReadonlyArray<string>,
+): boolean {
+  const sentences = lead.split(/(?<=[.!?])\s+|\n+/u).map(stems);
+  const asked = stems(question);
+  const options = [answer, ...wrongOptions];
+  const ownWords = (option: string) => {
+    const others = new Set(
+      options.filter((other) => other !== option).flatMap((o) => [...stems(o)]),
+    );
+    return [...stems(option)].filter((s) => !asked.has(s) && !others.has(s));
+  };
+  const said = new Set(sentences.flatMap((sentence) => [...sentence]));
+  const right = ownWords(answer);
+  const wrong = wrongOptions.map(ownWords);
+  if (
+    // One own word is often a connector ("plus"); two are a real pointer.
+    right.length > 1 &&
+    wrong.some((words) => words.length > 0) &&
+    wrong.every((words) => !words.some((s) => said.has(s))) &&
+    sentences.some((sentence) => right.every((s) => sentence.has(s)))
+  )
+    return true;
+  const parts = (option: string) =>
+    option
+      .split(/[,;:]|\s(?:and|but|because)\s/u)
+      .map(stems)
+      .filter((part) => part.size > 0);
+  const stated = (option: string) =>
+    parts(option).every((part) => sentences.some((s) => [...part].every((stem) => s.has(stem))));
+  return (
+    options.every((option) => parts(option).length > 0) &&
+    stated(answer) &&
+    !wrongOptions.some(stated)
+  );
 }
 
 const collapse = (value: string) => value.trim().replace(/\s+/gu, " ");
@@ -105,7 +174,7 @@ export function explainBackRetestProblem(
     .slice(0, at)
     .findLast((item) => item.kind === "save" || answeredIds.has(item.id));
   return before?.kind === "explain-back"
-    ? "Not saved: their restatement follows your correction, so check the corrected idea with a new case (a question_card applying it to a situation you haven't described) before saving."
+    ? "Not saved: their restatement follows your correction, so check the corrected idea with a new case (a quiz_card, or a question_card with number or blanks, applying it to a situation you haven't described) before saving."
     : undefined;
 }
 
@@ -115,6 +184,7 @@ export interface QuestionCard {
   readonly question: string;
   readonly blanks?: ReadonlyArray<{ readonly answers: ReadonlyArray<string> }>;
   readonly number?: { readonly answer: number; readonly tolerance: number; readonly unit?: string };
+  readonly picturesChecked?: true;
 }
 
 export type QuizLevel = "remember" | "understand" | "apply" | "analyse";
@@ -126,6 +196,7 @@ export interface QuizCard {
   readonly level: QuizLevel;
   readonly question: string;
   readonly wrongOptions: ReadonlyArray<{ readonly option: string; readonly wrongIdea: string }>;
+  readonly picturesChecked?: true;
 }
 
 export type LessonCard = QuizCard | QuestionCard;
@@ -221,7 +292,12 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
       blanks.push({ answers: parsed });
     }
     if ((question.match(/_{3,}/g) ?? []).length !== blanks.length) return undefined;
-    const card = { ...reply, question, blanks };
+    const card = {
+      ...reply,
+      question,
+      blanks,
+      ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
+    };
     return fitsCardBytes(card) ? card : undefined;
   }
   if (hasNumber) {
@@ -248,10 +324,15 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
       ...reply,
       question,
       number: { answer: number.answer, tolerance: number.tolerance, ...(unit ? { unit } : {}) },
+      ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
     };
     return fitsCardBytes(card) ? card : undefined;
   }
-  const card = { ...reply, question };
+  const card = {
+    ...reply,
+    question,
+    ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
+  };
   return fitsCardBytes(card) ? card : undefined;
 }
 
@@ -334,6 +415,7 @@ export function readQuizCard(value: unknown): QuizCard | undefined {
     level: level as QuizLevel,
     question,
     wrongOptions: parsed as QuizCard["wrongOptions"],
+    ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
   };
 }
 
@@ -595,7 +677,12 @@ export function openLessonCardItemId(
 export function lessonCardAnswers(card: LessonCard): ReadonlyArray<string> {
   if ("answer" in card) return [card.answer];
   return [
-    ...(card.number === undefined ? [] : [String(card.number.answer)]),
+    ...(card.number === undefined
+      ? []
+      : [
+          String(card.number.answer),
+          ...(card.number.unit ? [`${card.number.answer} ${card.number.unit}`] : []),
+        ]),
     ...(card.blanks ?? []).flatMap((blank) => blank.answers),
   ];
 }

@@ -258,6 +258,111 @@ describe("quiz cards", () => {
         shownBefore: 250,
       }),
     ).toBeUndefined();
+    // r14 cw2: the correction in the card's own verdict held the next answer.
+    expect(
+      cardReplyProblem({
+        verdict:
+          "Not saved yet. A dead failure lands in 0.01 to 0.25, so your run scores about 0.248.",
+        reply: "The two failing bands, with the facts written out.",
+        answers: ["0.248"],
+        shownBefore: 250,
+      }),
+    ).toMatch(/stated/u);
+  });
+  it("refuses a quiz whose lead points only at its right option (r14)", () => {
+    const quiz = (question: string, answer: string, wrongOptions: ReadonlyArray<string>) => ({
+      answers: [answer],
+      quiz: { question, wrongOptions },
+      shownBefore: 250,
+    });
+    const softmax = quiz(
+      "Your RL setup must keep rollout sampling at $T=1.5$ for extra exploration. Which change to the training step that computes each sampled token's probability keeps it consistent with the sampling?",
+      "Divide the logits by 1.5 before softmax",
+      ["Leave the logits as they are", "Multiply the logits by 1.5 before softmax"],
+    );
+    expect(
+      cardReplyProblem({
+        ...softmax,
+        reply:
+          "Rule: the probabilities the trainer uses for a sampled token must come from the same distribution the token was sampled from. Softmax with temperature divides logits by $T$, so the trainer has to apply the same division.",
+      }),
+    ).toMatch(/points to its right option/u);
+    expect(
+      cardReplyProblem({
+        ...softmax,
+        reply:
+          "Rule: the trainer's probabilities must come from the same distribution the token was sampled from. Temperature reshapes that distribution, so think about which way it moved.",
+      }),
+    ).toBeUndefined();
+    expect(
+      cardReplyProblem({
+        ...quiz(
+          "A task builder is packaging a routing task. A check needs a regulator's datasheet, and there's the original fully routed board. Where do these two go?",
+          "Datasheet in environment/input, original board in tests/reference",
+          [
+            "Datasheet in tests/reference, original board in environment/input",
+            "Datasheet and original board both in environment/input",
+            "Datasheet and original board both in tests/reference",
+          ],
+        ),
+        reply:
+          "The build packages this as a folder. `environment/input/` holds what the agent sees: the starter files and the datasheets. `tests/` holds the verifier and a `reference/` copy of the original working board.",
+      }),
+    ).toMatch(/points to its right option/u);
+    const checks = quiz(
+      "An agent shifts header J101 3 mm to the right of its starter position, then re-routes so every net is fully joined by copper. Which single check fails?",
+      "locked_kept",
+      ["routing", "interface", "shorts"],
+    );
+    expect(
+      cardReplyProblem({
+        ...checks,
+        reply:
+          "The starter board fixes three parts in place: the headers J101 and J102 and the USB-C connector J201. `locked_kept` compares the position of those kept parts, and the board outline, against the starter.",
+      }),
+    ).toMatch(/points to its right option/u);
+    // r13 cw2: only the right option's own words ("pass mark") sit in one sentence above.
+    expect(
+      cardReplyProblem({
+        ...quiz(
+          "An agent hands in a board that loads, is fully routed with no DRC errors, and has every pin right except a swapped USB D+ and D−. Treat `interface` as a required check. What does the run get?",
+          "Reward just under the pass mark, and the run fails",
+          [
+            "Reward 0, and the run fails",
+            "A high reward, and the run passes",
+            "Reward scaled down by the share of pins wrong",
+          ],
+        ),
+        reply:
+          "- **Required:** a miss breaks a hard requirement. The run fails and reward is held at pass mark minus 0.001.\n- **Weighted:** partial credit that builds the shaped score.",
+      }),
+    ).toMatch(/points to its right option/u);
+    // A lone shared connector ("plus") is not a pointer.
+    expect(
+      cardReplyProblem({
+        ...quiz(
+          "A masked slot sits in block 3 of an answer. Which tokens can it attend to?",
+          "Blocks 1 and 2, plus all of block 3",
+          ["Blocks 1 and 2 only", "Only tokens left of the slot", "Every block, including block 4"],
+        ),
+        reply:
+          "Attention is bidirectional inside a block and causal across blocks, so a masked slot sees visible tokens on both sides within its block, plus every earlier block, clean. Later blocks are hidden.",
+      }),
+    ).toBeUndefined();
+    // Every option taught side by side is a fair choice, and numbers are left to the answer check.
+    expect(
+      cardReplyProblem({
+        ...checks,
+        reply:
+          "- `interface`: every pad carries the pin table's net name\n- `routing`: each net is joined by copper\n- `shorts`: no two nets are joined\n- `locked_kept`: the headers stay where they were",
+      }),
+    ).toBeUndefined();
+    expect(
+      cardReplyProblem({
+        ...quiz("How many tokens commit this step?", "1", ["2", "3", "0"]),
+        reply: "So commits per step equal max(1, count above 0.9).",
+      }),
+    ).toBeUndefined();
   });
   it("checks units, unicode minus, prior text, and only substantial quiz answers", () => {
     expect(
