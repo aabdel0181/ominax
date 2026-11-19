@@ -8,6 +8,7 @@ import {
   cardAnswerId,
   cardReplyProblem,
   foldCardReply,
+  type CardTerm,
   parseCardAnswer,
   quizCardProblem,
   readQuestionCard,
@@ -16,7 +17,10 @@ import {
   withoutShownParagraphs,
   openLessonCardItemId,
   lessonCardAnswers,
+  type LessonCard,
+  MAX_REPLY,
   statesAnswer,
+  withTermMeanings,
 } from "@t3tools/shared/quizCard";
 import { htmlRenderFromToolItem, lessonCardFromToolItem } from "@t3tools/shared/toolOutput";
 import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
@@ -172,14 +176,29 @@ const refuseCardProblem = Effect.fn("quiz.refuseCardProblem")(function* (input: 
 
 // A verdict already shown as text isn't repeated on the card.
 const shownReply = (
-  input: { readonly reply: string; readonly source: string; readonly verdict?: string | undefined },
+  input: {
+    readonly reply: string;
+    readonly source: string;
+    readonly verdict?: string | undefined;
+    readonly terms: ReadonlyArray<CardTerm>;
+  },
   shown: { readonly visibleSinceAnswer: boolean; readonly text: string } | undefined,
-) =>
-  foldCardReply(
-    withoutShownParagraphs(input.reply, shown?.text ?? ""),
-    input.source,
-    shown?.visibleSinceAnswer ? undefined : input.verdict,
+  card: LessonCard,
+) => {
+  const fold = (reply: string) =>
+    foldCardReply(reply, input.source, shown?.visibleSinceAnswer ? undefined : input.verdict);
+  const reply = withoutShownParagraphs(input.reply, shown?.text ?? "");
+  const withMeanings = fold(
+    withTermMeanings({
+      reply,
+      terms: input.terms,
+      around: [shown?.text ?? "", input.verdict ?? "", card.question].join("\n"),
+      answers: lessonCardAnswers(card),
+    }),
   );
+  // Clients drop a card whose reply is over the cap, so a long card goes without the meanings.
+  return withMeanings.length > MAX_REPLY ? fold(reply) : withMeanings;
+};
 
 const skippedCardNotice = (shown: { readonly skippedCardId: string | undefined } | undefined) =>
   shown?.skippedCardId === undefined
@@ -307,7 +326,7 @@ const handlers = {
       return {
         quizCard: {
           ...card,
-          reply: shownReply(input, shown),
+          reply: shownReply(input, shown, card),
           ...(picturesChecked === true ? { picturesChecked: true as const } : {}),
         },
         message: [QUIZ_CARD_SHOWN, skippedCardNotice(shown)].filter(Boolean).join("\n"),
@@ -344,7 +363,7 @@ const handlers = {
       return {
         questionCard: {
           ...card,
-          reply: shownReply(input, shown),
+          reply: shownReply(input, shown, card),
           ...(picturesChecked === true ? { picturesChecked: true as const } : {}),
         },
         message: [QUESTION_CARD_SHOWN, skippedCardNotice(shown)].filter(Boolean).join("\n"),

@@ -12,6 +12,7 @@ describe("QuestionCardInput", () => {
     const decode = Schema.decodeUnknownSync(QuestionCardInput);
     const blanks = {
       reply: "Check.",
+      terms: [],
       source: "",
       question: "v = ___ + ___ t",
       blanks: [{ answers: ["v0", "v₀", "u", "v_0"] }, { answers: ["a"] }],
@@ -20,6 +21,7 @@ describe("QuestionCardInput", () => {
     expect(
       decode({
         reply: "Check.",
+        terms: [],
         source: "",
         purpose: "opening-check",
         question: "How fast?",
@@ -27,17 +29,25 @@ describe("QuestionCardInput", () => {
       }),
     ).toEqual({
       reply: "Check.",
+      terms: [],
       source: "",
       purpose: "opening-check",
       question: "How fast?",
       number: { answer: 10, tolerance: 0.1 },
     });
     expect(() =>
-      decode({ reply: "Check.", source: "", question: "x ___", blanks: [{ answers: [] }] }),
+      decode({
+        terms: [],
+        reply: "Check.",
+        source: "",
+        question: "x ___",
+        blanks: [{ answers: [] }],
+      }),
     ).toThrow();
     expect(() =>
       decode({
         reply: "Check.",
+        terms: [],
         source: "",
         question: "x ___",
         blanks: [{ answers: ["a", "b", "c", "d", "e"] }],
@@ -49,6 +59,7 @@ describe("QuestionCardInput", () => {
 describe("QuizCardInput", () => {
   it("requires a non-empty reply containing the card's teaching", () => {
     const card = {
+      terms: [],
       answer: "A",
       source: "",
       explanation: "Because",
@@ -70,8 +81,9 @@ describe("QuizCardInput", () => {
   it("requires a reply on question cards too", () => {
     expect(() => decodeQuestionCard({ question: "Why?" })).toThrow();
     expect(
-      decodeQuestionCard({ reply: "Quick check first.", source: "", question: "Why?" }),
+      decodeQuestionCard({ terms: [], reply: "Quick check first.", source: "", question: "Why?" }),
     ).toEqual({
+      terms: [],
       reply: "Quick check first.",
       source: "",
       question: "Why?",

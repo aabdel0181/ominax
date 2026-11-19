@@ -58,11 +58,14 @@ import {
   cardReplyProblem,
   explainBackClaimsProblem,
   foldCardReply,
+  lessonCardAnswers,
+  MAX_REPLY,
   replyCoverage,
   quizCardProblem,
   readQuestionCard,
   readQuizCard,
   withoutCardAnswerTag,
+  withTermMeanings,
 } from "@t3tools/shared/quizCard";
 import { THEME_GUIDE } from "@t3tools/shared/themeCss";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
@@ -1888,7 +1891,31 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
         return failed(
           `Invalid parameters for tool '${name}': source is longer than 500 characters`,
         );
-      const shownReply = foldCardReply(reply, input.source, valueText(input.verdict));
+      if (!Array.isArray(input.terms))
+        return failed(`Invalid parameters for tool '${name}': Missing key at ["terms"]`);
+      const keyed = name === "quiz_card" ? readQuizCard(input) : readQuestionCard(input);
+      const withMeanings = foldCardReply(
+        withTermMeanings({
+          reply,
+          terms: input.terms.flatMap((entry) =>
+            isRecord(entry) && typeof entry.term === "string" && typeof entry.meaning === "string"
+              ? [{ term: entry.term, meaning: entry.meaning }]
+              : [],
+          ),
+          around: [
+            sample.shownTextSinceLastUser,
+            valueText(input.verdict),
+            valueText(input.question),
+          ].join("\n"),
+          answers: keyed === undefined ? [] : lessonCardAnswers(keyed),
+        }),
+        input.source,
+        valueText(input.verdict),
+      );
+      const shownReply =
+        withMeanings.length > MAX_REPLY
+          ? foldCardReply(reply, input.source, valueText(input.verdict))
+          : withMeanings;
       const shown = { ...input, reply: shownReply };
       const quiz = name === "quiz_card" ? readQuizCard(shown) : undefined;
       const question = name === "question_card" ? readQuestionCard(shown) : undefined;

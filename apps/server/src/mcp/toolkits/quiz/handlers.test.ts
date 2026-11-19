@@ -170,7 +170,12 @@ it.effect.each([
     return Effect.gen(function* () {
       const toolkit = yield* QuizToolkit;
       const result = yield* toolkit
-        .handle("question_card", { reply: "x".repeat(250), source: "", question: "What?" })
+        .handle("question_card", {
+          terms: [],
+          reply: "x".repeat(250),
+          source: "",
+          question: "What?",
+        })
         .pipe(Stream.unwrap, Stream.runCollect);
       expect(JSON.stringify(result.at(-1)?.result).includes("closed as skipped")).toBe(notice);
     }).pipe(
@@ -214,6 +219,11 @@ it.effect("folds source into both returned card replies", () =>
     );
     const quizResult = yield* toolkit
       .handle("quiz_card", {
+        // Meanings that would push the reply past the card cap are left out.
+        terms: Array.from({ length: 8 }, (_, index) => ({
+          term: `term${index}`,
+          meaning: "m".repeat(190),
+        })),
         reply: "x".repeat(1990),
         source: "grader/bank/compose.py; docs/grading.md is out of date",
         purpose: "opening-check",
@@ -235,6 +245,7 @@ it.effect("folds source into both returned card replies", () =>
     });
     const questionResult = yield* toolkit
       .handle("question_card", {
+        terms: [],
         reply: "x".repeat(250),
         source: "",
         purpose: "opening-check",
@@ -305,6 +316,7 @@ it.effect("refuses an answer stated since the learner's last message or just bef
   return Effect.gen(function* () {
     const toolkit = yield* QuizToolkit;
     const card = {
+      terms: [],
       reply: "x".repeat(250),
       source: "",
       answer: "13 m",
@@ -366,6 +378,7 @@ it.effect("refuses an answer stated since the learner's last message or just bef
     // A number card is checked with its unit too.
     const numberCard = yield* toolkit
       .handle("question_card", {
+        terms: [],
         reply: "x".repeat(250),
         source: "",
         question: "Distance?",
@@ -413,7 +426,12 @@ it.effect(
       const showCard = Effect.gen(function* () {
         const toolkit = yield* QuizToolkit;
         return yield* toolkit
-          .handle("question_card", { reply: "x".repeat(250), source: "", question: "Why?" })
+          .handle("question_card", {
+            terms: [],
+            reply: "x".repeat(250),
+            source: "",
+            question: "Why?",
+          })
           .pipe(Stream.unwrap, Stream.runCollect);
       }).pipe(
         Effect.provide(
@@ -472,6 +490,7 @@ it.effect(
       const ask = (verdict?: string) =>
         toolkit
           .handle("question_card", {
+            terms: [],
             reply: "x".repeat(250),
             source: "",
             question: "Mass?",
@@ -622,6 +641,7 @@ it.effect("refuses picture spoilers and flags a clean teaching picture", () => {
       }),
     );
   const card = {
+    terms: [],
     reply:
       "The force split uses the ramp angle and separates the weight into components. " +
       "x".repeat(220),
