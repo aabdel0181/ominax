@@ -82,8 +82,9 @@ function planForkTargetThread(input: {
     creationSource: input.creationSource,
     id: input.targetThreadId,
     title: input.title,
-    // The source's title job completes only on the source thread.
+    // The source's title job and rename stay with the source thread.
     titleRegeneration: null,
+    titleRenamed: false,
     activeProviderThreadId: null,
     lineage: {
       parentThreadId: sourceThread.id,
