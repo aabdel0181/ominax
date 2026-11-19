@@ -89,9 +89,9 @@ const stems = (text: string) =>
   );
 
 /**
- * A quiz the lead gives away by words (r14 cw2, math): one sentence holds the words only the right
- * option has and no wrong option's own words appear, or each part of the right option is stated in
- * one sentence and no wrong option is.
+ * A quiz the lead gives away by words (r13/r14 cw2, r14 math): one sentence holds the two or more
+ * words only the right option has and no wrong option's own words appear, or each part of the right
+ * option is stated in one sentence and no wrong option is.
  */
 function leadPicksOption(
   lead: string,
@@ -112,7 +112,8 @@ function leadPicksOption(
   const right = ownWords(answer);
   const wrong = wrongOptions.map(ownWords);
   if (
-    right.length > 0 &&
+    // One own word is often a connector ("plus"); two are a real pointer.
+    right.length > 1 &&
     wrong.some((words) => words.length > 0) &&
     wrong.every((words) => !words.some((s) => said.has(s))) &&
     sentences.some((sentence) => right.every((s) => sentence.has(s)))
@@ -173,7 +174,7 @@ export function explainBackRetestProblem(
     .slice(0, at)
     .findLast((item) => item.kind === "save" || answeredIds.has(item.id));
   return before?.kind === "explain-back"
-    ? "Not saved: their restatement follows your correction, so check the corrected idea with a new case (a question_card applying it to a situation you haven't described) before saving."
+    ? "Not saved: their restatement follows your correction, so check the corrected idea with a new case (a quiz_card, or a question_card with number or blanks, applying it to a situation you haven't described) before saving."
     : undefined;
 }
 

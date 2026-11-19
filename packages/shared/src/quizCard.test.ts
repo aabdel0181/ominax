@@ -321,6 +321,34 @@ describe("quiz cards", () => {
           "The starter board fixes three parts in place: the headers J101 and J102 and the USB-C connector J201. `locked_kept` compares the position of those kept parts, and the board outline, against the starter.",
       }),
     ).toMatch(/points to its right option/u);
+    // r13 cw2: only the right option's own words ("pass mark") sit in one sentence above.
+    expect(
+      cardReplyProblem({
+        ...quiz(
+          "An agent hands in a board that loads, is fully routed with no DRC errors, and has every pin right except a swapped USB D+ and D−. Treat `interface` as a required check. What does the run get?",
+          "Reward just under the pass mark, and the run fails",
+          [
+            "Reward 0, and the run fails",
+            "A high reward, and the run passes",
+            "Reward scaled down by the share of pins wrong",
+          ],
+        ),
+        reply:
+          "- **Required:** a miss breaks a hard requirement. The run fails and reward is held at pass mark minus 0.001.\n- **Weighted:** partial credit that builds the shaped score.",
+      }),
+    ).toMatch(/points to its right option/u);
+    // A lone shared connector ("plus") is not a pointer.
+    expect(
+      cardReplyProblem({
+        ...quiz(
+          "A masked slot sits in block 3 of an answer. Which tokens can it attend to?",
+          "Blocks 1 and 2, plus all of block 3",
+          ["Blocks 1 and 2 only", "Only tokens left of the slot", "Every block, including block 4"],
+        ),
+        reply:
+          "Attention is bidirectional inside a block and causal across blocks, so a masked slot sees visible tokens on both sides within its block, plus every earlier block, clean. Later blocks are hidden.",
+      }),
+    ).toBeUndefined();
     // Every option taught side by side is a fair choice, and numbers are left to the answer check.
     expect(
       cardReplyProblem({
