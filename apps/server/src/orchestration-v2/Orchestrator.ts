@@ -14912,8 +14912,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
     effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
   ) {
-    // Every message passes through here, so the checks that read nothing come first.
-    if (!isUserAuthoredSideChatTrigger(command)) return;
+    // Every message passes through here, so the checks that read nothing come first. A steer
+    // follow-up re-sends a message that already passed through here.
+    if (command.steerFollowUpOfRunId !== undefined || !isUserAuthoredSideChatTrigger(command))
+      return;
     yield* reopenDoneSideChats(command, thread, events);
 
     const hasSideChats = yield* projectionStore

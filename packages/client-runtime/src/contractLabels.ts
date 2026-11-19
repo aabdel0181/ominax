@@ -15,6 +15,7 @@ import {
   worktreeSetupStageLabel as contractsWorktreeSetupStageLabel,
 } from "@t3tools/contracts";
 import type { IdleCompactionMode } from "@t3tools/contracts/settings";
+import { T3_LEARN_PRODUCT_NAME } from "@t3tools/shared/t3LearnIdentity";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 
@@ -70,7 +71,9 @@ export function managedUpdatesMessage(
   organization: string,
   resolve: MFunctionType = mFallback,
 ): string {
-  return resolve(msg("{organization} manages T3 Code updates.", { organization }));
+  return resolve(
+    msg("{organization} manages {app} updates.", { organization, app: T3_LEARN_PRODUCT_NAME }),
+  );
 }
 
 /** @public */
@@ -79,8 +82,9 @@ export function managedNightlyDeniedMessage(
   resolve: MFunctionType = mFallback,
 ): string {
   return resolve(
-    msg("{organization} manages T3 Code updates. Only stable releases can be installed.", {
+    msg("{organization} manages {app} updates. Only stable releases can be installed.", {
       organization,
+      app: T3_LEARN_PRODUCT_NAME,
     }),
   );
 }

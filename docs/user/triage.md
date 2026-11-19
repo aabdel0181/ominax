@@ -32,8 +32,8 @@ instructions. If more than one is installed, it asks which to use. You can also
 choose explicitly:
 
 ```sh
-npx t3 triage --agent antigravity
-npx t3 triage --agent codex
+ominax triage --agent antigravity
+ominax triage --agent codex
 ```
 
 Antigravity needs Google's standalone `agy` CLI on your `PATH` and its own sign-in.

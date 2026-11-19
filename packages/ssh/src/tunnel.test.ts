@@ -10,7 +10,11 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NetService from "@t3tools/shared/Net";
-import { T3_LEARN_HOME_DIRECTORY, T3_LEARN_REPOSITORY } from "@t3tools/shared/t3LearnIdentity";
+import {
+  T3_LEARN_COMMAND,
+  T3_LEARN_HOME_DIRECTORY,
+  T3_LEARN_REPOSITORY,
+} from "@t3tools/shared/t3LearnIdentity";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -379,7 +383,7 @@ describe("ssh tunnel scripts", () => {
           { mode: 0o755 },
         );
         NodeFS.writeFileSync(
-          NodePath.join(bin, "t3"),
+          NodePath.join(bin, T3_LEARN_COMMAND),
           `#!/bin/sh\ncase "$1" in --version) echo "t3 v${installed}"; exit ${status} ;; *) echo "host t3 $*" ;; esac\n`,
           { mode: 0o755 },
         );

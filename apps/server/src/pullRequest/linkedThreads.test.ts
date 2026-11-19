@@ -79,6 +79,13 @@ it.effect(
           source: "manual",
         },
         {
+          id: "lesson-side-chat",
+          host: "github.com",
+          repository: "acme/web",
+          number: 7,
+          source: "created",
+        },
+        {
           id: "dismissed",
           host: "github.com",
           repository: "acme/web",
@@ -113,6 +120,7 @@ it.effect(
           settledOverride: ["settled", "archived"].includes(fixture.id) ? "settled" : null,
           settledAt: fixture.id === "auto-settled" ? archivedAt : null,
           ...(fixture.id === "side-chat" ? { lineage: { sideChat: true } } : {}),
+          ...(fixture.id === "lesson-side-chat" ? { sideChat: { lessonThreadId: "active" } } : {}),
           pullRequests: [{ ...fixture, linkedAt: createdAt, snapshot: null, stack: null }],
         });
         yield* sql`

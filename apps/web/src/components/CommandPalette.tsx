@@ -543,7 +543,7 @@ function OpenCommandPaletteDialog(props: {
   );
   // An upstream side chat (`lineage.sideChat`) is never a T3 Learn lesson.
   const sideChatLesson =
-    activeThread !== null &&
+    activeThread &&
     activeThread.lineage.sideChat !== true &&
     activeThreadServerConfig !== undefined &&
     supportsLessonSideChats(activeThreadServerConfig.environment)

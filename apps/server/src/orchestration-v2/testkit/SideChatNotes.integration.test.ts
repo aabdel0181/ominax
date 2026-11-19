@@ -493,6 +493,36 @@ describe("side-chat notes", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("a lesson steer requeued after its turn leaves an answered side chat open", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeSideChatHarness("side-chat-notes-requeued-steer");
+      yield* Effect.gen(function* () {
+        const lesson = yield* harness.createLesson("Teach me RL environments.");
+        const after = yield* harness.mark;
+        const steer = yield* harness.send(lesson, "Explain rewards.");
+        const run = yield* harness.awaitRun(after, steer, "completed");
+        const space = yield* harness.openSideChat({ parentThreadId: lesson, label: SPACE });
+        yield* harness.send(space, SPACE_QUESTION);
+
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make(`command:unread-steer:${run.id}:${steer}`),
+          threadId: lesson,
+          messageId: steer,
+          steerFollowUpOfRunId: run.id,
+          text: "Explain rewards.",
+          attachments: [],
+          dispatchMode: { type: "queue_after_active" },
+          createdBy: "user",
+          creationSource: "web",
+        });
+
+        assert.isNull((yield* harness.thread(space)).sideChat?.done);
+      }).pipe(Effect.provide(harness.layer));
+    }).pipe(Effect.scoped),
+  );
+
   it.effect(
     "a lesson message leaves a side chat open while a side chat below it is still answering",
     () =>

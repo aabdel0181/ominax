@@ -8,7 +8,11 @@ import type {
 } from "@t3tools/contracts";
 import { waitForHttpReady as waitForHttpReadyShared } from "@t3tools/shared/httpReadiness";
 import { cliReleaseDownloadBaseUrl } from "@t3tools/shared/cliRelease";
-import { T3_LEARN_HOME_DIRECTORY, T3_LEARN_LEGACY } from "@t3tools/shared/t3LearnIdentity";
+import {
+  T3_LEARN_COMMAND,
+  T3_LEARN_HOME_DIRECTORY,
+  T3_LEARN_LEGACY,
+} from "@t3tools/shared/t3LearnIdentity";
 
 const REMOTE_HOME_SELECTION = `T3_SERVER_HOME="$(if [ -d "$HOME/${T3_LEARN_HOME_DIRECTORY}" ]; then printf '%s' "$HOME/${T3_LEARN_HOME_DIRECTORY}"; elif [ -d "$HOME/${T3_LEARN_LEGACY.homeDirectory}" ]; then printf '%s' "$HOME/${T3_LEARN_LEGACY.homeDirectory}"; else printf '%s' "$HOME/${T3_LEARN_HOME_DIRECTORY}"; fi)"`;
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
@@ -484,7 +488,7 @@ if [ -z "$T3_ARCHIVE_VERSION" ]; then
   printf 'No t3 release version was provided for the remote runtime.\\n' >&2
   exit 1
 fi
-T3_SYSTEM_EXECUTABLE="$(command -v t3 2>/dev/null || true)"
+T3_SYSTEM_EXECUTABLE="$(command -v ${T3_LEARN_COMMAND} 2>/dev/null || command -v ${T3_LEARN_LEGACY.command} 2>/dev/null || true)"
 if [ -n "$T3_SYSTEM_EXECUTABLE" ] && T3_SYSTEM_VERSION="$("$T3_SYSTEM_EXECUTABLE" --version 2>/dev/null)" && [ "$T3_SYSTEM_VERSION" = "t3 v$T3_ARCHIVE_VERSION" ]; then
   # A matching host-provided runtime supports platforms such as musl Linux,
   # where the portable release archive cannot run.

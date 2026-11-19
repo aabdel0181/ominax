@@ -30,11 +30,8 @@ export function ThreadSideChatsRow(props: {
         tintColorClassName="accent-foreground-muted"
       />
       <Text className="text-xs text-foreground-muted">
-        <T>Side chats</T>
-      </Text>
-      <Text className="text-xs text-foreground-muted">
         <T>
-          not supported in <Var>{T3_LEARN_PRODUCT_NAME}</Var> mobile yet
+          Side chats not supported in <Var>{T3_LEARN_PRODUCT_NAME}</Var> mobile yet
         </T>
       </Text>
     </View>
