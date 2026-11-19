@@ -4893,12 +4893,17 @@ it.effect.each([
   }),
 );
 
+const fetchedScan = { content: [{ type: "text", text: "Problem 1 answer: 30 N" }] };
 it.effect.each([
   {
     name: "a course's renamed prep thread stores no",
     prepThread: true,
     title: "Mechanics notes",
-    expected: ["", { output: { closedCardItemId: "card-1" }, input: { pset: 1 } }],
+    expected: [
+      "",
+      { output: { closedCardItemId: "card-1" }, input: { pset: 1 } },
+      { output: null, input: { pages: [1] } },
+    ],
   },
   {
     name: "a user thread titled Prep: keeps its",
@@ -4910,6 +4915,7 @@ it.effect.each([
         output: { references: [{ answers: "30 N" }], closedCardItemId: "card-1" },
         input: { pset: 1 },
       },
+      { output: fetchedScan, input: { pages: [1] } },
     ],
   },
 ])("$name reasoning or course answers", ({ prepThread, title, expected }) =>
@@ -4946,6 +4952,22 @@ it.effect.each([
             toolName: "course_problems",
             input: { pset: 1 },
             output: { references: [{ answers: "30 N" }], closedCardItemId: "card-1" },
+          },
+        } as ProviderAdapter.ProviderAdapterV2Event,
+        {
+          type: "turn_item.updated",
+          driver,
+          turnItem: {
+            ...makeLinkedChildTurnItemFixture({ ids, driver, type: "command_execution" }),
+            id: TurnItemId.make(`${ids.itemId}:reference`),
+            threadId: ids.threadId,
+            runId: ids.runId,
+            nodeId: ids.rootNodeId,
+            status: "completed",
+            type: "dynamic_tool",
+            toolName: "mcp__t3-code__course_reference_fetch",
+            input: { pages: [1] },
+            output: fetchedScan,
           },
         } as ProviderAdapter.ProviderAdapterV2Event,
         rootTerminalEvent(ids, "completed"),
