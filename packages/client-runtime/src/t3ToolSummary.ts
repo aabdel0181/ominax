@@ -129,6 +129,12 @@ export function summarizeT3ToolCalls(
   );
   let label: string;
   switch (action) {
+    case "quiz-card":
+      label = phrase("Asked", "ask", quantity(selected.length, "quiz", "quizzes"));
+      break;
+    case "question-card":
+      label = phrase("Asked", "ask", quantity(selected.length, "question"));
+      break;
     case "thread-send": {
       const messages = countEntities(selected.map((call) => id(call.output?.messageId)));
       const targetsKnown = threadIds.every((value) => value !== undefined);

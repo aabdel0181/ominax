@@ -7,6 +7,8 @@ export interface T3McpToolPresentation {
 
 export type T3McpToolSummaryAction =
   | "capabilities"
+  | "quiz-card"
+  | "question-card"
   | "delegate"
   | "task-status"
   | "task-cancel"
@@ -111,8 +113,8 @@ const T3_MCP_SERVER_ALIASES = new Set([
 ]);
 
 const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
-  quiz_card: tool(["Ask", "Asking", "Asked", "a quiz"], "capabilities"),
-  question_card: tool(["Ask", "Asking", "Asked", "a question"], "capabilities"),
+  quiz_card: tool(["Ask", "Asking", "Asked", "a quiz"], "quiz-card"),
+  question_card: tool(["Ask", "Asking", "Asked", "a question"], "question-card"),
   link_pull_request: tool(
     ["Link", "Linking", "Linked", "a pull request"],
     "link-pr",
