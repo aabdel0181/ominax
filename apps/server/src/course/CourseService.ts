@@ -686,11 +686,11 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
             const referencesNote =
               references === undefined
                 ? referencesLoading
-                  ? 'A prep thread is still looking for a published solution. Grade against your own working, end the verdict with "Reference still loading.", and call course_problems with this pset again before the next verdict; once references arrive, re-check earlier verdicts on this set against them and correct any that differ. '
+                  ? 'A prep thread is still looking for a published solution. Grade against your own working, tell the learner plainly that this grade is provisional until the published solution arrives, end the verdict with "Reference still loading.", and call course_problems with this pset again before the next verdict; once references arrive, re-check earlier verdicts on this set against them and correct any that differ. '
                   : ""
                 : references.length === 0
                   ? "No published solution was found online. End every verdict on this problem with the cite line. "
-                  : 'Published references (hidden from the learner until their final answer) are a check, not the truth. End every verdict on this problem, even a quick "correct", with the cite line. If your worked answer differs, say "the posted solution disagrees; here\'s why mine differs" and grade against your own working, never the reference. If a reference\'s numbers differ from the problem\'s own, treat it as a likely transcription misread; never say its author used wrong numbers. ';
+                  : 'Published references are hidden from the learner until they finish the problem set or ask for them. They are a check, not the truth. End every verdict on this problem, even a quick "correct", with the cite line. If your worked answer differs, say "the posted solution disagrees; here\'s why mine differs" and grade against your own working, never the reference. If a reference\'s numbers differ from the problem\'s own, treat it as a likely transcription misread; never say its author used wrong numbers. ';
             const referenceFields =
               references === undefined
                 ? referencesLoading
@@ -701,7 +701,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
                     cite:
                       references.length === 0
                         ? "No published solution was found online."
-                        : `Checked against ${references.map(({ label, url }) => `[${label}](${url})`).join(", ")}.`,
+                        : `Checked against ${references.map(({ label }) => label).join(", ")}.`,
                     note: referencesNote.trim(),
                   };
             if ((!input.reveal && !input.skip) || input.pset === undefined) {
@@ -729,7 +729,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
               ...referenceFields,
               ...(input.skip
                 ? {
-                    note: `The learner asked for the answer, so this problem is skipped; the visible reply must begin with the line **Skipped, not graded.**, then the final answer, then every step of the working, then the cite line if there is one. Do not grade it or ask the learner to answer this part again.${solution === null ? " No official solution exists; work it yourself." : ""}`,
+                    note: `The learner asked for the answer, so this problem is skipped; the visible reply must begin with the line **Skipped, not graded.**, then the final answer, then every step of the working, then the cite line if there is one. Do not grade it or ask the learner to answer this part again.${referencesLoading ? " The published solution is still loading; work it yourself." : solution === null ? " No official solution exists; work it yourself." : ""}`,
                   }
                 : solution === null
                   ? {

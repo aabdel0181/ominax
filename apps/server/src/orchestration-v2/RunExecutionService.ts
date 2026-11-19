@@ -641,17 +641,34 @@ const GUARDED_LESSON_TOOLS = new Set([
   QUESTION_CARD_TOOL_NAME,
   HTML_RENDER_TOOL_NAME,
 ]);
+// Their results (and course_update's input) carry pset answers and prepared quiz keys.
+const COURSE_ANSWER_TOOLS = new Set([
+  "course_read",
+  "course_problems",
+  "course_reference_fetch",
+  "course_update",
+]);
 
-/** Lesson thoughts and refused cards' or pictures' inputs can hold an open card's answer. */
+/** Lesson thoughts, course tool results and refused cards' or pictures' inputs can hold an answer. */
 function withoutLessonSecrets(
   event: ProviderAdapter.ProviderAdapterV2Event,
 ): ProviderAdapter.ProviderAdapterV2Event {
   if (event.type !== "turn_item.updated") return event;
   const item = event.turnItem;
   if (item.type === "reasoning") return { ...event, turnItem: { ...item, text: "", title: null } };
+  if (item.type !== "dynamic_tool") return event;
+  const toolId = resolveT3McpToolId(item.toolName) ?? "";
+  if (COURSE_ANSWER_TOOLS.has(toolId))
+    return {
+      ...event,
+      turnItem: {
+        ...item,
+        output: compactDynamicToolOutput(item.output) ?? null,
+        ...(toolId === "course_update" ? { input: null } : {}),
+      },
+    };
   if (
-    item.type === "dynamic_tool" &&
-    GUARDED_LESSON_TOOLS.has(resolveT3McpToolId(item.toolName) ?? "") &&
+    GUARDED_LESSON_TOOLS.has(toolId) &&
     (item.status === "failed" || compactDynamicToolOutput(item.output)?.isError === true)
   )
     return { ...event, turnItem: { ...item, input: null } };
@@ -1285,7 +1302,9 @@ export const layer: Layer.Layer<
         let rootTurnOwnershipChecked = false;
         const assistantStreaming = makeAssistantStreamingFilter(responseStreamingMode);
         const lessonThread =
-          input.appThread.lesson !== undefined || isSideChatThread(input.appThread);
+          input.appThread.lesson !== undefined ||
+          isSideChatThread(input.appThread) ||
+          input.appThread.title?.startsWith("Prep: ") === true;
         // Set when ingestion ends or finalization settles the run's open items, which a later
         // streaming snapshot must not reopen.
         let idleFlushClosed = false;
