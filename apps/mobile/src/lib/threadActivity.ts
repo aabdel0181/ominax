@@ -1797,16 +1797,19 @@ export function deriveThreadFeedPresentation(
         ) {
           return entry;
         }
-        let pendingCardId: string | undefined;
+        let pendingCard: Extract<ThreadFeedEntry, { type: "quiz-card" }> | undefined;
         for (let next = index + 1; next < sourceFeed.length; next += 1) {
           const candidate = sourceFeed[next]!;
           if (candidate.type === "message" && candidate.message.role === "user") break;
           if (candidate.type === "quiz-card" && candidate.runId === entry.runId) {
-            pendingCardId = candidate.id;
+            pendingCard = candidate;
             break;
           }
         }
-        const pending = pendingCardId !== undefined && !answeredCards.has(pendingCardId);
+        // The server checked only untagged pictures against this card.
+        if (entry.render.forCard === undefined && pendingCard?.quizCard.picturesChecked === true)
+          return entry;
+        const pending = pendingCard !== undefined && !answeredCards.has(pendingCard.id);
         return pending ? { ...entry, picturePending: true } : entry;
       })
     : sourceFeed;

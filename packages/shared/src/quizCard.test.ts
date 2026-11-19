@@ -26,6 +26,7 @@ import {
   parseNumberAnswer,
   shuffledQuizOptions,
   type QuizCard,
+  withTermMeanings,
 } from "./quizCard.ts";
 
 const card: QuizCard = {
@@ -468,6 +469,58 @@ describe("quiz cards", () => {
   it("puts a verdict before teaching and source", () => {
     expect(foldCardReply("The teaching.", "grader.py", "That is right.")).toBe(
       "That is right.\n\nThe teaching.\n\nSource: grader.py",
+    );
+  });
+  it("adds a listed term's meaning where the card first uses it undefined", () => {
+    const kv = { term: "KV cache", meaning: "saved results for tokens already processed" };
+    const fold = (reply: string, around = "", answers: Array<string> = []) =>
+      withTermMeanings({ reply, terms: [kv], around, answers });
+    expect(fold("The engine reuses the **KV cache** of finished blocks.")).toBe(
+      "The engine reuses the **KV cache** (saved results for tokens already processed) of finished blocks.",
+    );
+    for (const defined of [
+      "A KV cache is the saved results of earlier tokens.",
+      "The KV cache (saved results) makes each step cheaper.",
+      "Saved results, called the KV cache, make each step cheaper.",
+      "It keeps a KV cache, results already saved for processed tokens, so steps are cheaper.",
+    ]) {
+      expect(fold(defined)).toBe(defined);
+    }
+    expect(fold("Each step is cheaper.", "The KV cache (saved results) is reused.")).toBe(
+      "Each step is cheaper.",
+    );
+    expect(fold("Each step is cheaper.", "The engine keeps a KV cache.")).toBe(
+      "Each step is cheaper.\n\nKV cache: saved results for tokens already processed.",
+    );
+    expect(fold("It is faster (the engine keeps a KV cache).")).toBe(
+      "It is faster (the engine keeps a KV cache).\n\nKV cache: saved results for tokens already processed.",
+    );
+    expect(fold("What does the engine reuse?", "", ["KV cache"])).toBe(
+      "What does the engine reuse?",
+    );
+    expect(
+      fold("It reuses the KV cache.", "", ["It stores saved results for tokens already processed"]),
+    ).toBe("It reuses the KV cache.");
+    expect(fold("Run `KV cache` now.")).toBe(
+      "Run `KV cache` now.\n\nKV cache: saved results for tokens already processed.",
+    );
+    expect(
+      withTermMeanings({
+        reply: "Perplexity uses the log probability of each token.",
+        terms: [{ term: "log probability", meaning: "the log of a probability" }],
+        around: "",
+        answers: [],
+      }),
+    ).toBe("Perplexity uses the log probability (the log of a probability) of each token.");
+    expect(
+      withTermMeanings({
+        reply: "It reads netlist.net and checks that each net has copper.",
+        terms: [{ term: "net", meaning: "a group of pins wired together." }],
+        around: "",
+        answers: [],
+      }),
+    ).toBe(
+      "It reads netlist.net and checks that each net (a group of pins wired together) has copper.",
     );
   });
   it("refuses explain-back claims that do not hold", () => {

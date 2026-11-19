@@ -1753,6 +1753,12 @@ export function deriveMessagesTimelineRows(input: {
           if (pendingCard && effectiveAnsweredCardAnswers.has(pendingCard.id)) {
             pendingCard = undefined;
           }
+          // The server checked only untagged pictures against this card.
+          if (
+            entry.htmlRender.forCard === undefined &&
+            pendingCard?.quizCard.picturesChecked === true
+          )
+            return [];
           return pendingCard === undefined ? [] : [entry.id];
         })
       : [],

@@ -24,6 +24,17 @@ const source = Schema.String.pipe(Schema.check(Schema.isMaxLength(500))).annotat
   description:
     "Shown to the learner under your reply. Where the project facts in reply come from: the file you read that runs them (e.g. `grader/bank/compose.py`). If a doc, README or CLAUDE.md says something different, name that doc and say it is out of date, e.g. `grader/bank/compose.py; docs/grading.md is out of date: it names grader/core.py, which nothing calls`. Empty string when the card is not about project files.",
 });
+const terms = Schema.Array(
+  Schema.Struct({
+    term: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(60)),
+    meaning: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(200)),
+  }),
+)
+  .check(Schema.isMaxLength(10))
+  .annotate({
+    description:
+      "Each word in this card's reply or question, or in your text above it, that someone new to this field wouldn't know (technical terms, everyday words used in a special sense, abbreviations, project, file and column names), with its meaning as a short phrase in plain words that uses no other new word. Leave out words the learner used, words already defined in this lesson, and any word this card asks them to recall. The app adds the meaning where you used a word without defining it. [] if none.",
+  });
 const purpose = Schema.Literals(["opening-check", "explain-back"]).annotate({
   description:
     "Set only for the lesson's opening check of what the learner knows, or when asking them to explain a topic back before it is saved to their map; then the reply may be one framing sentence.",
@@ -31,6 +42,7 @@ const purpose = Schema.Literals(["opening-check", "explain-back"]).annotate({
 
 export const QuizCardInput = Schema.Struct({
   verdict,
+  terms,
   reply,
   source,
   purpose: Schema.optional(purpose),
@@ -53,8 +65,10 @@ const QuizCardTool = Tool.make(QUIZ_CARD_TOOL_NAME, {
   success: Schema.Struct({
     quizCard: Schema.Struct({
       ...QuizCardInput.fields,
+      terms: Schema.optional(terms),
       reply: Schema.String,
       source: Schema.optional(Schema.String),
+      picturesChecked: Schema.optional(Schema.Literal(true)),
     }),
     message: Schema.String,
   }),
@@ -73,6 +87,7 @@ const QuizCardTool = Tool.make(QUIZ_CARD_TOOL_NAME, {
 
 export const QuestionCardInput = Schema.Struct({
   verdict,
+  terms,
   reply,
   source,
   purpose: Schema.optional(purpose),
@@ -110,8 +125,10 @@ const QuestionCardTool = Tool.make(QUESTION_CARD_TOOL_NAME, {
   success: Schema.Struct({
     questionCard: Schema.Struct({
       ...QuestionCardInput.fields,
+      terms: Schema.optional(terms),
       reply: Schema.String,
       source: Schema.optional(Schema.String),
+      picturesChecked: Schema.optional(Schema.Literal(true)),
     }),
     message: Schema.String,
   }),

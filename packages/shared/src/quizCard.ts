@@ -115,6 +115,7 @@ export interface QuestionCard {
   readonly question: string;
   readonly blanks?: ReadonlyArray<{ readonly answers: ReadonlyArray<string> }>;
   readonly number?: { readonly answer: number; readonly tolerance: number; readonly unit?: string };
+  readonly picturesChecked?: true;
 }
 
 export type QuizLevel = "remember" | "understand" | "apply" | "analyse";
@@ -126,13 +127,14 @@ export interface QuizCard {
   readonly level: QuizLevel;
   readonly question: string;
   readonly wrongOptions: ReadonlyArray<{ readonly option: string; readonly wrongIdea: string }>;
+  readonly picturesChecked?: true;
 }
 
 export type LessonCard = QuizCard | QuestionCard;
 
 const MAX_ANSWER = 300;
 const MAX_QUESTION = 2000;
-const MAX_REPLY = 3200;
+export const MAX_REPLY = 3200;
 const MAX_OPTION = 300;
 const MAX_WRONG_IDEA = 500;
 const MAX_EXPLANATION = 1500;
@@ -221,7 +223,12 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
       blanks.push({ answers: parsed });
     }
     if ((question.match(/_{3,}/g) ?? []).length !== blanks.length) return undefined;
-    const card = { ...reply, question, blanks };
+    const card = {
+      ...reply,
+      question,
+      blanks,
+      ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
+    };
     return fitsCardBytes(card) ? card : undefined;
   }
   if (hasNumber) {
@@ -248,10 +255,15 @@ export function readQuestionCard(value: unknown): QuestionCard | undefined {
       ...reply,
       question,
       number: { answer: number.answer, tolerance: number.tolerance, ...(unit ? { unit } : {}) },
+      ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
     };
     return fitsCardBytes(card) ? card : undefined;
   }
-  const card = { ...reply, question };
+  const card = {
+    ...reply,
+    question,
+    ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
+  };
   return fitsCardBytes(card) ? card : undefined;
 }
 
@@ -334,6 +346,7 @@ export function readQuizCard(value: unknown): QuizCard | undefined {
     level: level as QuizLevel,
     question,
     wrongOptions: parsed as QuizCard["wrongOptions"],
+    ...(record.picturesChecked === true ? { picturesChecked: true as const } : {}),
   };
 }
 
@@ -595,7 +608,76 @@ export function openLessonCardItemId(
 export function lessonCardAnswers(card: LessonCard): ReadonlyArray<string> {
   if ("answer" in card) return [card.answer];
   return [
-    ...(card.number === undefined ? [] : [String(card.number.answer)]),
+    ...(card.number === undefined
+      ? []
+      : [
+          String(card.number.answer),
+          ...(card.number.unit ? [`${card.number.answer} ${card.number.unit}`] : []),
+        ]),
     ...(card.blanks ?? []).flatMap((blank) => blank.answers),
   ];
+}
+
+/** A word a card lists as new to the learner, with its meaning in plain words. */
+export interface CardTerm {
+  readonly term: string;
+  readonly meaning: string;
+}
+
+const MARKS = "[*_`]*";
+const termAt = (term: string) =>
+  `(?<![\\p{L}\\p{N}_./\\\\-])${term.replace(/[\\^$.*+?()[\]{}|/]/gu, "\\$&")}(?:e?s)?(?![\\p{L}\\p{N}_/-])`;
+const definedAt = (at: string) =>
+  new RegExp(
+    `${at}(?:\\s+\\p{L}+)?${MARKS}\\s*(?:\\((?!\\d)[^)]*\\)|(?:is|are)\\s+(?:an?|the|one|how|what|when|where|any|each|every)\\s|means\\s|refers?\\s+to\\s|[:\\u2013\\u2014]\\s|,\\s+(?:an?|the|which|meaning|i\\.e\\.)\\s)` +
+      `|\\(\\s*(?:the|an?|its|called)?\\s*${MARKS}${at}${MARKS}\\s*\\)` +
+      `|(?:called|known\\s+as|named)\\s+(?:the\\s+|an?\\s+|its\\s+)?${MARKS}${at}`,
+    "iu",
+  );
+
+/**
+ * Adds a listed term's meaning after its first use in the reply, or on a line ending the reply, unless
+ * the reply or `around` (text above the card, verdict, question) defines it or words most of its
+ * meaning beside it. Text above a card can land after the card, so unseen terms still get a line.
+ */
+export function withTermMeanings(input: {
+  readonly reply: string;
+  readonly terms: ReadonlyArray<CardTerm>;
+  readonly around: string;
+  readonly answers: ReadonlyArray<string>;
+}): string {
+  const lower = (value: string) => value.trim().toLocaleLowerCase();
+  const answers = input.answers.map(lower).filter((answer) => answer.length >= 3);
+  let reply = input.reply;
+  const lines: Array<string> = [];
+  for (const { term, meaning } of input.terms) {
+    const name = term.trim();
+    const plain = meaning.trim().replace(/[.\s]+$/u, "");
+    if (name === "" || plain === "") continue;
+    const meaningTokens = new Set(coverageTokens(plain));
+    const leaks = (answer: string) => {
+      const tokens = coverageTokens(answer);
+      const shared = tokens.filter((token) => meaningTokens.has(token)).length;
+      return lower(plain).includes(answer) || (shared >= 2 && shared / tokens.length >= 0.5);
+    };
+    if (answers.some((answer) => lower(name).includes(answer) || leaks(answer))) continue;
+    const at = termAt(name);
+    const text = `${input.around}\n${reply}`;
+    const use = new RegExp(at, "iu").exec(text);
+    // Most of the meaning's words right by the first use: the card already says it another way.
+    const nearby =
+      use === null ? "" : text.slice(Math.max(0, use.index - 100), use.index + use[0].length + 150);
+    const nearbyWithoutTerm = nearby.replace(new RegExp(at, "giu"), " ");
+    if (definedAt(at).test(text) || replyCoverage(plain, nearbyWithoutTerm) >= 0.5) continue;
+    const first = new RegExp(`${at}${MARKS}`, "iu").exec(reply);
+    const before = first === null ? "" : reply.slice(0, first.index);
+    const inCode = before.split("`").length % 2 === 0;
+    if (first === null || inCode || before.split("(").length > before.split(")").length) {
+      lines.push(`${name.charAt(0).toLocaleUpperCase()}${name.slice(1)}: ${plain}.`);
+      continue;
+    }
+    const end = first.index + first[0].length;
+    reply = `${reply.slice(0, end)} (${plain})${reply.slice(end)}`;
+  }
+  return lines.length === 0 ? reply : `${reply}\n\n${lines.join("\n")}`;
 }
