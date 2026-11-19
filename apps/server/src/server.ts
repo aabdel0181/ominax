@@ -611,6 +611,8 @@ const layerScheduledTaskWebhookOrigin = Layer.effect(
 );
 
 const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
+  // Run ingestion reads it to redact prep threads; memoized, so the course tools share it.
+  Layer.provide(CourseService.layer),
   Layer.provide(UsageLimitSources.layerResetFallback),
   Layer.provide(layerScheduledTaskWebhookOrigin),
   Layer.provideMerge(layerServerEnvironment),

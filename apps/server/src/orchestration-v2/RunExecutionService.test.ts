@@ -49,6 +49,7 @@ import { SqlError, classifySqliteError } from "effect/sql/SqlError";
 
 import { toPersistenceSqlError } from "../persistence/Errors.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as CourseService from "../course/CourseService.ts";
 import * as CheckpointService from "./CheckpointService.ts";
 import type { PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as EventSink from "./EventSink.ts";
@@ -4636,6 +4637,7 @@ function runBackgroundItemScenario(
     readonly lesson?: boolean;
     readonly sideChat?: boolean;
     readonly appThreadTitle?: string;
+    readonly prepThread?: boolean;
   },
 ) {
   return Effect.gen(function* () {
@@ -4721,6 +4723,11 @@ function runBackgroundItemScenario(
             },
           }),
           ServerSettings.layerTest(),
+          Layer.succeed(CourseService.CourseService, {
+            ...CourseService.unavailable,
+            isPrepThread: (threadId) =>
+              Effect.succeed(options?.prepThread === true && threadId === ids.threadId),
+          }),
         ),
       ),
     );
@@ -4886,11 +4893,30 @@ it.effect.each([
   }),
 );
 
-it.effect("redacts completed course answers and prep reasoning", () =>
+it.effect.each([
+  {
+    name: "a course's renamed prep thread stores no",
+    prepThread: true,
+    title: "Mechanics notes",
+    expected: ["", { output: { closedCardItemId: "card-1" }, input: { pset: 1 } }],
+  },
+  {
+    name: "a user thread titled Prep: keeps its",
+    prepThread: false,
+    title: "Prep: Mechanics",
+    expected: [
+      "answer 30 N",
+      {
+        output: { references: [{ answers: "30 N" }], closedCardItemId: "card-1" },
+        input: { pset: 1 },
+      },
+    ],
+  },
+])("$name reasoning or course answers", ({ prepThread, title, expected }) =>
   Effect.gen(function* () {
     const observed = yield* Ref.make<ReadonlyArray<unknown>>([]);
     yield* runBackgroundItemScenario(
-      "course-answer-leaks",
+      `course-answer-leaks-${prepThread}`,
       (ids) => [
         {
           type: "turn_item.updated",
@@ -4925,7 +4951,8 @@ it.effect("redacts completed course answers and prep reasoning", () =>
         rootTerminalEvent(ids, "completed"),
       ],
       {
-        appThreadTitle: "Prep: Mechanics",
+        appThreadTitle: title,
+        prepThread,
         onIngest: (event) => {
           if (event.type !== "turn_item.updated") return Effect.void;
           const item = event.turnItem;
@@ -4940,10 +4967,7 @@ it.effect("redacts completed course answers and prep reasoning", () =>
         },
       },
     );
-    assert.deepEqual(yield* Ref.get(observed), [
-      "",
-      { output: { closedCardItemId: "card-1" }, input: { pset: 1 } },
-    ]);
+    assert.deepEqual(yield* Ref.get(observed), expected);
   }),
 );
 

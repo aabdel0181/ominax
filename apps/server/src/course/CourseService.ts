@@ -92,6 +92,7 @@ export class CourseService extends Context.Service<
       courseId: string,
       threadId: ThreadId,
     ) => Effect.Effect<Course, CourseError>;
+    readonly isPrepThread: (threadId: ThreadId) => Effect.Effect<boolean, CourseError>;
     readonly clearCachedClips: Effect.Effect<number, CourseError>;
     readonly cachedConcepts: Effect.Effect<
       ReadonlyArray<{
@@ -777,6 +778,10 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
       }),
     );
   });
+  const isPrepThread = Effect.fn("CourseService.isPrepThread")(function* (threadId: ThreadId) {
+    const { courses } = yield* locked(readAll);
+    return courses.some((course) => course.prepThreadIds.includes(threadId));
+  });
   const visuals = path.join(stateDir, "visuals");
   const clearCachedClips = locked(
     Effect.gen(function* () {
@@ -812,6 +817,7 @@ export const make = Effect.fn("CourseService.make")(function* (stateDir: string)
     update,
     remove,
     recordPrepThread,
+    isPrepThread,
     clearCachedClips,
     cachedConcepts,
   });
@@ -834,6 +840,7 @@ export const unavailable = CourseService.of({
   update: () => Effect.fail(failure("Courses are unavailable.")),
   remove: () => Effect.fail(failure("Courses are unavailable.")),
   recordPrepThread: () => Effect.fail(failure("Courses are unavailable.")),
+  isPrepThread: () => Effect.succeed(false),
   clearCachedClips: Effect.fail(failure("Courses are unavailable.")),
   cachedConcepts: Effect.fail(failure("Courses are unavailable.")),
 });

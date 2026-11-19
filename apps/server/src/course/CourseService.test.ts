@@ -399,6 +399,8 @@ describe("CourseService", () => {
         assert.strictEqual(vectors.text, "[00:00] Vectors");
         assert.isUndefined((yield* service.readUnit({ courseId: course.id, unit: 2 })).plan);
         assert.deepStrictEqual(yield* service.get({ id: course.id }), repaired);
+        assert.isTrue(yield* service.isPrepThread(ThreadId.make("prep-1")));
+        assert.isFalse(yield* service.isPrepThread(threadId));
         assert.deepStrictEqual(
           yield* service.add({
             lessonThreadId: threadId,
