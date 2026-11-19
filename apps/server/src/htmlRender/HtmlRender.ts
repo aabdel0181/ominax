@@ -160,6 +160,7 @@ export class HtmlRender extends Context.Service<
       | HtmlRenderPrepareError
       | HtmlRenderStoreError
     >;
+    readonly readPublished: (attachmentId: string) => Effect.Effect<string, HtmlRenderStoreError>;
     readonly preview: (
       input: HtmlRenderSource & {
         readonly width?: number | undefined;
@@ -559,6 +560,19 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const readPublished = Effect.fn("HtmlRender.readPublished")(function* (attachmentId: string) {
+    const filePath = resolveAttachmentRelativePath({
+      attachmentsDir: config.attachmentsDir,
+      relativePath: `${attachmentId}.html`,
+    });
+    if (filePath === null) {
+      return yield* new HtmlRenderStoreError({ cause: new Error("Invalid attachment id.") });
+    }
+    return yield* fileSystem
+      .readFileString(filePath)
+      .pipe(Effect.mapError((cause) => new HtmlRenderStoreError({ cause })));
+  });
+
   const preview = Effect.fn("HtmlRender.preview")(function* (
     input: HtmlRenderSource & {
       readonly width?: number | undefined;
@@ -596,7 +610,7 @@ const make = Effect.gen(function* () {
     } satisfies HtmlPreview;
   });
 
-  return HtmlRender.of({ prepare, publish, preview });
+  return HtmlRender.of({ prepare, publish, readPublished, preview });
 });
 
 export const layer = Layer.effect(HtmlRender, make);

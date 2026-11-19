@@ -5527,6 +5527,17 @@ it("hides a lesson picture before an unanswered card until the card is answered"
     picturePending: true,
   });
 
+  expect(
+    deriveMessagesTimelineRows({
+      ...input,
+      timelineEntries: input.timelineEntries.map((entry) =>
+        entry.kind === "quiz-card"
+          ? { ...entry, quizCard: { ...entry.quizCard, picturesChecked: true as const } }
+          : entry,
+      ),
+    }).find((row) => row.id === "picture"),
+  ).not.toMatchObject({ picturePending: true });
+
   const answer = cardAnswerMessage('Quiz answer: "A", right.', "card");
   expect(
     deriveMessagesTimelineRows({
