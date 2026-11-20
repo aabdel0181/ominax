@@ -2,10 +2,14 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   EnvironmentId,
+  IssueTrackerKind,
   ORCHESTRATION_V2_WS_METHODS,
   RunId,
   ThreadId,
   WS_METHODS,
+  type IssueDetail,
+  type IssueRef,
+  type ThreadIssueLink,
 } from "@t3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 import {
@@ -24,6 +28,7 @@ import "~/components/ChatView";
 import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { selectThreadDiffPanelSelection, useDiffPanelStore } from "~/diffPanelStore";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
+import stylesheet from "~/index.css?inline";
 import { environmentContextRecord } from "~/lib/composerContextRecords";
 import { startWorkspaceFocus } from "~/lib/workspaceFocus";
 import { usePromptStashStore } from "~/promptStashStore";
@@ -143,6 +148,141 @@ vi.mock(import("~/rpc/requestLatencyState"), async (original) => ({
   ...(await original()),
   trackRpcRequestSent: () => {},
 }));
+
+it("opens a linked Linear issue from an inactive thread's sidebar badge", async () => {
+  using _welcomeGuide = skipLessonGuides();
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  using _style = { [Symbol.dispose]: () => style.remove() };
+  const first = threadWithHistory("issue-first", 1);
+  const linked = threadWithHistory("issue-linked", 1);
+  const issueRef = {
+    projectId: PROJECT_ID,
+    tracker: IssueTrackerKind.make("linear"),
+    host: "linear.app",
+    scope: "WEB",
+    key: "WEB-123",
+  } satisfies IssueRef;
+  const issue: ThreadIssueLink = {
+    ...issueRef,
+    url: "https://linear.app/example/issue/WEB-123/add-keyboard-support",
+    source: "manual",
+    linkedAt: "2026-01-01T00:00:00.000Z",
+    displayKey: issueRef.key,
+    title: "Add keyboard support",
+  };
+  const completed = {
+    ...issue,
+    key: "WEB-124",
+    displayKey: "WEB-124",
+    url: "https://linear.app/example/issue/WEB-124/keep-tabs-visible",
+    title: "Keep tabs visible",
+  };
+  const grouped = threadWithHistory("issue-grouped", 1);
+  using _environment = installFakeEnvironment([
+    first,
+    { ...linked, issues: [issue] },
+    { ...grouped, issues: [completed, issue] },
+  ]);
+  const liveTitle = "Add keyboard shortcuts to the sidebar";
+  using _detail = answerRpc(WS_METHODS.issuesDetail, (input: IssueRef) => {
+    const isCompleted = input.key === completed.key;
+    expect(input).toEqual({ ...issueRef, key: isCompleted ? completed.key : issue.key });
+    return Effect.succeed({
+      ...(isCompleted ? completed : issue),
+      title: isCompleted ? completed.title : liveTitle,
+      author: { login: "sam", name: null, avatarUrl: null },
+      state: isCompleted
+        ? { category: "closed", closeReason: "completed", name: "Done" }
+        : { category: "open", name: "Open" },
+      createdAt: issue.linkedAt,
+      updatedAt: issue.linkedAt,
+      closedAt: null,
+      assignees: [],
+      labels: [],
+      commentCount: 3,
+      projectTitle: "render",
+      writable: false,
+      capabilities: {
+        create: false,
+        edit: false,
+        comment: false,
+        labels: false,
+        assignees: false,
+        reactions: false,
+        templates: false,
+        linkedPullRequests: false,
+        events: false,
+        search: false,
+      },
+      viewerPermissions: {
+        setState: false,
+        comment: false,
+        edit: false,
+        labels: false,
+        assignees: false,
+      },
+      states: [],
+      viewer: null,
+      body: "",
+      comments: [],
+      commentsCursor: null,
+      events: [],
+      linkedPullRequests: [],
+    } satisfies IssueDetail);
+  });
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  await page.viewport(1400, 900);
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${first.id}`] }),
+  );
+  await router.load();
+  await using _app = await render(<AppRoot router={router} />, {
+    // AppRoot brings its own router.
+    router: false,
+  });
+  const badge = page.getByRole("button", {
+    name: `Issue ${issue.displayKey}: ${issue.title}, Open`,
+  });
+  await expect.element(badge).toBeVisible();
+  expect(badge.element().querySelector("svg")).toHaveClass(/text-emerald-600/);
+  const groupedBadge = page.getByRole("button", { name: "2 linked issues" });
+  await vi.waitFor(() =>
+    expect(groupedBadge.element().querySelector("svg")).toHaveClass(/text-emerald-600/),
+  );
+  await userEvent.hover(badge);
+  const issueName = `Issue ${issue.displayKey}: ${liveTitle}`;
+  const previewLink = page.getByRole("link", { name: issueName });
+  await userEvent.hover(previewLink.getByText("sam", { exact: true }));
+  await expect.element(previewLink).toBeVisible();
+  const contextMenu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+  await act(() => previewLink.element().dispatchEvent(contextMenu));
+  expect(contextMenu.defaultPrevented).toBe(false);
+  await userEvent.click(badge);
+  const issueRow = page
+    .getByRole("region", { name: "Linked issues" })
+    .getByRole("link", { name: issueName });
+  await expect.element(issueRow.getByRole("img", { name: "Open" })).toBeVisible();
+  await expect.element(issueRow.getByRole("img", { name: "3 comments" })).toBeVisible();
+  await expect.element(issueRow.getByRole("img", { name: "Linear" })).toBeVisible();
+  await expect.element(issueRow.getByText(issue.scope, { exact: true })).toBeVisible();
+  await userEvent.click(issueRow);
+  expect(router.history.location.pathname).toBe(`/${ENVIRONMENT_ID}/${linked.id}`);
+  await expect.element(page.getByRole("heading", { name: liveTitle })).toBeVisible();
+  await act(() => useRightPanelStore.getState().close(scopeThreadRef(ENVIRONMENT_ID, linked.id)));
+  await expect
+    .element(
+      page.getByRole("region", { name: "Thread details" }).getByRole("link", {
+        name: issueName,
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+});
 
 it("a machine chip stashed in one thread restores with its machine in another", async () => {
   using _welcomeGuide = skipLessonGuides();
@@ -759,3 +899,4 @@ it("selecting a side-chat tab focuses that side chat's composer", async () => {
   await expect.element(sideEditor).toHaveFocus();
   await expect.element(mainEditor).toHaveTextContent("main draft");
 });
+

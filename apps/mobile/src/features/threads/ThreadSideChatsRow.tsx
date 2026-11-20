@@ -1,4 +1,6 @@
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { T3_LEARN_PRODUCT_NAME } from "@t3tools/shared/t3LearnIdentity";
+import { T, Var } from "gt-react-native";
 import { Platform, View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
@@ -27,8 +29,11 @@ export function ThreadSideChatsRow(props: {
         size={12}
         tintColorClassName="accent-foreground-muted"
       />
-      <Text className="text-xs text-foreground-muted">Side chats</Text>
-      <Text className="text-xs text-foreground-muted">not supported in OminaX mobile yet</Text>
+      <Text className="text-xs text-foreground-muted">
+        <T>
+          Side chats not supported in <Var>{T3_LEARN_PRODUCT_NAME}</Var> mobile yet
+        </T>
+      </Text>
     </View>
   );
 }

@@ -26,7 +26,6 @@ import * as NodeUtil from "node:util";
 import * as ModelManifest from "./ModelManifest.ts";
 import * as ServerConfig from "../config.ts";
 import { auditDownload } from "../course/downloadAudit.ts";
-import { resolveProviderCompatibility } from "./providerCompatibility.ts";
 import * as ProviderInstallationGate from "./ProviderInstallationGate.ts";
 import * as ProviderRegistry from "./ProviderRegistry.ts";
 import { makeProviderMaintenanceCommandCoordinator } from "./providerMaintenanceCommandCoordinator.ts";
@@ -523,13 +522,11 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                   latestVersions,
                 ),
               ));
-            const advisory =
-              resolveProviderCompatibility(manifest.compatibility, provider, candidateVersion) ??
-              resolveProviderCompatibility(
-                ModelManifest.BUNDLED_MODEL_MANIFEST.compatibility,
-                provider,
-                candidateVersion,
-              );
+            const advisory = ModelManifest.providerCompatibility(
+              manifest,
+              provider,
+              candidateVersion,
+            );
             const command =
               targetVersion !== undefined
                 ? makeTargetedProviderUpdateAction(fresh, targetVersion)

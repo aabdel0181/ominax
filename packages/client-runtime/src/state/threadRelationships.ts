@@ -282,6 +282,7 @@ export function deriveSideChatTree(
       threadId: lessonThreadId,
       parentId: null,
       depth: 0,
+      // oxlint-disable-next-line t3code/no-untranslated-copy -- OminaX copy, English until the fork translates it
       label: shellsById.get(lessonThreadId)?.title ?? "Lesson",
       state: "lesson",
       noteStatus: null,

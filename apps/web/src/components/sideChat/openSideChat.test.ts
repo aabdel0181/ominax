@@ -9,6 +9,7 @@ import {
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
 import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -76,8 +77,8 @@ beforeEach(() => {
   useRightPanelStore.setState({ byThreadKey: {}, userActionRevisionByThreadKey: {} });
   usePendingSideChatStore.setState({ byThreadKey: {} });
   useComposerDraftStore.setState({ draftsByThreadKey: {}, draftThreadsByThreadKey: {} });
-  vi.spyOn(threadEnvironment.finishSideChat, "run").mockImplementation(async () =>
-    AsyncResult.success({ sequence: 1 }),
+  vi.spyOn(threadEnvironment.finishSideChat, "run").mockReturnValue(
+    Effect.succeed({ sequence: 1 }),
   );
 });
 
@@ -289,8 +290,8 @@ describe("openSideChatFromSelection", () => {
   });
 
   it("keeps the draft of a closed side chat the server refused to throw away", async () => {
-    vi.mocked(threadEnvironment.finishSideChat.run).mockImplementation(
-      async () => refusal as never,
+    vi.mocked(threadEnvironment.finishSideChat.run).mockReturnValue(
+      Effect.failCause(refusal.cause) as never,
     );
     const { run, startedThreadId, settle } = deferredRunner();
 
