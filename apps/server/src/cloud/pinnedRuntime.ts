@@ -161,6 +161,8 @@ const fetchReleaseAsset = Effect.fn("cloud.pinned_runtime.fetch_release_asset")(
   // Bytes from earlier attempts outlive the retry so a stalled download resumes with Range.
   let chunks: Array<Uint8Array> = [];
   let received = 0;
+  // The response the held bytes came from; a 416 resume only confirms them.
+  let delivered: { status: number; contentType: string | null } = { status: 0, contentType: null };
   // Bound stalls while holding the install lock, but allow transfers that keep
   // receiving bytes to finish regardless of their total duration.
   return yield* Effect.suspend(() => {
@@ -168,7 +170,8 @@ const fetchReleaseAsset = Effect.fn("cloud.pinned_runtime.fetch_release_asset")(
       chunks = [];
       received = 0;
     }
-    hops.length = 0;
+    // A resume keeps every hop since its held bytes started.
+    if (received === 0) hops.length = 0;
     return withAuditHops(httpClient, hops).execute(
       received > 0
         ? HttpClientRequest.get(url).pipe(
@@ -186,12 +189,7 @@ const fetchReleaseAsset = Effect.fn("cloud.pinned_runtime.fetch_release_asset")(
     Effect.timeout(PINNED_RUNTIME_DOWNLOAD_STALL_TIMEOUT),
     Effect.flatMap(
       Effect.fn(function* (response) {
-        const asset = () => ({
-          bytes: concatChunks(chunks, received),
-          status: response.status,
-          contentType: response.headers["content-type"] ?? null,
-        });
-        if (response.status === 416) return asset();
+        if (response.status === 416) return { bytes: concatChunks(chunks, received), ...delivered };
         const contentRange =
           response.status === 206
             ? CONTENT_RANGE.exec(response.headers["content-range"] ?? "")
@@ -211,6 +209,10 @@ const fetchReleaseAsset = Effect.fn("cloud.pinned_runtime.fetch_release_asset")(
           chunks = [];
           received = 0;
         }
+        delivered = {
+          status: response.status,
+          contentType: response.headers["content-type"] ?? null,
+        };
         const length = Number(
           contentRange === null ? response.headers["content-length"] : contentRange[2],
         );
@@ -249,7 +251,7 @@ const fetchReleaseAsset = Effect.fn("cloud.pinned_runtime.fetch_release_asset")(
         if (total === undefined && received > 0) {
           onProgress?.({ stage: "download", received, total: received });
         }
-        return asset();
+        return { bytes: concatChunks(chunks, received), ...delivered };
       }),
     ),
     Effect.retry({ ...DOWNLOAD_RETRY, while: isTransientDownloadFailure }),

@@ -447,8 +447,8 @@ reports its own result, and the ones that failed stay ticked so you can try
 only those again. Machines already linked are left as they are.
 
 For machines no app is connected to, put one `<address> <pairing-code>` per
-line in a file (make each code with `t3 pair` on that machine) and run
-`t3 environment link --from <file> --access <mode>`, or `--from -` to read
+line in a file (make each code with `ominax pair` on that machine) and run
+`ominax environment link --from <file> --access <mode>`, or `--from -` to read
 standard input. It prints a result per line, leaves machines already linked as
 they are, and exits non-zero if any line failed, so the same file can be run
 again with fresh codes for the failures.

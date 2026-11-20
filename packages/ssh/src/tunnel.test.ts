@@ -1788,15 +1788,15 @@ const canBind = (port) =>
       }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  // An NFS home can carry a ~/.t3 symlink whose target exists only on another host.
-  it.live.skipIf(windowsHost)("launches through a ~/.t3 symlink whose target is missing", () =>
+  // An NFS home can carry a ~/.ominax symlink whose target exists only on another host.
+  it.live.skipIf(windowsHost)("launches through a ~/.ominax symlink whose target is missing", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-dangling-home-" });
       const home = `${root}/home`;
       const target = `${root}/shared/t3`;
       yield* fs.makeDirectory(home, { recursive: true });
-      yield* fs.symlink(target, `${home}/.t3`);
+      yield* fs.symlink(target, `${home}/${T3_LEARN_HOME_DIRECTORY}`);
       const launch = `${root}/launch.sh`;
       yield* fs.writeFileString(
         launch,

@@ -353,21 +353,44 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
     }),
   );
 
+  // The archive's audit line: `hops` since the held bytes started, `status` of the response that sent them.
   it.effect.each([
-    { name: "body fails after the host answered", first: "body fails", honorsRange: true },
+    {
+      name: "body fails after the host answered",
+      first: "body fails",
+      honorsRange: true,
+      hops: [200, 206],
+      status: 206,
+    },
     {
       name: "body stalls and its resume ends early",
       first: "body stalls",
       honorsRange: true,
       shortResume: true,
+      hops: [200, 206, 206],
+      status: 206,
     },
-    { name: "body stalls on a host that ignores Range", first: "body stalls", honorsRange: false },
-    { name: "response headers stall", first: "headers stall", honorsRange: true },
+    {
+      name: "body stalls on a host that ignores Range",
+      first: "body stalls",
+      honorsRange: false,
+      hops: [200, 200],
+      status: 200,
+    },
+    {
+      name: "response headers stall",
+      first: "headers stall",
+      honorsRange: true,
+      hops: [200],
+      status: 200,
+    },
     {
       name: "whole body arrives and then stalls",
       first: "body stalls",
       honorsRange: true,
       wholeArchive: true,
+      hops: [200, 416],
+      status: 200,
     },
   ] as const)("resumes a release archive download when its $name", (row) =>
     Effect.gen(function* () {
@@ -498,6 +521,18 @@ it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
           total,
         },
       );
+      const auditFiles = yield* fs.readDirectory(path.join(baseDir, "userdata", "audit"));
+      const audit = (yield* fs.readFileString(
+        path.join(baseDir, "userdata", "audit", auditFiles[0]!),
+      ))
+        .split("\n")
+        .filter((line) => line.includes(archiveName))
+        .map((line) => JSON.parse(line) as { status: number; hops: Array<{ status: number }> })[0]!;
+      assert.deepEqual(
+        audit.hops.map((hop) => hop.status),
+        [...row.hops],
+      );
+      assert.equal(audit.status, row.status);
     }),
   );
 

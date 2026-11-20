@@ -8,6 +8,7 @@ import * as NetService from "@t3tools/shared/Net";
 import { resolveGitWorktreePath, resolveWorktreeT3Home } from "@t3tools/shared/devHome";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { T3_LEARN_HOME_DIRECTORY, T3_LEARN_LEGACY } from "@t3tools/shared/t3LearnIdentity";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -330,9 +331,12 @@ export const createDevRunnerEnv = Effect.fn("dev-runner.createDevRunnerEnv")(fun
   };
 
   const path = yield* Path.Path;
-  // The server stores an explicit home's state in userdata, which for ~/.t3 is the live
-  // install. Left implicit, dev state goes to ~/.t3/dev.
-  const isLiveHome = resolvedBaseDir === path.join(yield* HostProcess.HomeDirectory, ".t3");
+  // The server stores an explicit home's state in userdata, which for ~/.t3 (or OminaX's
+  // ~/.ominax and ~/.t3-learn) is the live install. Left implicit, dev state goes to ~/.t3/dev.
+  const userHome = yield* HostProcess.HomeDirectory;
+  const isLiveHome = [".t3", T3_LEARN_HOME_DIRECTORY, T3_LEARN_LEGACY.homeDirectory].some(
+    (dir) => resolvedBaseDir === path.join(userHome, dir),
+  );
   if (configuredBaseDir !== undefined && !isLiveHome) {
     output.T3CODE_HOME = resolvedBaseDir;
   } else {
