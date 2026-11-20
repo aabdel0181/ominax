@@ -125,6 +125,8 @@ export function threadSupportsProviderHandoff(projection: Projection | null | un
 export function getUserQueuedThreadRuns(
   projection: Pick<Projection, "runs" | "messages" | "thread">,
 ): ReadonlyArray<Run> {
+  if (!projection.runs.some((run) => run.status === "queued")) return [];
+
   // A done side chat parks these until the learner reopens it, so they show there.
   const parked = projection.thread.sideChat?.done != null;
   const automaticCompletionMessageIds = new Set(
