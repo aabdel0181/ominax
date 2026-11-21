@@ -9,8 +9,10 @@ import {
   deriveThreadActivityRun,
   deriveThreadStructureRuntime,
 } from "@t3tools/client-runtime/state/thread-execution";
+import type { SideThreadOpenIntent } from "@t3tools/client-runtime/side-thread";
 import type {
   AssistantCitation,
+  EnvironmentId,
   ProviderApprovalDecision,
   RuntimeRequestId,
   ScopedThreadRef,
@@ -72,7 +74,11 @@ export function SideChatTimeline(props: {
         embedTitle?: string,
       ) => boolean)
     | undefined;
-  readonly onOpenThread: (threadId: ThreadId) => void;
+  readonly onOpenThread: (
+    threadId: ThreadId,
+    environmentId?: EnvironmentId,
+    intent?: SideThreadOpenIntent,
+  ) => void;
   /** Opens a side chat nested in this one from its mark. */
   readonly onOpenSideChat?: (threadId: ThreadId) => void;
   readonly workspaceRoot: string | undefined;

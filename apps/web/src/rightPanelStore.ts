@@ -130,11 +130,11 @@ export type RightPanelSurface =
 
 export type ThreadSurface = { id: `thread:${string}`; kind: "thread"; threadId: ThreadId };
 
-const threadSurface = (threadId: ThreadId): ThreadSurface => ({
-  id: `thread:${threadId}`,
-  kind: "thread",
-  threadId,
-});
+// A declaration, not a `const`: closedViewStore decodes saved tabs while it hydrates, possibly
+// before this module has run (the two import each other).
+function threadSurface(threadId: ThreadId): ThreadSurface {
+  return { id: `thread:${threadId}`, kind: "thread", threadId };
+}
 
 /**
  * A saved thread surface with its id rebuilt, or null when it names no thread. Builds before

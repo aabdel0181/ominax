@@ -19,10 +19,12 @@ import {
 import {
   type AssistantCitation,
   AuthOrchestrationOperateScope,
+  type EnvironmentId,
   type MessageId,
   type ScopedThreadRef,
   ThreadId,
 } from "@t3tools/contracts";
+import { type SideThreadOpenIntent, sideThreadKindOf } from "@t3tools/client-runtime/side-thread";
 import { assistantCitationLabel } from "@t3tools/shared/assistantCitations";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon, EllipsisIcon, NetworkIcon } from "lucide-react";
@@ -54,6 +56,7 @@ import {
   isLatestRunSettled,
 } from "../../session-logic";
 import {
+  readThreadShell,
   useProject,
   useQuietThreadProjection,
   useQuietThreadVisibleTurnItems,
@@ -61,6 +64,7 @@ import {
   useSideChatNoteDelivered,
   useSideChatTreeShells,
 } from "../../state/entities";
+import { openSideThread } from "../../lib/sideChatPane";
 import { useEnvironmentProviders } from "../../state/environments";
 import { useEnvironmentScope } from "../../state/session";
 import { threadEnvironment } from "../../state/threads";
@@ -457,7 +461,11 @@ export function SideChatPanel(props: {
     void navigate({ ...assistantCitationNavigation(citation, null), replace: true });
   };
 
-  const onOpenThread = (threadId: ThreadId) => {
+  const onOpenThread = (
+    threadId: ThreadId,
+    threadEnvironmentId?: EnvironmentId,
+    intent?: SideThreadOpenIntent,
+  ) => {
     const top = topSideChatId(rows, threadId);
     if (top === sideChatSurfaceTopThreadId(surface)) {
       walkInto(threadId);
@@ -468,10 +476,20 @@ export function SideChatPanel(props: {
       revealSideChat(lessonRef, threadId);
       return;
     }
-    void navigate({
-      to: "/$environmentId/$threadId",
-      params: buildThreadRouteParams(scopeThreadRef(environmentId, threadId)),
-    });
+    const threadRef = scopeThreadRef(threadEnvironmentId ?? environmentId, threadId);
+    const openInMain = (ref: ScopedThreadRef) =>
+      void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(ref) });
+    // A subagent opens beside the lesson or in its place, as the lesson's own timeline does.
+    if (intent !== undefined || sideThreadKindOf(readThreadShell(threadRef)) !== null) {
+      openSideThread({
+        threadRef,
+        panelRef: lessonRef,
+        intent: intent ?? "primary",
+        navigate: openInMain,
+      });
+      return;
+    }
+    openInMain(threadRef);
   };
 
   const sideChat = shell?.sideChat ?? undefined;

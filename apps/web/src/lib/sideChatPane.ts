@@ -16,6 +16,7 @@ import type { useNavigate } from "@tanstack/react-router";
 import { getClientSettings } from "../hooks/useSettings";
 import { linkedThreadRouteParams } from "../linkedThreadSurface";
 import { rightPanelHostRef, useRightPanelStore } from "../rightPanelStore";
+import { readThreadShell } from "../state/entities";
 
 /**
  * Whether an event started in the side chat pane (`data-side-chat-pane`) or T3 Learn's
@@ -68,6 +69,14 @@ function canOpenThreadInPanel(
   return host.environmentId === threadRef.environmentId && host.threadId !== threadRef.threadId;
 }
 
+/** A T3 Learn side chat's tabs open in its lesson's panel; its own never renders. */
+function lessonPanelRef(panelRef: ScopedThreadRef | null): ScopedThreadRef | null {
+  const lessonThreadId = panelRef && readThreadShell(panelRef)?.sideChat?.lessonThreadId;
+  return panelRef && lessonThreadId
+    ? scopeThreadRef(panelRef.environmentId, lessonThreadId)
+    : panelRef;
+}
+
 /**
  * Opens a side chat or subagent where the click asked: as a tab beside `panelRef`, the thread the
  * click happened in, or on the main screen through `navigate`. Returns where it went.
@@ -78,7 +87,8 @@ export function openSideThread(input: {
   readonly intent: SideThreadOpenIntent;
   readonly navigate: (threadRef: ScopedThreadRef) => void;
 }): SideThreadOpenTarget {
-  const { threadRef, panelRef } = input;
+  const { threadRef } = input;
+  const panelRef = lessonPanelRef(input.panelRef);
   const target = resolveSideThreadOpenTarget({
     preference: getClientSettings().sideThreadOpenTarget,
     intent: input.intent,
@@ -102,7 +112,8 @@ export function openLinkedThreadRead(input: {
   readonly intent: SideThreadOpenIntent;
   readonly navigate: ReturnType<typeof useNavigate>;
 }) {
-  const { panelRef, target } = input;
+  const { target } = input;
+  const panelRef = lessonPanelRef(input.panelRef);
   const place = resolveSideThreadOpenTarget({
     preference: getClientSettings().sideThreadOpenTarget,
     intent: input.intent,

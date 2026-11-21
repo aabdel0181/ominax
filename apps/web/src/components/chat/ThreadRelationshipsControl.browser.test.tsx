@@ -40,6 +40,7 @@ vi.mock(import("../../state/entities"), () => ({
   useProjects: (() => []) as never,
   useHiddenThreadKeys: (() => new Set()) as never,
   useAnyEnvironmentHiding: (() => false) as never,
+  readThreadShell: () => null,
 }));
 vi.mock(import("../../state/environments"), () => ({
   // The click rule reads the client setting, whose module asks for these.

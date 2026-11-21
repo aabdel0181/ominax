@@ -27,7 +27,7 @@ place they could not reach before.
 - On web and desktop, use **Add folder** under **Repositories**.
 - If the project folder has a `.code-workspace` file, the folders it lists outside the project are
   offered there with an **Add** button, on mobile too.
-- From a script, `t3 project add <path> --track <folder>` adds one.
+- From a script, `ominax project add <path> --track <folder>` adds one.
 
 **Remove** takes an added folder out of the project. It never deletes files. Added folders are
 paths on one machine, so the same project on another machine has its own. A project can cover up to

@@ -20,6 +20,11 @@ import {
 } from "@t3tools/contracts";
 import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
 import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
+import {
+  T3_LEARN_HOME_DIRECTORY,
+  T3_LEARN_HOME_ENV,
+  T3_LEARN_PRODUCT_NAME,
+} from "@t3tools/shared/t3LearnIdentity";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
@@ -350,8 +355,7 @@ const make = Effect.gen(function* () {
       if (peerLink && !(yield* linksEnabled)) {
         return yield* new AuthMcpRegistrationError({
           error: "invalid_client_metadata",
-          error_description:
-            'Linked environments is off on that machine. Turn it on in its Settings → Labs, or without a desktop, set "linkedEnvironmentsEnabled": true in userdata/settings.json in its T3 home (~/.t3 by default).',
+          error_description: `Linked environments is off on that machine. Turn it on in its Settings → Labs, or without a desktop, set "linkedEnvironmentsEnabled": true in userdata/settings.json in its ${T3_LEARN_PRODUCT_NAME} home (~/${T3_LEARN_HOME_DIRECTORY} by default, or ${T3_LEARN_HOME_ENV}).`,
         });
       }
       const clientId = yield* signClientId(name, redirectUris, peerLink);

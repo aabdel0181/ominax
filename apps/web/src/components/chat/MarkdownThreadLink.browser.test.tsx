@@ -34,6 +34,7 @@ vi.mock(import("../../state/entities"), () => ({
       : [],
   useProject: (ref: { projectId: string } | null) =>
     ref?.projectId === "essay-project" ? ({ title: "Essays" } as never) : null,
+  readThreadShell: () => null,
 }));
 vi.mock(import("../../state/environments"), () => ({
   // The click rule reads the client setting, whose module asks for these.

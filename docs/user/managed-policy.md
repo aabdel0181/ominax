@@ -127,7 +127,7 @@ cannot enforce, so upgrade T3 Code before you deploy a policy that uses them.
 ## Settings
 
 Each key under `settings` is a setting's path in the server's `settings.json`, such as
-`storageCleanup.logsAfterDays`. Run `t3 policy settings` to list every path a policy can manage,
+`storageCleanup.logsAfterDays`. Run `ominax policy settings` to list every path a policy can manage,
 with its default.
 
 - `"locked": false` sets a default. It applies wherever the user has not chosen a value of their

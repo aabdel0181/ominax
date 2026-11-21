@@ -5,6 +5,7 @@ import {
   type ProviderMcpSignInStartInput,
   type ProviderMcpSignInStartResult,
 } from "@t3tools/contracts";
+import { T3_LEARN_PRODUCT_NAME } from "@t3tools/shared/t3LearnIdentity";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -55,7 +56,10 @@ const make = Effect.gen(function* () {
     );
     if (runtime === undefined) return yield* stopped(input.server);
     if (runtime.mcpSignIn === undefined) {
-      return yield* fail(input.server, "This agent can't sign MCP servers in from T3 Code.");
+      return yield* fail(
+        input.server,
+        `This agent can't sign MCP servers in from ${T3_LEARN_PRODUCT_NAME}.`,
+      );
     }
     return { providerThread, mcpSignIn: runtime.mcpSignIn };
   });
