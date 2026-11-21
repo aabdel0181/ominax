@@ -19,6 +19,7 @@ import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
 import { GitManager } from "../git/GitManager.ts";
 import { GitWorkflowService } from "../git/GitWorkflowService.ts";
 import { KnowledgeMap } from "../knowledgeMap.ts";
+import { TaskFolders } from "../workspace/TaskFolders.ts";
 import * as McpHttpServer from "../mcp/McpHttpServer.ts";
 import { PreviewAutomationBroker } from "../mcp/PreviewAutomationBroker.ts";
 import {
@@ -72,6 +73,7 @@ const toolHandlerServices = Layer.mergeAll(
   Layer.mock(CourseService.CourseService)({}),
   Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({}),
   Layer.mock(ProcessRunner.ProcessRunner)({}),
+  Layer.mock(TaskFolders)({}),
   Layer.mock(IssueService)({}),
   Layer.mock(ManagedProjectFolders)({ namedProjectsRoot: "" }),
   Layer.mock(McpProviderSessions)({}),

@@ -315,10 +315,10 @@ describe("root reopen shortcut", () => {
 
     expect(
       selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, ref).surfaces,
-    ).toEqual([{ id: "side-chat:side-1", kind: "side-chat", threadId: "side-1" }]);
+    ).toEqual([{ id: "thread:side-1", kind: "thread", threadId: "side-1" }]);
   });
 
-  it("forwards address-bar focus, zoom, and panel close from a focused desktop page", async () => {
+  it("forwards address-bar focus, zoom, and panel new and close from a focused desktop page", async () => {
     setup();
     await using _shortcut = await renderShortcut();
     expect(state.setShortcuts).toHaveBeenLastCalledWith(
@@ -328,6 +328,7 @@ describe("root reopen shortcut", () => {
           "preview.zoomIn",
           "preview.zoomOut",
           "preview.resetZoom",
+          "rightPanel.new",
           "rightPanel.close",
         ].map((command) => expect.objectContaining({ command })),
       ),

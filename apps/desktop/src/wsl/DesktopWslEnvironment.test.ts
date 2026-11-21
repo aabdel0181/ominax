@@ -23,10 +23,10 @@ import {
   layer as layerDesktopWslEnvironment,
   buildWslRuntimeInstallScript,
   makeIsAvailable,
-  buildWslRuntimeInvalidateScript,
   buildWslRuntimePruneScript,
   buildWslRuntimeProbeScript,
   parseResolvedPath,
+  parseT3Home,
   parseWslRuntimeRoot,
   windowsToWslPathImpl,
 } from "./DesktopWslEnvironment.ts";
@@ -97,10 +97,9 @@ describe("WSL runtime cache", () => {
   it.each([
     [
       "install",
-      (id: string) => buildWslRuntimeInstallScript("/runtime.tar.gz", id, "b".repeat(64)),
+      (id: string) => buildWslRuntimeInstallScript("/runtime.tar.gz", id, "b".repeat(64), null),
     ],
-    ["prune", buildWslRuntimePruneScript],
-    ["invalidate", buildWslRuntimeInvalidateScript],
+    ["prune", (id: string) => buildWslRuntimePruneScript(id, null)],
   ] as const)("sanitizes cache ids in the %s script", (_, buildScript) => {
     const runtimeId = "1.2.3/x64; touch /tmp/nope";
     const script = buildScript(runtimeId);
@@ -140,11 +139,11 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
     const archiveSha = readField(result.stdout, "archiveSha");
     const runtimeId = `sha256-${archiveSha}`;
     // WSL does not inherit HOME; embed the fixture's override in the script.
-    const installScript = (archive = archivePath, sha = archiveSha) =>
+    const installScript = (archive = archivePath, sha = archiveSha, t3Home: string | null = null) =>
       [
         `HOME=${sh(`${work}/home`)}`,
         "export HOME",
-        buildWslRuntimeInstallScript(archive, runtimeId, sha),
+        buildWslRuntimeInstallScript(archive, runtimeId, sha, t3Home),
       ].join("\n");
     return {
       work,
@@ -155,7 +154,8 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
       runtimeRoot: `${work}/home/.ominax/wsl-runtime/${runtimeId}`,
       serverEntry: `${work}/home/.ominax/wsl-runtime/${runtimeId}/t3`,
       installScript,
-      install: (archive?: string, sha?: string) => runShell(installScript(archive, sha)),
+      install: (archive?: string, sha?: string, t3Home?: string | null) =>
+        runShell(installScript(archive, sha, t3Home)),
     };
   };
 
@@ -209,6 +209,25 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
     const provider = runShell(`export PATH=${sh(resolvedPath ?? "")}\nnode provider.js`);
     expect(provider.status, provider.stderr).toBe(0);
     expect(provider.stdout).toBe("linux-node-provider\n");
+  });
+
+  it("stages the runtime under the login shell's OMINAX_HOME and reports it to the launcher", () => {
+    const fixture = createFixture();
+    const t3Home = `${fixture.work}/home/.config/t3 home`;
+    const install = fixture.install(undefined, undefined, t3Home);
+    expect(install.status, install.stderr).toBe(0);
+    expect(parseWslRuntimeRoot(install.stdout)).toBe(`${t3Home}/wsl-runtime/${fixture.runtimeId}`);
+    expect(runShell(`test ! -e ${sh(`${fixture.work}/home/.ominax`)}`).status).toBe(0);
+
+    const probeWith = (exported: string) =>
+      runShell(
+        [`bash() { ( export ${exported}; eval "$2" ); }`, buildWslRuntimeProbeScript()].join("\n"),
+      );
+    const probe = probeWith(`OMINAX_HOME=${sh(t3Home)}`);
+    expect(probe.status, probe.stderr).toBe(0);
+    expect(parseT3Home(probe.stdout)).toBe(t3Home);
+    // T3 Code's home is never OminaX's.
+    expect(parseT3Home(probeWith(`T3CODE_HOME=${sh(t3Home)}`).stdout)).toBeNull();
   });
 
   it("keeps the inherited PATH when bash is unavailable", () => {
@@ -393,7 +412,7 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
         `sh ${sh(`${fixture.work}/select.sh`)}`,
         `HOME=${sh(`${fixture.work}/home`)}`,
         "export HOME",
-        buildWslRuntimePruneScript("sha256-current"),
+        buildWslRuntimePruneScript("sha256-current", null),
         `test -d ${sh(fixture.runtimeRoot)}`,
       ].join("\n"),
     );
@@ -474,11 +493,15 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
         const translated = yield* wsl.windowsToWslPath("Ubuntu", fixture.archivePath);
         expect(translated._tag).toBe("None");
 
-        const prepared = yield* wsl.prepareRuntime("Ubuntu", {
-          windowsPath: fixture.archivePath,
-          runtimeId: fixture.runtimeId,
-          sha256: fixture.archiveSha,
-        });
+        const prepared = yield* wsl.prepareRuntime(
+          "Ubuntu",
+          {
+            windowsPath: fixture.archivePath,
+            runtimeId: fixture.runtimeId,
+            sha256: fixture.archiveSha,
+          },
+          null,
+        );
 
         expect(prepared).toEqual({ ok: true, linuxAppRoot: fixture.runtimeRoot });
         const version = runShell(`${sh(fixture.serverEntry)} --version`);
@@ -515,7 +538,7 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
         holdInstallLock('"$runtime_parent/.sha256-locked.install.lock"'),
         `HOME="$home"`,
         "export HOME",
-        buildWslRuntimePruneScript("sha256-current"),
+        buildWslRuntimePruneScript("sha256-current", null),
         'test -d "$runtime_parent/sha256-current"',
         'test -d "$runtime_parent/sha256-previous"',
         'test -d "$runtime_parent/sha256-active"',

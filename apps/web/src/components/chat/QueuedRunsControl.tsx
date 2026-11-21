@@ -6,16 +6,18 @@ import {
 import { deriveThreadQueueWorkflowState } from "@t3tools/client-runtime/state/thread-workflows";
 import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
 import { withoutCardAnswerTag, withoutShownOptions } from "@t3tools/shared/quizCard";
+import { isSlashCommand } from "@t3tools/shared/composerTrigger";
 import {
   isAttachmentOnlyBootstrapPrompt,
   replaceComposerContextReferences,
 } from "@t3tools/shared/composerContextReferences";
-import type {
-  ChatAttachment as ContractChatAttachment,
-  EnvironmentId,
-  MessageId,
-  RunId,
-  ThreadId,
+import {
+  parseGoalCommand,
+  type ChatAttachment as ContractChatAttachment,
+  type EnvironmentId,
+  type MessageId,
+  type RunId,
+  type ThreadId,
 } from "@t3tools/contracts";
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import { Link } from "@tanstack/react-router";
@@ -282,6 +284,9 @@ export function QueuedRunsControl({
                 ),
               ).trim();
           const isEditing = item.runId !== null && item.runId === props.editingRunId;
+          // The server decides on the agent's text, and a goal command can stop the turn.
+          const sentText = { text: item.message?.text ?? item.text, attachments: item.attachments };
+          const movesCommandFirst = isSlashCommand(sentText) && parseGoalCommand(sentText) === null;
           return (
             <li
               key={item.key}
@@ -332,14 +337,20 @@ export function QueuedRunsControl({
                               ? gt("Skip compaction and send this message ({shortcut})", {
                                   shortcut: props.steerShortcutLabel,
                                 })
-                              : gt("Send into the current turn ({shortcut})", {
-                                  shortcut: props.steerShortcutLabel,
-                                })
+                              : movesCommandFirst
+                                ? gt("Move this command to the front of the queue ({shortcut})", {
+                                    shortcut: props.steerShortcutLabel,
+                                  })
+                                : gt("Send into the current turn ({shortcut})", {
+                                    shortcut: props.steerShortcutLabel,
+                                  })
                           : workflow?.canSendNow
                             ? gt("Start a turn with this message")
                             : workflow?.promoteSkipsCompaction
                               ? gt("Skip compaction and send this message")
-                              : gt("Send into the current turn")}
+                              : movesCommandFirst
+                                ? gt("Move this command to the front of the queue")
+                                : gt("Send into the current turn")}
                       </TooltipPopup>
                     </Tooltip>
                   </>
