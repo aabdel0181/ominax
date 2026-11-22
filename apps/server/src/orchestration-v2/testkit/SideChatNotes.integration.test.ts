@@ -260,21 +260,35 @@ describe("side-chat notes", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("a scheduled-task message neither carries nor consumes notes", () =>
+  it.effect.each([
+    { name: "scheduled", text: "Run the nightly check.", scheduled: true },
+    // A slash command's turn defers inline context, so it must not show notes as included.
+    { name: "slash", text: "/review the plan", scheduled: false },
+  ])("a $name lesson message neither carries nor consumes notes", ({ name, text, scheduled }) =>
     Effect.gen(function* () {
-      const harness = yield* makeSideChatHarness("side-chat-notes-scheduled");
+      const harness = yield* makeSideChatHarness(`side-chat-notes-${name}`);
       yield* Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
         const lesson = yield* lessonWithSpaceNote(harness);
+        const notesItems = Effect.map(orchestrator.getThreadProjection(lesson), (projection) =>
+          projection.turnItems.filter(
+            (item) => item.type === "handoff" && item.title === SIDE_CHAT_NOTES_HANDOFF_TITLE,
+          ),
+        );
 
-        yield* harness.send(lesson, "Run the nightly check.", {
-          scheduledTaskId: ScheduledTaskId.make("scheduled:nightly"),
-        });
+        yield* harness.send(
+          lesson,
+          text,
+          scheduled ? { scheduledTaskId: ScheduledTaskId.make("scheduled:nightly") } : {},
+        );
 
         assert.equal(headerCount(harness.prompts(lesson).at(-1) ?? ""), 0);
         assert.isUndefined((yield* harness.thread(lesson)).sideChatNoteDeliveries);
+        assert.lengthOf(yield* notesItems, 0);
 
         yield* harness.send(lesson, "Continue the lesson.");
         assert.include(harness.prompts(lesson).at(-1), spaceLine);
+        assert.lengthOf(yield* notesItems, 1);
       }).pipe(Effect.provide(harness.layer));
     }).pipe(Effect.scoped),
   );

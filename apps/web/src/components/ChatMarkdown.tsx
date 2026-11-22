@@ -1942,6 +1942,7 @@ function markdownIslandOptions(state: ChatMarkdownComponentState): MarkdownIslan
     cwd,
     headingLevelOffset,
     imageBaseDir,
+    inline,
     inlineCodeFileLinkMetaByText,
     onTaskListChange,
     skills,
@@ -1971,7 +1972,9 @@ function markdownIslandOptions(state: ChatMarkdownComponentState): MarkdownIslan
               resolveInlineCodeFileLinkMeta(codeText, cwd, imageBaseDir ?? cwd)) != null
           );
         }
+        // Inline renders (lesson cards) need MarkdownParagraph's span, not a block <p>.
         case "p":
+          return inline || hastTextHasChip(node, skills);
         case "li":
           return hastTextHasChip(node, skills);
         default:

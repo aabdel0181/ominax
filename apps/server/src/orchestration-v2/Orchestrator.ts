@@ -226,6 +226,7 @@ import {
   ThreadForkServiceV2,
 } from "./ThreadForkService.ts";
 import { buildSideChatNotesSummaryText, isUserAuthoredSideChatTrigger } from "./sideChat/notes.ts";
+import { isSlashCommandMessage } from "./ContextHandoffDelivery.ts";
 import {
   buildSideChatContextHandoff,
   pendingSideChatOpeningEffect,
@@ -15201,7 +15202,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
    * A user's message reopens its done side chat and those above it, and finishes the idle open side
    * chats below it, deepest first, as Done does without stopping a turn. One still answering, any
    * above it, and one nobody has written in stay open. Their notes ride the run this message starts
-   * when written within the wait cap, and the user's next message otherwise.
+   * when written within the wait cap and it is not a slash command, and the next message otherwise.
    */
   const applySideChatUserMessage = Effect.fn("Orchestrator.applySideChatUserMessage")(function* (
     command: Extract<OrchestrationV2Command, { readonly type: "message.dispatch" }>,
@@ -15300,7 +15301,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         run.rootNodeId === null ||
         run.restartContinuationOfRunId !== undefined ||
         message === undefined ||
-        !isUserAuthoredSideChatTrigger(message)
+        !isUserAuthoredSideChatTrigger(message) ||
+        // A slash command's turn defers inline context, so its notes ride the next message.
+        isSlashCommandMessage(message)
       ) {
         yield* emitUnchanged;
         return;

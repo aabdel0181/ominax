@@ -1111,7 +1111,8 @@ describe("side chat opening context", () => {
         const question = yield* harness.send(space, "What is an observation space?", {
           await: "none",
         });
-        // The turn waits out the cap only once the worker has taken up the side chat's opening.
+        // Claims queued behind this fiber's commit run only once it yields; yield until the opening
+        // is taken up so the turn start reaches its wait before the clock jumps.
         yield* harness.openingRequested("Teach me RL environments.");
         yield* TestClock.adjust(Duration.millis(SIDE_CHAT_OPENING_WAIT_CAP_MS));
         yield* harness.awaitRun(afterAsk, question, "completed");
