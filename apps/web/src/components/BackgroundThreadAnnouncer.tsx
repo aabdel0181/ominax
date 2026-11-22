@@ -14,6 +14,7 @@ import {
   type BackgroundThreadSnapshot,
   nextBackgroundThreadAnnouncement,
   resolveBackgroundThreadRequest,
+  resolveBackgroundThreadRunStatus,
 } from "./backgroundThreadAnnouncement";
 
 const backgroundThreadLiveRegion = createLiveRegion();
@@ -56,7 +57,7 @@ export function startBackgroundThreadAnnouncements(
         title: thread.title,
         ...resolveBackgroundThreadRequest(thread),
         runId: thread.latestRun?.runId ?? null,
-        runStatus: thread.latestRun?.status ?? null,
+        runStatus: resolveBackgroundThreadRunStatus(thread),
         activeRunId: thread.runtime?.activeRunId ?? null,
         snoozed: effectiveSnoozed(thread, { now }),
       });
