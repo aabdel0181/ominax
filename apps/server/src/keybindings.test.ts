@@ -16,6 +16,10 @@ import * as SharedKeybindings from "@t3tools/shared/keybindings";
 import { KeybindingsConfigError, MAX_KEYBINDINGS_COUNT } from "@t3tools/contracts";
 
 const KeybindingsConfigJson = Schema.fromJsonString(KeybindingsConfig);
+// The fork's sideChat.* defaults also take places in the visible binding window.
+const FORK_ONLY_DEFAULT_COUNT = SharedKeybindings.DEFAULT_KEYBINDINGS.filter((rule) =>
+  rule.command.startsWith("sideChat."),
+).length;
 const encodeKeybindingsConfigJson = Schema.encodeEffect(KeybindingsConfigJson);
 const decodeKeybindingsConfigJson = Schema.decodeUnknownEffect(KeybindingsConfigJson);
 const layerKeybindings = () => {
@@ -630,7 +634,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       const keybindings = yield* Keybindings.Keybindings;
       yield* writeKeybindingsConfig(
         keybindingsConfigPath,
-        Array.from({ length: 210 }, (_, index) => ({
+        Array.from({ length: 210 - FORK_ONLY_DEFAULT_COUNT }, (_, index) => ({
           key: "mod+alt+f1",
           command: `script.filler-${index}.run` as const,
         })),
@@ -663,7 +667,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         const keybindings = yield* Keybindings.Keybindings;
         yield* writeKeybindingsConfig(
           keybindingsConfigPath,
-          Array.from({ length: 209 }, (_, index) => ({
+          Array.from({ length: 209 - FORK_ONLY_DEFAULT_COUNT }, (_, index) => ({
             key: "mod+alt+f1",
             command: `script.filler-${index}.run` as const,
           })),
