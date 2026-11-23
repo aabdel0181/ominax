@@ -34,7 +34,7 @@ The installer uses `OMINAX_*` environment variables. The old `T3LEARN_*` names s
 - **Linux:** the command installs the `.deb` where `apt` and `sudo` are available, so the app keeps Chromium's sandbox, and an AppImage in your home folder otherwise. Set `OMINAX_FORMAT=appimage` or `OMINAX_FORMAT=deb` to choose.
 - **A specific version:** set `OMINAX_VERSION`, for example `OMINAX_VERSION=0.1.3-learn.1`.
 - **Remove it:** on macOS and Linux, run the install command with `sh -s -- --uninstall` in place of `sh`. On Windows, uninstall **OminaX** from **Settings → Apps**. Your projects and settings stay in `~/.ominax`; delete that folder to remove them too.
-- **From source:** you need [`vp`](docs/operations/development.md#first-checkout). Run `vp i`, then `vp run --filter t3 build`, then `vp env exec -- node apps/server/dist/bin.mjs serve --base-dir ~/.ominax`, and open the pairing URL it prints.
+- **From source:** you need [`vp`](docs/operations/00_development.md#first-checkout). Run `vp i`, then `vp run --filter t3 build`, then `vp env exec -- node apps/server/dist/bin.mjs serve --base-dir ~/.ominax`, and open the pairing URL it prints.
 
 </details>
 
@@ -152,7 +152,7 @@ We have limited review capacity. Small, focused fixes are the most likely to be 
 
 - Read [CONTRIBUTING.md](./CONTRIBUTING.md) before you report a bug or open a pull request.
 - Put feature requests in [Ideas](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-- Build from source with the [development runbook](./docs/operations/development.md#first-checkout). The [architecture overview](./docs/internals/overview.md) explains how it works.
+- Build from source with the [development runbook](./docs/operations/00_development.md#first-checkout). The [architecture overview](./docs/internals/01_architecture.md) explains how it works.
 - Get help in [Discord](https://discord.gg/jn4EGJjrvv).
 
 ## License

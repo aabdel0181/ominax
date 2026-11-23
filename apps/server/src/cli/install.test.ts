@@ -212,17 +212,32 @@ it.layer(NodeServices.layer)("t3 install", (it) => {
       const globalBin = path.join(root, "global-bin");
       yield* fs.makeDirectory(globalBin);
       yield* fs.writeFileString(path.join(globalBin, "ominax"), "");
+      yield* fs.chmod(path.join(globalBin, "ominax"), 0o755);
       yield* offer(false, { env: { PATH: globalBin } });
       assert.equal(asked, 0);
       assert.isFalse(yield* fs.exists(link));
 
-      // A runner's own .bin on PATH is not an installed t3.
+      // A directory or non-executable file named `ominax` on PATH is not an installed ominax.
+      const dirBin = path.join(root, "dir-bin");
+      yield* fs.makeDirectory(path.join(dirBin, "ominax"), { recursive: true });
+      const nonExecBin = path.join(root, "non-exec-bin");
+      yield* fs.makeDirectory(nonExecBin);
+      yield* fs.writeFileString(path.join(nonExecBin, "ominax"), "");
+      assert.isFalse(yield* offer(undefined, { env: { PATH: dirBin } }));
+      assert.equal(asked, 1);
+      assert.isFalse(yield* offer(undefined, { env: { PATH: nonExecBin } }));
+      assert.equal(asked, 2);
+      asked = 0;
+
+      // A runner's own .bin on PATH, even found through a bare launcher record, is not an installed t3.
       const npxBin = path.join(npmPackage, "../.bin");
       const pnpmBin = path.join(root, ".cache/pnpm/dlx/abc/node_modules/.bin");
       for (const bin of [npxBin, pnpmBin]) {
         yield* fs.makeDirectory(bin, { recursive: true });
         yield* fs.writeFileString(path.join(bin, "ominax"), "");
+        yield* fs.chmod(path.join(bin, "ominax"), 0o755);
       }
+      yield* fs.writeFileString(path.join(runtimeDir, "launchers"), "ominax\n");
       assert.isFalse(yield* offer(undefined, { env: { PATH: `${npxBin}:${pnpmBin}` } }));
       assert.equal(asked, 1);
       assert.isFalse(yield* fs.exists(path.join(runtimeDir, "install-prompt-declined")));

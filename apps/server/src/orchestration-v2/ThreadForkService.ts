@@ -72,6 +72,8 @@ function planForkTargetThread(input: {
     t3CodeCopiedAt: _t3CodeCopiedAt,
     // The remote parent delegated the source thread, not its forks.
     delegatedFrom: _delegatedFrom,
+    // Nor is a fork a step of the run its source was one of.
+    workflowRun: _workflowRun,
     ...sourceThread
   } = input.sourceThread;
   return {

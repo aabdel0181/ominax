@@ -25,7 +25,7 @@ export function getDesktopLinkSchemes(isDevelopment: boolean): readonly string[]
   return isDevelopment ? [DESKTOP_DEVELOPMENT_SCHEME] : T3_LEARN_LINK_SCHEMES;
 }
 
-function getDesktopOrigin(isDevelopment: boolean): string {
+export function getDesktopOrigin(isDevelopment: boolean): string {
   return `${getDesktopScheme(isDevelopment)}://${DESKTOP_HOST}`;
 }
 

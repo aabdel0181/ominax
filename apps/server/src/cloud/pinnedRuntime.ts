@@ -618,9 +618,11 @@ export const resolveLauncherPath = Effect.gen(function* () {
     return path.resolve(cwd, invokedAs);
   }
   const delimiter = platform === "win32" ? ";" : ":";
-  for (const directory of (environment["PATH"] ?? "").split(delimiter)) {
-    if (directory.length === 0) continue;
-    const candidate = path.resolve(cwd, directory, invokedAs);
+  const searchPath = environment["PATH"] ?? "";
+  for (const directory of searchPath.split(delimiter)) {
+    // POSIX shells search the working directory for an empty entry of a nonempty PATH.
+    if (directory.length === 0 && (platform === "win32" || searchPath.length === 0)) continue;
+    const candidate = path.resolve(cwd, directory || ".", invokedAs);
     const info = yield* fs.stat(candidate).pipe(Effect.option);
     // Like the shell, pass over directories and non-executable files named the same.
     if (
@@ -731,12 +733,13 @@ export const findPosixLauncher = Effect.fn("cloud.pinned_runtime.find_posix_laun
     const installBinDir =
       environment["T3CODE_INSTALL_BIN_DIR"] ||
       path.join(yield* HostProcess.HomeDirectory, ".local", "bin");
+    const searchPath = environment["PATH"] ?? "";
     const candidates = [
-      // PATH first, resolved like the shell does: it decides which launcher the user runs.
-      ...(environment["PATH"] ?? "")
-        .split(":")
-        .filter((directory) => directory.length > 0)
-        .flatMap((directory) => launcherNames.map((name) => path.resolve(cwd, directory, name))),
+      // PATH first, resolved like the shell does: it decides which launcher the user runs. An
+      // empty entry of a nonempty PATH is the working directory; an empty PATH searches nothing.
+      ...(searchPath.length === 0 ? [] : searchPath.split(":")).flatMap((directory) =>
+        launcherNames.map((name) => path.resolve(cwd, directory || ".", name)),
+      ),
       ...launcherNames.map((name) => path.join(installBinDir, name)),
       ...recorded.split(/\r?\n/),
     ].filter((candidate) => path.isAbsolute(candidate));

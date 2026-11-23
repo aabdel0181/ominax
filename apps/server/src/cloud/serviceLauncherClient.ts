@@ -163,12 +163,28 @@ export const repointLaunchers = Effect.fn("cloud.service_launcher_client.repoint
       environment["T3CODE_INSTALL_BIN_DIR"] ||
       (environment["HOME"] ? path.join(environment["HOME"], ".local", "bin") : undefined);
     const candidates = new Set<string>();
+    const searchPath = environment["PATH"] ?? "";
+    const cwd = yield* HostProcess.WorkingDirectory;
     // `ominax install` links ominax; upstream's install scripts link t3.
     for (const name of [T3_LEARN_COMMAND, "t3"]) {
       if (installBinDir !== undefined) candidates.add(path.join(installBinDir, name));
-      for (const directory of (environment["PATH"] ?? "").split(":")) {
-        if (directory.length === 0) continue;
-        const candidate = path.join(directory, name);
+      for (const directory of searchPath.split(":")) {
+        // Like the shell, an empty entry of a nonempty PATH is the working directory.
+        if (directory.length === 0 && searchPath.length === 0) continue;
+        const candidate = path.join(directory || cwd, name);
+        if (directory.length === 0) {
+          // The shell passes over a working-directory entry it cannot run and keeps searching.
+          const info = yield* fs.stat(candidate).pipe(Effect.option);
+          if (
+            Option.isNone(info) ||
+            info.value.type !== "File" ||
+            (info.value.mode & 0o111) === 0
+          ) {
+            continue;
+          }
+          candidates.add(candidate);
+          break;
+        }
         if (
           yield* fs.exists(candidate).pipe(
             Effect.catch((cause) =>
