@@ -36,7 +36,7 @@ the T3 team. Choose a mode in **Agent feedback** in **Settings > Labs**:
 - **When I ask**: agents send a report only when you ask them to, about anything in OminaX.
 - **Automatic**: agents also report OminaX problems they hit on their own, such as a T3 tool that
   failed and made them find another way. These reports carry no outline and no message text, and
-  go out without asking you. `ominax feedback --kind bug --subject "ominax thread send" --expected "…" --actual "…"`
+  go out without asking you. `ominax feedback --kind bug --subject "t3 thread send" --expected "…" --actual "…"`
   sends one the same way, so it works only in this mode.
 
 When you ask your agent for a report, in either mode, OminaX shows it in the thread as a card

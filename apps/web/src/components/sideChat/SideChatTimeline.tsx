@@ -5,6 +5,7 @@ import { useLayoutEffect, useRef } from "react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
 import {
+  deriveLatestThreadRun,
   deriveRunlessWorkStartedAt,
   deriveThreadActivityRun,
   deriveThreadStructureRuntime,
@@ -204,6 +205,16 @@ export function SideChatTimeline(props: {
           runs={projection?.runs ?? []}
           latestRun={activityRun}
           providerStartingLabel={activityRun?.providerStartingLabelMsg ?? null}
+          providerStarting={
+            activityRun?.providerStartingLabelMsg ? (activityRun.providerStarting ?? null) : null
+          }
+          usageLimitRunId={
+            projection !== null &&
+            runtime?.status === "failed" &&
+            runtime.lastErrorClass === "usage_limit"
+              ? (deriveLatestThreadRun(projection)?.runId ?? null)
+              : null
+          }
           runningRunId={runtime?.activeRunId ?? null}
           turnDiffSummaries={[]}
           activeThreadEnvironmentId={props.sideChatRef.environmentId}

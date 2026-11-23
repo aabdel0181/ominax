@@ -462,7 +462,8 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
     ).pipe(Effect.annotateLogs({ divergent }));
   }
   if (includesV2) {
-    // Fork-only index kept outside the migrator ids (see legacy-orchestration-migration.md).
+    // Fork-only index, kept outside the migrator: a fork migration id would collide with a later
+    // upstream one (see assertV2MigrationsCanRun).
     yield* sql`
       CREATE INDEX IF NOT EXISTS orchestration_v2_projection_threads_side_chat_anchor_idx
       ON orchestration_v2_projection_threads(

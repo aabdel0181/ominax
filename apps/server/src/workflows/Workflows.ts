@@ -156,7 +156,7 @@ export class Workflows extends Context.Service<
 const refuse = Effect.fn("Workflows.disabled")(function* () {
   return yield* new WorkflowInputError({
     problem:
-      "This server defines no workflows yet. Add a file to the workflows folder of its T3 home.",
+      "This server defines no workflows yet. Add a file to the workflows folder of its OminaX home (~/.ominax/workflows by default).",
   });
 });
 

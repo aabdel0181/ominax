@@ -195,6 +195,8 @@ vi.mock("../state/entities", () => ({
   useEnvironmentPreviewTunnelOff: () => false,
 }));
 vi.mock("../state/peerLinks", () => ({ useLinkedEnvironments: () => new Map() }));
+// The fork's ThreadFeed reads FileMarkdownPreview's styles, which import this native-only view.
+vi.mock("../features/files/SourceFileSurface", () => ({ SourceFileSurface: () => null }));
 vi.mock("../features/threads/useOpenThreadLink", () => ({ useOpenThreadLink: () => vi.fn() }));
 vi.mock("../state/use-thread-selection", () => ({
   useThreadSelection: () => ({ selectedThread: null }),

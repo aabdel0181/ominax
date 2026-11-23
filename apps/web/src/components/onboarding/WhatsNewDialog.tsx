@@ -144,9 +144,7 @@ function WhatsNewDialog({
           break;
         }
         case "lessons-filter": {
-          const button = document.querySelector<HTMLButtonElement>(
-            '[aria-label^="Filter threads"]',
-          );
+          const button = document.querySelector<HTMLButtonElement>("[data-sidebar-project-scope]");
           if (button) button.click();
           else void navigate({ to: "/settings/threads" });
           break;

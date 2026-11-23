@@ -3173,6 +3173,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   <ComboboxTrigger
                     render={
                       <SidebarHeaderIconButton
+                        // What's new opens this menu; its label changes with the scope and language.
+                        data-sidebar-project-scope=""
                         label={
                           lessonsOnly
                             ? gt("Filter threads: lessons only")
