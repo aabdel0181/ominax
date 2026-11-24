@@ -47,6 +47,7 @@ import {
 } from "@t3tools/source-control-core/server/IssueTracker";
 import { asIssueTrackerAccount } from "@t3tools/source-control-core/server/IssueTrackerHost";
 import { parseUrl } from "@t3tools/shared/url";
+import { T3_LEARN_PRODUCT_NAME } from "@t3tools/shared/t3LearnIdentity";
 
 import * as IssueTrackerBindings from "../persistence/IssueTrackerBindings.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -824,7 +825,10 @@ const make = Effect.gen(function* () {
       if (standalone === null) {
         const found = serve(onTracker);
         if (found === null) {
-          return yield* new IssueUnavailableError({ reason: "tracker-unsupported" });
+          return yield* new IssueOperationError({
+            operation: "resolveUrl",
+            detail: `No project in ${T3_LEARN_PRODUCT_NAME} is on ${link.host}. Add any ${link.host} project to read its issues.`,
+          });
         }
         return found.resolved;
       }

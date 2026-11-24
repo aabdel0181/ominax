@@ -2,6 +2,7 @@ import type { ClientConnectionMethod, EnvironmentId } from "@t3tools/contracts";
 import type { RelayProtectedError } from "@t3tools/contracts/relay";
 import type { ManagedRelayClientError } from "../relay/managedRelay.ts";
 import { msg } from "gt-i18n";
+import { T3_LEARN_PRODUCT_NAME } from "@t3tools/shared/t3LearnIdentity";
 import { dpopFailureText, relayProtectedErrorText } from "../relay/errorPresentation.ts";
 import type { RemoteEnvironmentAuthError } from "../authorization/remote.ts";
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
@@ -54,10 +55,10 @@ export function environmentMismatchError(input: {
   return new ConnectionBlockedError({
     reason: "configuration",
     ...translatableDetail(
-      msg("Connected environment {actual} does not match {expected}.", {
-        actual: input.actual,
-        expected: input.expected,
-      }),
+      msg(
+        "This address now runs a different {app} install ({actual}, not {expected}). Remove this connection and add it again.",
+        { actual: input.actual, expected: input.expected, app: T3_LEARN_PRODUCT_NAME },
+      ),
     ),
   });
 }

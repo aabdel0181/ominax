@@ -929,6 +929,7 @@ it.effect(
         );
       const input = {
         cwd: "/tmp",
+        projectCwd: "/tmp",
         number: 1,
         title: "Change",
         description: "",

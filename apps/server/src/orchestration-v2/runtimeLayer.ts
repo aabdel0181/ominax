@@ -200,6 +200,8 @@ const layerProviderTurnStartServiceProvided = ProviderTurnStartService.layer.pip
       // The same instance the effect worker settles, so a turn start can await an opening summary.
       EffectOutbox.layer,
       TurnItemPositionStore.layer,
+      // The same instance as thread management's, which hands over send-time recreations.
+      layerThreadWorktreeRestore,
     ),
   ),
 );

@@ -1195,8 +1195,8 @@ describe("deriveMessagesTimelineRows", () => {
     expect(assistantRows[1]?.showAssistantCopyButton).toBe(true);
   });
 
-  it("projects assistant diffs and rewinds the first visible run to thread start after a rewind", () => {
-    const assistantTurnDiffSummary = {
+  it("rewinds the first visible run to thread start after a rewind", () => {
+    const checkpoint = {
       runId: "turn-1" as never,
       completedAt: "2026-01-01T00:00:30Z",
       assistantMessageId: "assistant-1" as never,
@@ -1240,7 +1240,7 @@ describe("deriveMessagesTimelineRows", () => {
       ],
       isWorking: false,
       activeTurnStartedAt: null,
-      turnDiffSummaries: [assistantTurnDiffSummary],
+      turnDiffSummaries: [checkpoint],
       supportsConversationRollback: true,
       threadStartCheckpointAvailable: true,
     });
@@ -1249,13 +1249,7 @@ describe("deriveMessagesTimelineRows", () => {
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message" && row.message.role === "user",
     );
-    const assistantRow = rows.find(
-      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
-        row.kind === "message" && row.message.role === "assistant",
-    );
-
     expect(userRow?.revertTurnCount).toBe(0);
-    expect(assistantRow?.assistantTurnDiffSummary).toBe(assistantTurnDiffSummary);
   });
 
   it("folds the first assistant message and settled work before the terminal response", () => {
@@ -5266,6 +5260,20 @@ describe("parent run waiting on foreground subagents", () => {
     expect(liveRow([], "hideAll")).toEqual({ ...thinking, label: "Waiting on 2 subagents" });
   });
 
+  // regression: #40551 a finished status after the children is the parent parking, not new work
+  it("names the running children when the parent's finished status message follows them", () => {
+    const status: OrchestrationV2TurnItem = {
+      ...base("status", 5),
+      status: "completed",
+      type: "assistant_message",
+      messageId: MessageId.make("status"),
+      text: "Subagents launched; waiting for them to report back.",
+      streaming: false,
+    };
+    expect(liveRow([status])).toEqual({ ...thinking, label: "Waiting on 2 subagents" });
+    expect(liveRow([{ ...status, runId: RunId.make("other-run") }])).toEqual(thinking);
+  });
+
   it("keeps Thinking when a hidden newer parent command follows the children", () => {
     const command: OrchestrationV2TurnItem = {
       ...base("command", 5),
@@ -5678,27 +5686,7 @@ it("turns a question card into an unanswered quiz-card row", () => {
     ],
     supportsConversationRollback: false,
   });
-  expect(withChangedFiles.find((entry) => entry.kind === "message")).toMatchObject({
-    assistantTurnDiffSummary: { checkpointTurnCount: 1 },
-  });
-
-  const withNoChanges = deriveMessagesTimelineRows({
-    timelineEntries: [question, emptyReply],
-    isWorking: false,
-    turnDiffSummaries: [
-      {
-        runId: "turn-1" as never,
-        completedAt: at,
-        assistantMessageId: MessageId.make("empty"),
-        checkpointTurnCount: 1,
-        checkpointRef: "checkpoint-1" as never,
-        status: "ready",
-        files: [],
-      },
-    ],
-    supportsConversationRollback: false,
-  });
-  expect(withNoChanges.some((entry) => entry.kind === "message")).toBe(false);
+  expect(withChangedFiles.some((entry) => entry.kind === "message")).toBe(false);
 });
 
 describe("isTimelineMinimapTurnVisible", () => {

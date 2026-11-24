@@ -5,6 +5,8 @@ import {
 } from "@t3tools/shared/htmlRender";
 import { useRef, useState } from "react";
 import { page, userEvent } from "vite-plus/test/browser";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import "~/index.css";
@@ -17,6 +19,17 @@ import {
   HtmlRenderDocument,
   type HtmlRenderDocumentHandle,
 } from "./BrowserDocumentFrame";
+
+const links = vi.hoisted(() => ({
+  openLink: vi.fn(async () => undefined),
+  openChangeRequestLink: vi.fn(() => false),
+  openIssueLink: vi.fn(() => true),
+}));
+vi.mock("~/browser/useOpenLink", () => ({ useOpenLink: () => links.openLink }));
+vi.mock("~/lib/openPullRequestLink", () => ({
+  useOpenChangeRequestLink: () => links.openChangeRequestLink,
+}));
+vi.mock("~/lib/openIssueLink", () => ({ useOpenIssueLink: () => links.openIssueLink }));
 
 const sizeChanged = (height: number) => ({
   jsonrpc: "2.0",
@@ -67,6 +80,30 @@ describe("HtmlRenderDocument", () => {
     await expect.element(viewer.getByAltText("Green")).toBeVisible();
     await expect.element(viewer.getByRole("button", { name: "Next media" })).toBeVisible();
     await expect.element(viewer.getByRole("button", { name: "Previous media" })).toBeVisible();
+  });
+
+  it("opens a clicked issue link beside the thread, as chat Markdown does", async () => {
+    const issueUrl = "https://github.com/pingdotgg/t3code/issues/41939";
+    const html = injectHtmlRenderBootstrap(
+      `<!doctype html><html><body><a href="${issueUrl}">Issue #41939</a></body></html>`,
+    );
+    const src = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    using _url = { [Symbol.dispose]: () => URL.revokeObjectURL(src) };
+    const threadRef = scopeThreadRef(EnvironmentId.make("local"), ThreadId.make("thread"));
+    await using screen = await render(
+      <HtmlRenderDocument src={src} title="Links" threadRef={threadRef} />,
+    );
+
+    await page.frameLocator(screen.getByTitle("Links")).getByRole("link").click();
+
+    // The frame tries the pull request handler first, then settles the click in the same call.
+    await vi.waitFor(() => expect(links.openChangeRequestLink).toHaveBeenCalled());
+    expect(links.openLink).not.toHaveBeenCalled();
+    expect(links.openIssueLink).toHaveBeenCalledWith(
+      expect.anything(),
+      issueUrl,
+      threadRef.environmentId,
+    );
   });
 });
 
