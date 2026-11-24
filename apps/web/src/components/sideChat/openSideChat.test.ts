@@ -189,7 +189,8 @@ describe("openSideChatFromSelection", () => {
       topThreadId: null,
       run: unexplained.run,
     });
-    unexplained.settle(AsyncResult.failure(Cause.fail("offline")));
+    // A string failure shows its own text; any other value gets the fallback.
+    unexplained.settle(AsyncResult.failure(Cause.fail({ status: 503 })));
     await expect(unexplainedOutcome).resolves.toEqual({
       _tag: "Failed",
       message: "The side chat could not start.",
