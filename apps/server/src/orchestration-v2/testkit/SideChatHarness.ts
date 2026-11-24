@@ -147,11 +147,13 @@ export const makeSideChatHarness = Effect.fn("makeSideChatHarness")(function* (n
   const awaitEvent = (after: number, predicate: (event: OrchestrationV2DomainEvent) => boolean) =>
     awaitPicked(after, (event) => (predicate(event) ? event : undefined));
 
+  // A run completes before its turn-end checkpoint capture; `completed` waits for both.
   const awaitRun = (after: number, messageId: MessageId, status: OrchestrationV2Run["status"]) =>
     awaitPicked(after, (event) =>
       event.type === "run.updated" &&
       event.payload.userMessageId === messageId &&
-      event.payload.status === status
+      event.payload.status === status &&
+      (status !== "completed" || event.payload.checkpointId !== null)
         ? event.payload
         : undefined,
     );
