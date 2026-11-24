@@ -110,6 +110,17 @@ it.layer(layerTest)("lesson Ultracode cap", (it) => {
       const queued = (yield* projections.getThreadProjection(threadId)).runs.at(-1);
       assert.equal(queued?.status, "queued");
       assert.deepEqual(queued?.modelSelection.options, capped);
+
+      yield* orchestrator.dispatch({
+        type: "queued-run.edit",
+        commandId: CommandId.make("edit:lesson-ultracode-queued"),
+        threadId,
+        runId: queued!.id,
+        text: "and then, harder",
+        modelSelection: ultracode,
+      });
+      const edited = (yield* projections.getThreadProjection(threadId)).runs.at(-1);
+      assert.deepEqual(edited?.modelSelection.options, capped);
     }),
   );
 

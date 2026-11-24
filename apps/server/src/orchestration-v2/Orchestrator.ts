@@ -12962,7 +12962,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: "A guest's message cannot be edited. Cancel it instead.",
       });
     }
-    const modelSelection = command.modelSelection ?? queuedRunModelSelection(projection, queuedRun);
+    const modelSelection =
+      command.modelSelection === undefined
+        ? queuedRunModelSelection(projection, queuedRun)
+        : projection.thread.lesson === undefined && projection.thread.sideChat === undefined
+          ? command.modelSelection
+          : withoutUltracode(command.modelSelection);
     yield* ensureGoalCommandSupported(
       command,
       { text: command.text, attachments: command.attachments ?? queuedMessage.attachments },

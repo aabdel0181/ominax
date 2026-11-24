@@ -3992,7 +3992,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     private: true,
     packageManager: rootPackageJson.packageManager,
     description:
-      "OminaX is a fork of T3 Code for learning with AI. Highlight anything in a reply and ask about it in a side chat next to the lesson. It installs next to T3 Code and keeps its own data.",
+      "OminaX is an unofficial fork of T3 Code for learning with AI, not affiliated with T3 Tools, Inc. Highlight anything in a reply and ask about it in a side chat next to the lesson. It installs next to T3 Code and keeps its own data.",
     license: "MIT",
     homepage: "https://github.com/aabdel0181/ominax",
     author: "aabdel0181",

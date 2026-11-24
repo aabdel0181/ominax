@@ -23,6 +23,7 @@ import { Atom } from "effect/reactivity";
 
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
+import { useEnvironmentProviders } from "~/state/environments";
 import { environmentThreadDetails } from "~/state/threads";
 import { answeredCardAnswers } from "@t3tools/shared/quizCard";
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
@@ -102,7 +103,8 @@ export function SideChatTimeline(props: {
   const citationHistory = useCitedHistory(props.citationRequest);
 
   // Run state as ChatView derives it for a server thread.
-  const activityRun = projection === null ? null : deriveThreadActivityRun(projection);
+  const providers = useEnvironmentProviders().get(props.sideChatRef.environmentId);
+  const activityRun = projection === null ? null : deriveThreadActivityRun(projection, providers);
   const runtime = projection === null ? null : deriveThreadStructureRuntime(projection);
   const runlessWorkStartedAt = projection === null ? null : deriveRunlessWorkStartedAt(projection);
   const isWorking = deriveTimelineWorking({
