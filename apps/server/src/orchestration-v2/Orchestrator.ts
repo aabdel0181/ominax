@@ -17114,9 +17114,18 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 (cause) => new OrchestratorProjectionError({ threadId: deletion.threadId, cause }),
               ),
             );
-          return hasSideChats
-            ? { ...plan, effects: [...plan.effects, sideChatCascadeEffect(deletion, "delete")] }
-            : plan;
+          if (!hasSideChats) return plan;
+          // Before the purge, which skips a thread that still has other pending effects.
+          const isPurge = (effect: (typeof plan.effects)[number]) =>
+            effect.request.type === "thread-content.purge";
+          return {
+            ...plan,
+            effects: [
+              ...plan.effects.filter((effect) => !isPurge(effect)),
+              sideChatCascadeEffect(deletion, "delete"),
+              ...plan.effects.filter(isPurge),
+            ],
+          };
         });
         // Checked under the thread lock: a message sent since the client looked keeps the thread.
         if (command.onlyIfUnused === true) {

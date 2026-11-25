@@ -37,6 +37,7 @@ import * as EffectOutbox from "../EffectOutbox.ts";
 import * as EffectWorker from "../EffectWorker.ts";
 import * as EventSink from "../EventSink.ts";
 import * as Orchestrator from "../Orchestrator.ts";
+import * as ProjectionMaintenance from "../ProjectionMaintenance.ts";
 import * as ProviderAdapterRegistry from "../ProviderAdapterRegistry.ts";
 import * as ThreadManagementService from "../ThreadManagementService.ts";
 import { SIDE_CHAT_OPENING_FRAMING } from "../sideChat/sideChatText.ts";
@@ -1292,6 +1293,9 @@ describe("side chat cascade", () => {
       yield* worker.drain();
       assert.isNull(yield* orchestrator.getThreadShell(space));
       assert.isNull(yield* orchestrator.getThreadShell(box));
+      // The cascade runs before the lesson's purge, which skips a thread with other pending work.
+      const lesson = yield* orchestrator.getThreadProjection(LESSON_THREAD_ID);
+      assert.equal(lesson.thread.title, ProjectionMaintenance.DELETED_THREAD_TITLE);
     }).pipe(Effect.provide(openHarness())),
   );
 
