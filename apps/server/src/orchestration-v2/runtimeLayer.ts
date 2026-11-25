@@ -420,6 +420,7 @@ const layerEffectExecutorProvided = EffectWorker.layerExecutor.pipe(
       layerSideChatLifecycleProvided,
       layerThreadManagementProvided,
       ProjectionStore.layer,
+      layerProjectionMaintenanceProvided,
     ),
   ),
 );

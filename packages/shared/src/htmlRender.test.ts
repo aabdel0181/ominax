@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  htmlRenderFileName,
   injectHtmlRenderBootstrap,
   readHtmlRenderImageRequest,
   readHtmlRenderSelection,
@@ -23,6 +24,15 @@ describe("readHtmlRenderReference forCard", () => {
       ...reference,
       ...(expected === undefined ? {} : { forCard: expected }),
     });
+  });
+});
+
+describe("htmlRenderFileName", () => {
+  it("never ends on half of an emoji at the length limit", () => {
+    const fits = "a".repeat(118);
+    const crosses = "a".repeat(119);
+    expect(htmlRenderFileName(`${fits}🚀 report`)).toBe(`${fits}🚀.html`);
+    expect(htmlRenderFileName(`${crosses}🚀 report`)).toBe(`${crosses}.html`);
   });
 });
 
