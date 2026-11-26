@@ -80,7 +80,7 @@ const { autoBootstrapProjectFromCwd: _, ...serveCommandFlags } = sharedServerCom
 export const serveCommand = Command.make("serve", serveCommandFlags).pipe(
   Command.withShortDescription(`Run ${T3_LEARN_PRODUCT_NAME} in this terminal, with no browser.`),
   Command.withDescription(
-    `Run ${T3_LEARN_PRODUCT_NAME} in this terminal without opening a browser, and print pairing details. The background service runs this. To set up access from your other devices, run \`${T3_LEARN_COMMAND} up\`.`,
+    `Run ${T3_LEARN_PRODUCT_NAME} in this terminal without opening a browser, and print pairing details. The background service runs this too, without printing them: pair with \`${T3_LEARN_COMMAND} pair\`. To set up access from your other devices, run \`${T3_LEARN_COMMAND} up\`.`,
   ),
   Command.withHandler((flags) =>
     runServerCommand(
