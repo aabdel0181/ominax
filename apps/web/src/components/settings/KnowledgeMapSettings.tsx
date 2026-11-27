@@ -9,7 +9,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { errorMessage } from "../CommandPalette.logic";
 import { Button } from "../ui/button";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
 
 const knowledgeAtom = environmentAtomList("web-knowledge-map", (id) =>
@@ -20,6 +20,7 @@ const permissionsAtom = environmentAtomList(
   serverEnvironment.removeKnowledge.permissionAtom,
 );
 export function KnowledgeMapSection() {
+  const searchableSetting = useSearchableSetting();
   const { connectedEnvironments } = useSettingsScope();
   const supported = connectedEnvironments.filter(
     (e) => e.serverConfig?.environment.capabilities.knowledgeMap === true,

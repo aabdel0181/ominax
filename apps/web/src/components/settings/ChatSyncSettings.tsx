@@ -7,7 +7,7 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
 
 const chatSyncStatusesAtom = environmentAtomList("web-chat-sync-statuses", (environmentId) =>
@@ -34,6 +34,7 @@ function statusText(status: ChatSyncStatus): string {
 }
 
 export function ChatSyncSection() {
+  const searchableSetting = useSearchableSetting();
   const { connectedEnvironments } = useSettingsScope();
   const [pending, setPending] = useState(false);
   const start = useAtomCommand(serverEnvironment.startChatSync);

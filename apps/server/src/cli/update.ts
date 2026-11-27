@@ -25,6 +25,7 @@ import * as BootService from "../cloud/bootService.ts";
 import {
   ensurePinnedRuntimeInstalled,
   findPosixLauncher,
+  generatedWindowsShimTarget,
   launcherOwnsVersionsDir,
   isUnpublishedRelease,
   pinnedRuntimePaths,
@@ -38,6 +39,7 @@ import {
 } from "../cloud/pinnedRuntime.ts";
 import {
   compareExactServiceVersions,
+  decodeServiceUnit,
   isExactServiceVersion,
   SERVICE_LAUNCHER_PROTOCOL,
 } from "../cloud/serviceProtocol.ts";
@@ -172,7 +174,7 @@ export const repointLauncher = Effect.fn("cli.update.repoint_launcher")(function
     );
 
   if (platform === "win32") {
-    const shimPath = yield* findWindowsShim(input.launchedAs);
+    const shimPath = yield* findWindowsShim(input.launchedAs, versionsDir);
     if (shimPath === undefined) return Option.none<string>();
     const current = yield* fs.readFileString(shimPath).pipe(Effect.option);
     const quoted = Option.isSome(current) ? windowsShimTarget(current.value) : undefined;
@@ -204,25 +206,41 @@ export const repointLauncher = Effect.fn("cli.update.repoint_launcher")(function
   return Option.some(launcher);
 });
 
-/** Windows executables see their own path, so find the installer shim by matching t3.cmd targets on PATH. */
+/** Windows executables see their own path, so locate the installer shim by matching its target. */
 export const findWindowsShim = Effect.fn("cli.update.find_windows_shim")(function* (
   executablePath: string,
+  versionsDir?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const environment = yield* HostProcess.Environment;
+  const shimNames = [`${T3_LEARN_COMMAND}.cmd`, "t3.cmd"];
   const candidates = [
     ...(environment["T3CODE_INSTALL_BIN_DIR"] ? [environment["T3CODE_INSTALL_BIN_DIR"]] : []),
     ...(environment["PATH"] ?? environment["Path"] ?? "").split(";"),
-  ].filter((entry) => entry.trim().length > 0);
-  // `ominax install` writes ominax.cmd; upstream's install scripts write t3.cmd.
-  const shimPaths = candidates.flatMap((directory) =>
-    [`${T3_LEARN_COMMAND}.cmd`, "t3.cmd"].map((name) => path.join(directory, name)),
-  );
-  for (const shimPath of shimPaths) {
+  ]
+    .filter((entry) => entry.trim().length > 0)
+    // `ominax install` writes ominax.cmd; upstream's install scripts write t3.cmd.
+    .flatMap((directory) =>
+      shimNames.map((name) => ({
+        shimPath: path.join(directory, name),
+        parseTarget: windowsShimTarget,
+      })),
+    );
+  if (versionsDir !== undefined) {
+    const recorded = yield* fs
+      .readFileString(path.join(path.dirname(versionsDir), "launchers"))
+      .pipe(Effect.orElseSucceed(() => ""));
+    for (const shimPath of recorded.split(/\r?\n/)) {
+      if (path.isAbsolute(shimPath) && shimNames.includes(path.basename(shimPath).toLowerCase())) {
+        candidates.push({ shimPath, parseTarget: generatedWindowsShimTarget });
+      }
+    }
+  }
+  for (const { shimPath, parseTarget } of candidates) {
     const contents = yield* fs.readFileString(shimPath).pipe(Effect.option);
     if (Option.isNone(contents)) continue;
-    const target = windowsShimTarget(contents.value);
+    const target = parseTarget(contents.value);
     if (
       target !== undefined &&
       path.resolve(target).toLowerCase() === path.resolve(executablePath).toLowerCase()
@@ -586,7 +604,9 @@ export const runUpdate = Effect.fn("cli.update.run")(function* (input: {
   // A handed-off service install rewrites the unit later, while the old launcher may be stopped.
   if (servicePlan?.handedOff !== true) {
     // A stopped service's unit still names the launcher runtime it will start.
-    const unit = yield* fs.readFileString(status.unitPath).pipe(Effect.option);
+    const unit = yield* fs
+      .readFile(status.unitPath)
+      .pipe(Effect.map(decodeServiceUnit), Effect.option);
     yield* prunePinnedRuntimes({
       baseDir: input.baseDir,
       keep: [currentVersion, targetVersion],

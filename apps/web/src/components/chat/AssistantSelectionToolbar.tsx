@@ -5,6 +5,7 @@ import {
   type AssistantCitation,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { BookOpenIcon, MessageCircleQuestionIcon, QuoteIcon } from "lucide-react";
 import { use, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -82,6 +83,7 @@ export function AssistantSelectionToolbar({
   // A sheet traps focus and dismisses on outside presses, so the toolbar must live inside it.
   const sheet = viewport?.closest<HTMLElement>('[data-slot="sheet-popup"]') ?? null;
   const backgroundThread = use(BackgroundThreadContext);
+  const gt = useGT();
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the toolbar DOM node and clamps its position inside the window before paint
   useLayoutEffect(() => {
@@ -187,6 +189,7 @@ export function AssistantSelectionToolbar({
       element: viewport,
       getActionElement: () => toolbarRef.current,
       restoreAfterScroll: true,
+      immediateMultiClick: true,
       onSelection: update,
       onDismiss: clear,
     });
@@ -301,7 +304,7 @@ export function AssistantSelectionToolbar({
     <div
       ref={toolbarRef}
       role="toolbar"
-      aria-label="Selection actions"
+      aria-label={gt("Selection actions")}
       className={`${sheet ? "absolute" : "fixed"} z-50 flex max-w-[calc(100vw-1rem)] items-center gap-1`}
       style={{ left: selection.position.x, top: selection.position.y }}
       onPointerDown={(event) => event.preventDefault()}
@@ -330,12 +333,16 @@ export function AssistantSelectionToolbar({
         variant="glass"
         disabled={citeTooLong}
         tabIndex={rovingAction === "cite" ? 0 : -1}
-        aria-label={citeTooLong ? "Selection is too long to cite" : "Cite selection in composer"}
+        aria-label={
+          citeTooLong ? gt("Selection is too long to cite") : gt("Cite selection in composer")
+        }
         onFocus={() => setFocusedAction("cite")}
         onClick={cite}
       >
         <QuoteIcon aria-hidden="true" className="size-3.5" />
-        {citeTooLong ? "Shorten selection" : "Cite"}
+        {citeTooLong
+          ? gt("Shorten selection")
+          : gt("Cite", { $context: "verb, button that quotes the selected text" })}
       </Button>
       {offersAskHere ? (
         <AskInSideChatButton
@@ -353,12 +360,14 @@ export function AssistantSelectionToolbar({
           variant="glass"
           disabled={askTooLong}
           tabIndex={rovingAction === "lesson" ? 0 : -1}
-          aria-label={askTooLong ? "Shorten selection to create a lesson" : "Create a lesson"}
+          aria-label={
+            askTooLong ? gt("Shorten selection to create a lesson") : gt("Create a lesson")
+          }
           onFocus={() => setFocusedAction("lesson")}
           onClick={createLesson}
         >
           <BookOpenIcon className="size-3.5" />
-          {askTooLong ? "Shorten selection" : "Create a lesson"}
+          {askTooLong ? gt("Shorten selection") : gt("Create a lesson")}
         </Button>
       ) : null}
     </div>,
@@ -379,6 +388,7 @@ export function AskInSideChatButton({
   onFocus?: () => void;
   onClick: () => void;
 }) {
+  const gt = useGT();
   return (
     <Tooltip
       onOpenChange={(_open, details) => {
@@ -395,7 +405,9 @@ export function AskInSideChatButton({
             tabIndex={tabIndex}
             aria-disabled={blockedReason !== null || undefined}
             aria-description={blockedReason ?? undefined}
-            aria-label={tooLong ? "Shorten selection to ask in side chat" : "Ask in side chat"}
+            aria-label={
+              tooLong ? gt("Shorten selection to ask in side chat") : gt("Ask in side chat")
+            }
             onFocus={onFocus}
             onClick={() => {
               if (blockedReason === null) onClick();
@@ -404,7 +416,7 @@ export function AskInSideChatButton({
         }
       >
         <MessageCircleQuestionIcon aria-hidden="true" className="size-3.5" />
-        {tooLong ? "Shorten selection" : "Ask in side chat"}
+        {tooLong ? gt("Shorten selection") : gt("Ask in side chat")}
       </TooltipTrigger>
       {blockedReason ? <TooltipPopup side="top">{blockedReason}</TooltipPopup> : null}
     </Tooltip>

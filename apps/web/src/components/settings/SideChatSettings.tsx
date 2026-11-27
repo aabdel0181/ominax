@@ -37,7 +37,7 @@ import {
   ComboboxSearchInput,
   ComboboxTrigger,
 } from "../ui/combobox";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import { hasSideChatSettings } from "./sideChatSettingsSupport";
 import {
   SETTINGS_PICKER_TRIGGER_CLASSNAME,
@@ -49,6 +49,7 @@ import {
 const normalizeSkillName = (name: string) => name.trim().replace(/^[\p{Sc}/]+/u, "");
 
 export function SideChatSettings() {
+  const searchableSetting = useSearchableSetting();
   const settings = useScopedSettings();
   const update = useUpdateScopedSettings();
   const { environment } = useSettingsScope();
@@ -256,7 +257,7 @@ export function SideChatSettings() {
         resetAction={
           mixedInstructions || settings.sideChatInstructions ? (
             <SettingResetButton
-              label="side chat instructions"
+              ariaLabel="Reset side chat instructions to default"
               onClick={() => update({ sideChatInstructions: "" })}
             />
           ) : null
@@ -294,7 +295,10 @@ export function SideChatSettings() {
         description="Skills are attached when a side chat starts, where its provider has them."
         resetAction={
           mixedSkills || skills.length > 0 ? (
-            <SettingResetButton label="side chat skills" onClick={() => saveSkills([])} />
+            <SettingResetButton
+              ariaLabel="Reset side chat skills to default"
+              onClick={() => saveSkills([])}
+            />
           ) : null
         }
       >

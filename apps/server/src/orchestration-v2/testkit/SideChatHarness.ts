@@ -94,6 +94,14 @@ export const makeSideChatHarness = Effect.fn("makeSideChatHarness")(function* (n
   };
 
   const openingScripts = new Map<string, Array<SideChatNoteScript>>();
+  const openingRequests = new Map<string, Deferred.Deferred<void>>();
+  const openingRequest = (marker: string): Deferred.Deferred<void> => {
+    const existing = openingRequests.get(marker);
+    if (existing !== undefined) return existing;
+    const created = Deferred.makeUnsafe<void>();
+    openingRequests.set(marker, created);
+    return created;
+  };
 
   const sideChatTextGeneration = Effect.fn("SideChatHarness.generateSideChatText")(function* (
     input: TextGeneration.SideChatTextGenerationInput,
@@ -103,6 +111,8 @@ export const makeSideChatHarness = Effect.fn("makeSideChatHarness")(function* (n
         ([marker, scripts]) => scripts.length > 0 && input.prompt.includes(marker),
       );
       const script = scriptEntry?.[1].shift();
+      if (scriptEntry !== undefined)
+        yield* Deferred.succeed(openingRequest(scriptEntry[0]), undefined);
       return yield* runNoteScript(script ?? { text: null });
     }
     const excerpt = outcomeExcerpt(input.prompt) ?? "";
@@ -137,11 +147,13 @@ export const makeSideChatHarness = Effect.fn("makeSideChatHarness")(function* (n
   const awaitEvent = (after: number, predicate: (event: OrchestrationV2DomainEvent) => boolean) =>
     awaitPicked(after, (event) => (predicate(event) ? event : undefined));
 
+  // A run completes before its turn-end checkpoint capture; `completed` waits for both.
   const awaitRun = (after: number, messageId: MessageId, status: OrchestrationV2Run["status"]) =>
     awaitPicked(after, (event) =>
       event.type === "run.updated" &&
       event.payload.userMessageId === messageId &&
-      event.payload.status === status
+      event.payload.status === status &&
+      (status !== "completed" || event.payload.checkpointId !== null)
         ? event.payload
         : undefined,
     );
@@ -287,6 +299,8 @@ export const makeSideChatHarness = Effect.fn("makeSideChatHarness")(function* (n
     },
     /** Resolves once the note writer has asked for a note on `excerpt`. */
     noteRequested: (excerpt: string) => Deferred.await(noteRequest(excerpt)),
+    /** Resolves once the summary writer has asked for an opening scripted under `marker`. */
+    openingRequested: (marker: string) => Deferred.await(openingRequest(marker)),
     finishHeldTurn: provider.finishHeldTurn,
     mark,
     awaitEvent,

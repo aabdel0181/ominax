@@ -260,21 +260,35 @@ describe("side-chat notes", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("a scheduled-task message neither carries nor consumes notes", () =>
+  it.effect.each([
+    { name: "scheduled", text: "Run the nightly check.", scheduled: true },
+    // A slash command's turn defers inline context, so it must not show notes as included.
+    { name: "slash", text: "/review the plan", scheduled: false },
+  ])("a $name lesson message neither carries nor consumes notes", ({ name, text, scheduled }) =>
     Effect.gen(function* () {
-      const harness = yield* makeSideChatHarness("side-chat-notes-scheduled");
+      const harness = yield* makeSideChatHarness(`side-chat-notes-${name}`);
       yield* Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
         const lesson = yield* lessonWithSpaceNote(harness);
+        const notesItems = Effect.map(orchestrator.getThreadProjection(lesson), (projection) =>
+          projection.turnItems.filter(
+            (item) => item.type === "handoff" && item.title === SIDE_CHAT_NOTES_HANDOFF_TITLE,
+          ),
+        );
 
-        yield* harness.send(lesson, "Run the nightly check.", {
-          scheduledTaskId: ScheduledTaskId.make("scheduled:nightly"),
-        });
+        yield* harness.send(
+          lesson,
+          text,
+          scheduled ? { scheduledTaskId: ScheduledTaskId.make("scheduled:nightly") } : {},
+        );
 
         assert.equal(headerCount(harness.prompts(lesson).at(-1) ?? ""), 0);
         assert.isUndefined((yield* harness.thread(lesson)).sideChatNoteDeliveries);
+        assert.lengthOf(yield* notesItems, 0);
 
         yield* harness.send(lesson, "Continue the lesson.");
         assert.include(harness.prompts(lesson).at(-1), spaceLine);
+        assert.lengthOf(yield* notesItems, 1);
       }).pipe(Effect.provide(harness.layer));
     }).pipe(Effect.scoped),
   );
@@ -489,6 +503,36 @@ describe("side-chat notes", () => {
 
         yield* harness.finishHeldTurn(space);
         yield* harness.awaitRun(after, question, "completed");
+      }).pipe(Effect.provide(harness.layer));
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("a lesson steer requeued after its turn leaves an answered side chat open", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeSideChatHarness("side-chat-notes-requeued-steer");
+      yield* Effect.gen(function* () {
+        const lesson = yield* harness.createLesson("Teach me RL environments.");
+        const after = yield* harness.mark;
+        const steer = yield* harness.send(lesson, "Explain rewards.");
+        const run = yield* harness.awaitRun(after, steer, "completed");
+        const space = yield* harness.openSideChat({ parentThreadId: lesson, label: SPACE });
+        yield* harness.send(space, SPACE_QUESTION);
+
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make(`command:unread-steer:${run.id}:${steer}`),
+          threadId: lesson,
+          messageId: steer,
+          steerFollowUpOfRunId: run.id,
+          text: "Explain rewards.",
+          attachments: [],
+          dispatchMode: { type: "queue_after_active" },
+          createdBy: "user",
+          creationSource: "web",
+        });
+
+        assert.isNull((yield* harness.thread(space)).sideChat?.done);
       }).pipe(Effect.provide(harness.layer));
     }).pipe(Effect.scoped),
   );

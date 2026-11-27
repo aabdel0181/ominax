@@ -14,6 +14,7 @@ import {
   readFilePreviewScroll,
   type HtmlRenderShortcut,
   htmlRenderShortcutsMessage,
+  HTML_RENDER_CONTAIN_SCROLL_FRAGMENT,
   htmlRenderThemeFragment,
   htmlRenderThemeMessage,
   htmlRenderResult,
@@ -32,6 +33,7 @@ import {
 } from "@t3tools/shared/keybindings";
 import {
   lazy,
+  type ReactNode,
   Suspense,
   useEffect,
   useEffectEvent,
@@ -55,6 +57,7 @@ import { ExpandedImageDialog } from "~/components/chat/ExpandedImageDialog";
 import type { ExpandedImagePreview } from "~/components/chat/ExpandedImagePreview";
 import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { shortcutConflictKey } from "~/keybindings";
+import { useOpenIssueLink } from "~/lib/openIssueLink";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
 import { readLocalApi } from "~/localApi";
 import { cn, randomUUID } from "~/lib/utils";
@@ -90,7 +93,13 @@ export const isPdfPreviewFile = (path: string): boolean =>
 const PdfViewer = lazy(() => import("./PdfViewer"));
 
 // The document stays mounted while each revision gets a fresh PDF.js document.
-function PdfDocument(props: { src: string; title: string; documentKey: string }) {
+function PdfDocument(props: {
+  src: string;
+  title: string;
+  documentKey: string;
+  threadRef: ScopedThreadRef | undefined;
+  actions?: ReactNode;
+}) {
   const [view, setView] = useState<PdfViewState>({ page: 0, offset: 0, zoom: null, left: 0 });
   return (
     <PdfDocumentRevision
@@ -100,6 +109,8 @@ function PdfDocument(props: { src: string; title: string; documentKey: string })
       positionKey={props.documentKey}
       initialView={view}
       onViewChange={setView}
+      threadRef={props.threadRef}
+      actions={props.actions}
     />
   );
 }
@@ -111,8 +122,11 @@ function PdfDocumentRevision(props: {
   positionKey: string;
   initialView: PdfViewState;
   onViewChange: (view: PdfViewState) => void;
+  threadRef: ScopedThreadRef | undefined;
+  actions?: ReactNode;
 }) {
   const [src] = useState(props.src);
+  const openLink = useOpenLink(props.threadRef);
   // The Electron shell does not enable PDF plugins. WebKit embeds on iOS
   // expose only the first page, even when pdfViewerEnabled reports support.
   const native =
@@ -135,6 +149,10 @@ function PdfDocumentRevision(props: {
         positionKey={props.positionKey}
         initialView={props.initialView}
         onViewChange={props.onViewChange}
+        onOpenLink={(url, event) => {
+          void openLink(url, { event }).catch((cause: unknown) => console.error(cause));
+        }}
+        actions={props.actions}
       />
     </Suspense>
   );
@@ -154,6 +172,8 @@ export function BrowserDocumentFrame(props: {
   readonly documentKey?: string | undefined;
   /** Resource identity without its revision, so PDF reloads can retain the reading position. */
   readonly documentId?: string | undefined;
+  /** Toolbar actions for the in-app PDF viewer; Chromium's own viewer brings its own. */
+  readonly pdfActions?: ReactNode;
 }) {
   const key = props.documentKey ?? props.src;
   return props.pdf ? (
@@ -162,6 +182,8 @@ export function BrowserDocumentFrame(props: {
       documentKey={key}
       src={props.src}
       title={props.title}
+      threadRef={props.threadRef}
+      actions={props.pdfActions}
     />
   ) : props.htmlRender ? (
     <HtmlRenderDocument
@@ -301,10 +323,12 @@ export function HtmlRenderAskButton(props: {
       <TooltipTrigger
         render={
           <Button
+            // oxlint-disable-next-line t3code/no-untranslated-copy -- OminaX copy, English until the fork translates it
             aria-label="Ask in side chat"
             size="icon-xs"
             variant="glass"
             aria-disabled={props.askPending || undefined}
+            // oxlint-disable-next-line t3code/no-untranslated-copy -- OminaX copy, English until the fork translates it
             aria-description={props.askPending ? "Starting side chat…" : undefined}
             onClick={() => {
               if (!props.askPending) props.onClick();
@@ -315,6 +339,7 @@ export function HtmlRenderAskButton(props: {
         <MessageCircleQuestionIcon aria-hidden="true" className="size-3.5" />
       </TooltipTrigger>
       <TooltipPopup side="left">
+        {/* oxlint-disable-next-line t3code/no-untranslated-copy -- OminaX copy, English until the fork translates it */}
         {props.askPending ? "Starting side chat…" : "Ask in side chat"}
       </TooltipPopup>
     </Tooltip>
@@ -335,12 +360,17 @@ export function HtmlRenderDocument({
   readonly className?: string;
   readonly threadRef?: ScopedThreadRef | undefined;
   readonly onContentHeight?: (height: number) => void;
+  /** Keeps the page's scrollIntoView calls from scrolling the host, for frames inline in the chat. */
+  readonly containScroll?: boolean | undefined;
   /** Reports fullscreen changes so virtualized rows can stay mounted. */
   readonly onFullscreenChange?: ((fullscreen: boolean) => void) | undefined;
 }) {
   const theme = useHtmlRenderTheme();
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const [src] = useState(() => `${props.src.split("#", 1)[0]}${htmlRenderThemeFragment(theme)}`);
+  const [src] = useState(
+    () =>
+      `${props.src.split("#", 1)[0]}${htmlRenderThemeFragment(theme)}${props.containScroll ? HTML_RENDER_CONTAIN_SCROLL_FRAGMENT : ""}`,
+  );
   const [loaded, setLoaded] = useState(false);
   const [selection, setSelection] = useState<{
     text: string;
@@ -416,6 +446,7 @@ export function HtmlRenderDocument({
     },
   );
   const openChangeRequestLink = useOpenChangeRequestLink(props.threadRef);
+  const openIssueLink = useOpenIssueLink(props.threadRef);
   const openLink = useOpenLink(props.threadRef);
   const open = useEffectEvent((url: string, modifiers: { metaKey: boolean; ctrlKey: boolean }) => {
     if (modifiers.metaKey || modifiers.ctrlKey) {
@@ -424,14 +455,15 @@ export function HtmlRenderDocument({
         .catch((cause: unknown) => console.error(cause));
       return;
     }
+    const event = {
+      ...modifiers,
+      preventDefault: () => undefined,
+      stopPropagation: () => undefined,
+    };
     if (
       props.threadRef !== undefined &&
-      openChangeRequestLink(
-        { ...modifiers, preventDefault: () => undefined, stopPropagation: () => undefined },
-        url,
-        undefined,
-        props.threadRef.environmentId,
-      )
+      (openChangeRequestLink(event, url, undefined, props.threadRef.environmentId) ||
+        openIssueLink(event, url, props.threadRef.environmentId))
     ) {
       return;
     }
@@ -543,6 +575,7 @@ export function HtmlRenderDocument({
         ? createPortal(
             <div
               role="toolbar"
+              // oxlint-disable-next-line t3code/no-untranslated-copy -- OminaX copy, English until the fork translates it
               aria-label="Selection actions"
               className={cn(selection.overlay ? "absolute" : "fixed", "z-50")}
               style={{ left: selection.x, top: selection.y }}
@@ -552,9 +585,11 @@ export function HtmlRenderDocument({
                 tooLong={tooLong}
                 blockedReason={
                   tooLong
-                    ? `Side chats take up to ${SIDE_CHAT_EXCERPT_MAX_CHARS.toLocaleString("en-US")} characters`
+                    ? // oxlint-disable-next-line t3code/no-untranslated-copy -- OminaX copy, English until the fork translates it
+                      `Side chats take up to ${SIDE_CHAT_EXCERPT_MAX_CHARS.toLocaleString("en-US")} characters`
                     : props.askPending
-                      ? "Starting side chat…"
+                      ? // oxlint-disable-next-line t3code/no-untranslated-copy -- OminaX copy, English until the fork translates it
+                        "Starting side chat…"
                       : null
                 }
                 onClick={() => {

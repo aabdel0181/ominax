@@ -101,8 +101,8 @@ it("never pastes into the lesson composer from inside the side-chat panel", asyn
   const composerRef = {
     current: {
       isModelPickerOpen: () => false,
-      pasteTextAtEnd: (text: string) => {
-        inserted.push(text);
+      pasteTextAtEnd: (clipboardData: DataTransfer) => {
+        inserted.push(clipboardData.getData("text/plain"));
         return true;
       },
     } as Partial<ChatComposerHandle> as ChatComposerHandle,

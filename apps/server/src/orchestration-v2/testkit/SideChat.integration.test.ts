@@ -22,6 +22,7 @@ import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -37,6 +38,7 @@ import * as EffectOutbox from "../EffectOutbox.ts";
 import * as EffectWorker from "../EffectWorker.ts";
 import * as EventSink from "../EventSink.ts";
 import * as Orchestrator from "../Orchestrator.ts";
+import * as ProjectionMaintenance from "../ProjectionMaintenance.ts";
 import * as ProviderAdapterRegistry from "../ProviderAdapterRegistry.ts";
 import * as ThreadManagementService from "../ThreadManagementService.ts";
 import { SIDE_CHAT_OPENING_FRAMING } from "../sideChat/sideChatText.ts";
@@ -410,6 +412,7 @@ describe("side chat opening context", () => {
     options: {
       readonly generateSideChatText?: GenerateSideChatText;
       readonly failResume?: boolean;
+      readonly loseNativeSessionOnce?: Ref.Ref<boolean>;
       readonly injectHistory?: boolean;
       readonly providers?:
         | ReadonlyArray<ServerProvider>
@@ -426,6 +429,9 @@ describe("side chat opening context", () => {
       capabilities: CodexProviderCapabilitiesV2,
       cwd,
       ...(options.failResume === undefined ? {} : { failResume: options.failResume }),
+      ...(options.loseNativeSessionOnce === undefined
+        ? {}
+        : { loseNativeSessionOnce: options.loseNativeSessionOnce }),
       ...(options.injectHistory === undefined ? {} : { injectHistory: options.injectHistory }),
     });
     const switched = yield* makePromptRecordingAdapter({
@@ -856,7 +862,14 @@ describe("side chat opening context", () => {
             assert.include(prompt, summary);
             assert.equal(opening?.delivery?.status, "inline");
           }
-        }).pipe(Effect.provide(layer));
+        }).pipe(
+          Effect.provide(layer),
+          // At 1,024 tokens (4 KB) only the side-chat opening's 32 KB floor lets it through.
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromUnknown({ T3CODE_CONTEXT_HANDOFF_TOKEN_CAP: 1024 }),
+          ),
+        );
       }),
     ),
   );
@@ -1004,42 +1017,59 @@ describe("side chat opening context", () => {
     ),
   );
 
-  it.effect("gives the opening context again when the native thread is replaced", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { cwd, layer, prompts } = yield* deliveryHarness("side-chat-opening-replaced", {
-          failResume: true,
-          providers: [
-            providerWithSkill(LESSON_SELECTION.instanceId, ProviderDriverKind.make("codex")),
-          ],
-          settings: { sideChatSkills: ["review"] },
-        });
-        yield* Effect.gen(function* () {
-          const orchestrator = yield* Orchestrator.OrchestratorV2;
-          const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
-          yield* openAndAsk(cwd);
-          yield* completeLatestRun(SIDE_CHAT_THREAD_ID);
-          // A live session answers resume itself; detaching it makes the next turn really try.
-          const { providerSessions } = yield* orchestrator.getThreadProjection(SIDE_CHAT_THREAD_ID);
-          assert.lengthOf(providerSessions, 1);
-          yield* orchestrator.dispatch({
-            type: "provider-session.detach",
-            commandId: CommandId.make("command:side-chat:detach"),
-            threadId: SIDE_CHAT_THREAD_ID,
-            providerSessionId: providerSessions[0]!.id,
-          });
-          yield* worker.drain();
-          yield* ask(SIDE_CHAT_THREAD_ID, "command:side-chat:ask-again", "Is it always a Box?");
-        }).pipe(Effect.provide(layer));
+  // "start": the session is gone only when the turn starts (an ACP agent restarted under it).
+  // "start after a stop": the stopped run's sent opening is carried into the next run.
+  it.effect.each(["resume", "start", "start after a stop"] as const)(
+    "gives the opening context again when the native thread is replaced at %s",
+    (replacedAt) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const loseNativeSessionOnce = yield* Ref.make(false);
+          const { cwd, layer, prompts } = yield* deliveryHarness(
+            `side-chat-opening-replaced-${replacedAt.replaceAll(" ", "-")}`,
+            {
+              failResume: replacedAt === "resume",
+              loseNativeSessionOnce,
+              providers: [
+                providerWithSkill(LESSON_SELECTION.instanceId, ProviderDriverKind.make("codex")),
+              ],
+              settings: { sideChatSkills: ["review"] },
+            },
+          );
+          yield* Effect.gen(function* () {
+            const orchestrator = yield* Orchestrator.OrchestratorV2;
+            const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
+            yield* openAndAsk(cwd);
+            yield* completeLatestRun(
+              SIDE_CHAT_THREAD_ID,
+              replacedAt === "start after a stop" ? "interrupted" : "completed",
+            );
+            if (replacedAt !== "resume") {
+              yield* Ref.set(loseNativeSessionOnce, true);
+            } else {
+              // A live session answers resume itself; detaching it makes the next turn really try.
+              const { providerSessions } =
+                yield* orchestrator.getThreadProjection(SIDE_CHAT_THREAD_ID);
+              assert.lengthOf(providerSessions, 1);
+              yield* orchestrator.dispatch({
+                type: "provider-session.detach",
+                commandId: CommandId.make("command:side-chat:detach"),
+                threadId: SIDE_CHAT_THREAD_ID,
+                providerSessionId: providerSessions[0]!.id,
+              });
+              yield* worker.drain();
+            }
+            yield* ask(SIDE_CHAT_THREAD_ID, "command:side-chat:ask-again", "Is it always a Box?");
+          }).pipe(Effect.provide(layer));
 
-        const sideChatPrompts = promptsFor(prompts, SIDE_CHAT_THREAD_ID);
-        assert.lengthOf(sideChatPrompts, 2);
-        assert.include(sideChatPrompts[1], LESSON_SUMMARY);
-        assert.include(sideChatPrompts[1], "What is an observation space?");
-        assert.include(sideChatPrompts[0], "\n$review");
-        assert.include(sideChatPrompts[1], "\n$review");
-      }),
-    ),
+          const sideChatPrompts = promptsFor(prompts, SIDE_CHAT_THREAD_ID);
+          assert.lengthOf(sideChatPrompts, 2);
+          assert.include(sideChatPrompts[1], LESSON_SUMMARY);
+          assert.include(sideChatPrompts[1], "What is an observation space?");
+          assert.include(sideChatPrompts[0], "\n$review");
+          assert.include(sideChatPrompts[1], "\n$review");
+        }),
+      ),
   );
 
   it.effect("gives the opening context again after a provider switch inside the side chat", () =>
@@ -1111,6 +1141,9 @@ describe("side chat opening context", () => {
         const question = yield* harness.send(space, "What is an observation space?", {
           await: "none",
         });
+        // Claims queued behind this fiber's commit run only once it yields; yield until the opening
+        // is taken up so the turn start reaches its wait before the clock jumps.
+        yield* harness.openingRequested("Teach me RL environments.");
         yield* TestClock.adjust(Duration.millis(SIDE_CHAT_OPENING_WAIT_CAP_MS));
         yield* harness.awaitRun(afterAsk, question, "completed");
 
@@ -1289,6 +1322,9 @@ describe("side chat cascade", () => {
       yield* worker.drain();
       assert.isNull(yield* orchestrator.getThreadShell(space));
       assert.isNull(yield* orchestrator.getThreadShell(box));
+      // The cascade runs before the lesson's purge, which skips a thread with other pending work.
+      const lesson = yield* orchestrator.getThreadProjection(LESSON_THREAD_ID);
+      assert.equal(lesson.thread.title, ProjectionMaintenance.DELETED_THREAD_TITLE);
     }).pipe(Effect.provide(openHarness())),
   );
 

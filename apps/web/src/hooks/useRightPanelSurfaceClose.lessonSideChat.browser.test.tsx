@@ -88,8 +88,8 @@ it("forgets the draft of an empty side chat that closing its tab deletes", async
 it("does not finish a side chat when an upstream side-chat tab closes", async () => {
   setup();
   const surface: RightPanelSurface = {
-    id: "side-chat:side-1",
-    kind: "side-chat",
+    id: "thread:side-1",
+    kind: "thread",
     threadId: SIDE_REF.threadId,
   };
   await using screen = await render(<CloseTab surface={surface} />);

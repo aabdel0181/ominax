@@ -1,3 +1,5 @@
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 import type {
   EnvironmentId,
   OrchestrationV2ShellSnapshot,
@@ -48,9 +50,7 @@ const EMPTY_THREAD_REFS_BY_PROJECT: ReadonlyMap<
 // parent is no longer waiting on the answer, so it stops counting as input.
 // The activity run stays set when a follow-up is queued behind a blocked run;
 // older servers omit it, so fall back to the latest run's status.
-const isChildRunLive = (
-  thread: Pick<OrchestrationV2ThreadShell, "activityRunStatus" | "status">,
-) =>
+const isChildRunLive = (thread: Pick<OrchestrationV2ThreadShell, "activityRunStatus" | "status">) =>
   thread.activityRunStatus !== undefined
     ? thread.activityRunStatus !== null
     : thread.status === "preparing" ||
@@ -149,6 +149,11 @@ function sideChatRequest(thread: OrchestrationV2ThreadShell): PendingSubagentReq
   return kind === "user_input" ? "user_input" : "approval";
 }
 
+const asksParent = (thread: OrchestrationV2ThreadShell) =>
+  subagentRequest(thread) !== null ||
+  sideChatRequest(thread) !== null ||
+  (isSideChatThread(thread) && liveChildRequest(thread) !== null);
+
 /**
  * The threads to flag for a subagent's live approval, up its
  * subagent chain and through a side chat to its parent. `delegated` are tasks this
@@ -207,15 +212,27 @@ export function childThreadInputsTitle(
   children: ReadonlyArray<
     Pick<EnvironmentThreadShell, "hasPendingApprovals" | "lineage" | "sideChat">
   >,
+  resolve: MFunctionType = mFallback,
 ): string {
   const approvals = children.filter((child) => child.hasPendingApprovals).length;
   const need = approvals === 0 ? "input" : approvals === children.length ? "approval" : "you";
   const sideChats = children.filter((child) => isAnySideChatThread(child)).length;
-  const noun =
-    sideChats === children.length ? "side chat" : sideChats === 0 ? "subagent" : "thread";
-  return children.length === 1
-    ? `${noun === "side chat" ? "Side chat" : "Subagent"} needs ${need}`
-    : `${children.length} ${noun}s need ${need}`;
+  const kind = sideChats === children.length ? "sideChat" : sideChats === 0 ? "subagent" : "thread";
+  const count = children.length;
+  if (count === 1) {
+    return resolve(
+      msg(
+        "{kind, select, sideChat {{need, select, input {Side chat needs input} approval {Side chat needs approval} other {Side chat needs you}}} other {{need, select, input {Subagent needs input} approval {Subagent needs approval} other {Subagent needs you}}}}",
+        { kind, need },
+      ),
+    );
+  }
+  return resolve(
+    msg(
+      "{kind, select, sideChat {{need, select, input {{count} side chats need input} approval {{count} side chats need approval} other {{count} side chats need you}}} subagent {{need, select, input {{count} subagents need input} approval {{count} subagents need approval} other {{count} subagents need you}}} other {{need, select, input {{count} threads need input} approval {{count} threads need approval} other {{count} threads need you}}}}",
+      { kind, need, count: String(count) },
+    ),
+  );
 }
 
 const sameWireThreadShell = Schema.toEquivalence(OrchestrationV2ThreadShell);
@@ -491,12 +508,23 @@ export function createEnvironmentThreadShellAtoms(input: {
     }).pipe(Atom.withLabel(`environment-quiet-thread-shell:${key}`));
   });
 
+  const hasChildThreadInputsAtom = Atom.make((get) => {
+    for (const environmentId of enabledEnvironmentIds(get(input.catalogValueAtom))) {
+      if (get(environmentThreadsAtom(environmentId)).some(asksParent)) return true;
+    }
+    return false;
+  }).pipe(Atom.withLabel("environment-has-child-thread-inputs"));
+
   // Subagent and side-chat approvals and questions are hidden with their sidebar
   // rows. Read their shell summaries, without subscribing to every child transcript.
   // A task delegated to a linked environment is a child too, with its own subagents.
   const childThreadInputsAtomFamily = Atom.family((key: string) => {
     let previous: ReadonlyArray<EnvironmentThreadShell> = [];
     return Atom.make((get) => {
+      if (!get(hasChildThreadInputsAtom)) {
+        if (previous.length !== 0) previous = [];
+        return previous;
+      }
       const children = new Map<
         string,
         Array<{ environmentId: EnvironmentId; thread: OrchestrationV2ThreadShell }>
@@ -532,11 +560,7 @@ export function createEnvironmentThreadShellAtoms(input: {
           if (seen.has(childKey)) continue;
           seen.add(childKey);
           pending.push(childKey);
-          const request =
-            subagentRequest(thread) ??
-            sideChatRequest(thread) ??
-            (isSideChatThread(thread) ? liveChildRequest(thread) : null);
-          if (request !== null) {
+          if (asksParent(thread)) {
             next.push(
               scopedThread(environmentId, thread, get(pendingSubagentRequestsAtom(environmentId))),
             );

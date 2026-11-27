@@ -5,9 +5,10 @@ import {
   type PreviewSessionSnapshot,
   ThreadId,
 } from "@t3tools/contracts";
-import { beforeEach, describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { type ClosedView, type ClosedViewEntry, useClosedViewStore } from "./closedViewStore";
+import { createMemoryStorage } from "./lib/storage";
 
 const refA = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-A"));
 const refB = scopeThreadRef("env-2" as EnvironmentId, ThreadId.make("thread-A"));
@@ -58,7 +59,13 @@ describe("closedViewStore", () => {
       id: "bad",
       kind: "panel-tab",
       threadRef: refA,
-      surface: { kind: "side-chat", id: "side-chat:x" },
+      surface: { kind: "thread", id: "thread:x" },
+    },
+    {
+      id: "bad",
+      kind: "panel-tab",
+      threadRef: refA,
+      surface: { kind: "linked-thread", id: "linked-thread:x", viaEnvironmentId: "env-1" },
     },
     {
       id: "bad",
@@ -104,7 +111,7 @@ describe("closedViewStore", () => {
         threadId: ThreadId.make("nested-1"),
         trail,
       },
-    } as ClosedViewEntry;
+    } as unknown as ClosedViewEntry;
     const { storage, name } = useClosedViewStore.persist.getOptions();
     await storage!.setItem(name!, {
       state: { entries: [{ ...map, id: mapId }, savedBeforeVersion3] },
@@ -116,6 +123,34 @@ describe("closedViewStore", () => {
       { ...map, id: mapId },
       { ...sideChat, id: sideChatId },
     ]);
+  });
+
+  // The right panel store imports this one before its own body runs, so this store hydrates first.
+  it("hydrates T3 Learn's version 3 side-chat entries when the right panel store loads first", async () => {
+    const storage = createMemoryStorage();
+    const sideChat = { id: "side-chat:side", kind: "side-chat", threadId: "side" };
+    storage.setItem(
+      "t3code:closed-views:v2",
+      JSON.stringify({
+        version: 3,
+        state: {
+          entries: [{ id: "closed", kind: "panel-tab", threadRef: refA, surface: sideChat }],
+        },
+      }),
+    );
+    vi.stubGlobal("window", { localStorage: storage });
+    vi.resetModules();
+    try {
+      await import("./rightPanelStore");
+      const { useClosedViewStore: reloaded } = await import("./closedViewStore");
+      expect(reloaded.persist.hasHydrated()).toBe(true);
+      expect(reloaded.getState().entries).toMatchObject([
+        { id: "closed", surface: { id: "thread:side", kind: "thread", threadId: "side" } },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
   });
 
   it("keeps private tabs available in memory without saving their metadata", async () => {
@@ -139,7 +174,8 @@ describe("closedViewStore", () => {
     const sideChatId = store.remember({
       kind: "panel-tab",
       threadRef: refA,
-      surface: { id: "side-chat:side", kind: "side-chat", threadId: ThreadId.make("side") },
+      // Saved before a side chat's tab became a `thread` surface.
+      surface: { id: "side-chat:side", kind: "side-chat", threadId: "side" } as never,
     });
     const publicId = store.remember(diff(refA));
     const browserId = store.remember({
@@ -164,7 +200,8 @@ describe("closedViewStore", () => {
           ...useClosedViewStore.getState().entries,
         ] as ClosedViewEntry[],
       },
-      version: 0,
+      // T3 Learn's version 3 saved upstream side chats as "side-chat"; earlier ones are ambiguous.
+      version: 3,
     });
     await useClosedViewStore.persist.rehydrate();
     expect(useClosedViewStore.persist.hasHydrated()).toBe(true);
@@ -173,6 +210,9 @@ describe("closedViewStore", () => {
       publicId,
       sideChatId,
     ]);
+    expect(useClosedViewStore.getState().entries.at(-1)).toMatchObject({
+      surface: { id: "thread:side", kind: "thread", threadId: "side" },
+    });
     const saved = JSON.stringify(await storage!.getItem(name!));
     expect(saved).not.toContain("private.example");
     expect(saved).not.toContain("Private page");

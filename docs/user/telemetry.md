@@ -1,4 +1,4 @@
-# Product usage data
+# Product usage data and diagnostics
 
 OminaX sends no product usage events and no relay connection traces by default, and never sends
 usage events to T3 Code. To send them to your own PostHog server, set all three in the server's
@@ -8,83 +8,39 @@ environment:
 - `T3CODE_POSTHOG_KEY` to your PostHog project key
 - `T3CODE_POSTHOG_HOST` to your PostHog URL, for example `https://posthog.example.ts.net`
 
-Without a key and host, nothing is sent. The rest of this page describes what the events contain.
+Without a key and host, nothing is sent. Prompts, responses, lesson text, the text of quiz answers, file contents, and credentials are never included (unless you explicitly approve an [agent feedback](#agent-feedback) card with conversation text attached).
 
-Product usage events are associated with a hashed account or installation identifier. To count how many installations one person
-uses, the server also sends hashed account identifiers: your T3 Connect account, your OpenAI and
-Claude accounts when you are signed in, and a random identifier for each device that connects. Events include the provider, model, reasoning effort,
-permission mode, turn and request results, duration, release channel, and token counts when
-available. Child-agent token counts are reported separately from the main agent's. Model names
-are sent only when they appear in a provider's public model list. Lesson features are counted
-too: new lessons, side chats opened and finished, quiz cards and whether each answer was right,
-What's new actions, viewing and changing the knowledge map, and changes to courses.
+## Product usage events
 
-Product events do not include prompts, responses, lesson text, the text of quiz answers, file contents, authentication tokens, conversation IDs,
-raw provider events, or child-agent output.
+The server sends usage events to your PostHog server under a hashed random install ID (plus a hashed T3 Connect account ID when signed in, and random client device IDs). Events contain provider, catalog model name (non-catalog models report as custom), reasoning effort, permission mode, turn/request outcome, duration, release channel, and token counts. Lesson features are counted too: new lessons, side chats opened and finished, quiz cards and whether each answer was right, What's new actions, viewing and changing the knowledge map, and changes to courses.
+
+## Disable telemetry
+
+- **Server / CLI**: Leave `T3CODE_TELEMETRY_ENABLED` unset or set it to `false`, or set `DO_NOT_TRACK=1` before starting (`DO_NOT_TRACK=1` takes precedence over `T3CODE_TELEMETRY_ENABLED=true`). CI environments (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `JENKINS_URL`) disable telemetry by default unless `T3CODE_TELEMETRY_ENABLED=true`.
+- **Desktop app**: On macOS and Linux, the desktop app reads `T3CODE_TELEMETRY_ENABLED`, `T3CODE_POSTHOG_KEY`, `T3CODE_POSTHOG_HOST`, and `DO_NOT_TRACK` from your shell profile (for example `~/.zshrc`), so it sends events even when opened from the Dock or a launcher. On Windows, set them as user environment variables; a WSL backend receives them too. Restart the app after changing them.
+- **Managed policy**: Administrators can set `"telemetry": false` in [managed policy](./managed-policy.md#other-capabilities) for servers and desktop apps.
+- **Mobile app**: Toggle **Send crash reports** and **Send connection traces** separately in **Settings → About T3 Code → Diagnostics**.
 
 ## Relay connection diagnostics
 
-T3 Code sends relay connection traces to Axiom to diagnose T3 Connect connectivity. These are
-separate from product events. Depending on the client version, traces can include connection
-timings, environment identifiers and the connected machine's name. Failed spans can include error
-messages and stack traces; error text can quote a value the app was handling.
+T3 Connect sends connection timings, request paths, environment/thread IDs, and error types (no addresses, logs, or stack frames) to Axiom. Disabled by the server telemetry opt-outs above or by `T3CODE_OTEL_SDK_DISABLED` / `OTEL_SDK_DISABLED`.
 
-To disable product events and relay tracing from the server, set
-`T3CODE_TELEMETRY_ENABLED=false` in its environment before starting it. Relay tracing also stops
-when `T3CODE_OTEL_SDK_DISABLED` or `OTEL_SDK_DISABLED` turns OpenTelemetry export off.
+## Agent feedback
 
-An administrator can turn product events and relay tracing off in the server and desktop app with
-a [managed policy](./managed-policy.md#other-capabilities). This does not control traces sent by
-separate browser or mobile clients.
+Optional tool for agents to report OminaX bugs or missing capabilities. Reports go to the PostHog server set above, like product events, never to T3 Code, although the app's own copy still names the T3 team. Configure in **Settings → Labs → Agent feedback**:
 
-On macOS and Linux, the desktop app reads all three from your shell profile (for example
-`~/.zshrc`), so it sends events even when opened from the Dock or a launcher. On Windows, set all
-three as user environment variables; a WSL backend receives them too.
+- **Off** (default): Feedback tools and `ominax feedback` are disabled.
+- **When I ask**: Agents submit a report only when you ask, shown as an interactive approval card before anything leaves your machine.
+- **Automatic**: Also sends minimal automated reports (problem kind + tool/command name only—no text or conversation) when an agent hits a T3 tool failure; enables `ominax feedback` CLI reporting (up to 10/hour).
 
-The web app in a browser, including one the `ominax` CLI opens, does not read these environment
-variables. When its build has relay tracing configured, it sends its own connection traces even
-if the server has opted out. The browser app has no relay tracing toggle.
-
-## Mobile app diagnostics
-
-When the iOS or Android app crashes or hits an error, it sends a report to T3 Code: the error
-message, the stack trace, the app version, and the device model and OS version. Each launch also
-sends startup timings, and every report carries a random ID for the install. Reports go through
-the T3 Connect relay to Axiom. They do not include your threads, prompts, or connection details,
-but an error message can quote a value the app was handling.
-
-To stop sending them, turn off **Send crash reports** in **Settings > About T3 Code > Diagnostics**.
-
-The mobile app also sends relay connection traces when its build has tracing configured. These
-carry an identifier for the current app session. **Send crash reports** does not control these
-traces, and the mobile app has no separate relay tracing toggle. Server environment variables and
-managed policy do not disable mobile tracing.
+Approval cards show exact payloads (expected/actual/workaround, turn outline with no text, and optional **Include the conversation** up to 16 KB). File paths, usernames, hostnames, git remotes, and secret-like strings are scrubbed before saving, and reports use one-off random IDs. Inspect local reports with `ominax feedback list [--json]`.
 
 ## Agent activity for mobile notifications
 
-When **Publish agent activity** is enabled on a host, it sends project and thread titles, model
-names, activity status, and environment and thread identifiers to the T3 Connect relay for
-[mobile notifications and live activities](./mobile-notifications.md). This is separate from
-product events and relay diagnostics. The telemetry opt-out does not disable it.
+**Settings → Sharing & access → Publish agent activity** sends project/thread titles, model names, and turn status to the T3 Connect relay for [mobile notifications and live activities](./mobile-notifications.md). This is independent of telemetry—turn it off directly on the host if you don't want it.
 
-To stop publishing, turn off **Publish agent activity** under **Settings > Sharing & access** on
-the host. Turning off notifications on a phone controls that phone's alerts, not the host's
-publishing setting.
+## Export diagnostics to your own OpenTelemetry receiver
 
-## Export diagnostics to your own receiver
+Open **Settings → Maintenance → Diagnostics** (per environment) and enter OTLP HTTP endpoints (e.g. `http://localhost:4318/v1/traces`), save, and restart the server. Use **Test** to verify connectivity.
 
-To send traces, metrics, or logs to an OpenTelemetry receiver, open
-**Settings > Maintenance > Diagnostics**, select an environment, and enter each signal's OTLP HTTP
-endpoint under **OpenTelemetry export** (for example `http://localhost:4318/v1/traces`). Save, then
-restart that environment's server. The receiver must be reachable from the server's machine.
-**Test** sends an empty export from the server to check an endpoint before or after you save it;
-saved endpoints are checked when the section opens. Checks send authentication headers only to
-the signal's currently running endpoint and do not follow redirects. To check a new endpoint
-that requires authentication, save it and restart the server first.
-
-`T3CODE_OTLP_*_URL` and standard `OTEL_EXPORTER_OTLP_*` environment variables override the saved
-settings. An overridden signal shows **Set by environment** and names the variable that set it, and its
-**Test** checks the running endpoint instead of the field. For endpoints saved here or set with `T3CODE_OTLP_*_URL`, set `T3CODE_OTLP_HEADERS` for
-receivers that need authentication and `T3CODE_OTLP_PROTOCOL=http/protobuf` for receivers that do
-not accept JSON. An endpoint set with `OTEL_EXPORTER_OTLP_*` takes its headers and protocol from
-`OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_EXPORTER_OTLP_PROTOCOL` instead.
+`T3CODE_OTLP_*_URL` and standard `OTEL_EXPORTER_OTLP_*` env vars override saved settings (use `T3CODE_OTLP_HEADERS` / `T3CODE_OTLP_PROTOCOL=http/protobuf` or the standard `OTEL_EXPORTER_OTLP_*` equivalents for auth and protobuf).

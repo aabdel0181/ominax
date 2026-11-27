@@ -1,6 +1,6 @@
 # OminaX
 
-OminaX (formerly T3 Learn) is a fork of [T3 Code](https://github.com/pingdotgg/t3code) for learning with AI.
+OminaX (formerly T3 Learn) is an unofficial fork of [T3 Code](https://github.com/pingdotgg/t3code) for learning with AI. It is not affiliated with, endorsed by or maintained by T3 Tools, Inc.
 
 When a reply uses something you don't know yet, highlight it and choose **Ask in side chat** (⌥⌘S on a Mac, Ctrl+Alt+S elsewhere). A side chat opens next to the lesson. It sees your highlight and a short summary of the lesson, and nothing you say in it lands in the lesson. Side chats nest, so you can follow a question as deep as it goes. The side-chat header's map toggle (⌥⌘G on a Mac, Ctrl+Alt+G elsewhere) shows where you are without leaving the chat. Press **Done** to climb back out: the AI writes a short note, and your next lesson message carries it so the lesson picks up where you left off. The first time you open OminaX, a short guide walks you through this; open it again from Settings.
 
@@ -34,7 +34,7 @@ The installer uses `OMINAX_*` environment variables. The old `T3LEARN_*` names s
 - **Linux:** the command installs the `.deb` where `apt` and `sudo` are available, so the app keeps Chromium's sandbox, and an AppImage in your home folder otherwise. Set `OMINAX_FORMAT=appimage` or `OMINAX_FORMAT=deb` to choose.
 - **A specific version:** set `OMINAX_VERSION`, for example `OMINAX_VERSION=0.1.3-learn.1`.
 - **Remove it:** on macOS and Linux, run the install command with `sh -s -- --uninstall` in place of `sh`. On Windows, uninstall **OminaX** from **Settings → Apps**. Your projects and settings stay in `~/.ominax`; delete that folder to remove them too.
-- **From source:** you need [`vp`](docs/operations/development.md#first-checkout). Run `vp i`, then `vp run --filter t3 build`, then `vp env exec -- node apps/server/dist/bin.mjs serve --base-dir ~/.ominax`, and open the pairing URL it prints.
+- **From source:** you need [`vp`](docs/operations/00_development.md#first-checkout). Run `vp i`, then `vp run --filter t3 build`, then `vp env exec -- node apps/server/dist/bin.mjs serve --base-dir ~/.ominax`, and open the pairing URL it prints.
 
 </details>
 
@@ -87,7 +87,7 @@ It works with Claude Code, Codex, Cursor, OpenCode, Grok Build, Antigravity, Kir
 - **Remote ready.** Run agents on any machine. Connect over your local network, Tailscale, or [T3 Connect](./docs/user/remote-access.md).
 - **Git built in.** Each thread can work in its own worktree. Review the diff, then commit, push, and open a pull request with one button.
 - **Fast.** Performance is a feature here. We measure it, and we treat a dropped frame as a bug.
-- **Open.** MIT licensed. If you don't like something, fork it.
+- **Open.** Source code is MIT licensed. If you don't like something, fork it under your own branding (see [Trademarks and forks](#trademarks-and-forks)).
 
 ## Install
 
@@ -133,7 +133,7 @@ T3 Code needs one agent that is installed and signed in. For example, install [C
 
 Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the tool that you want.
+We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork the source code and build the tool that you want, under your own name and branding.
 
 ## Documentation
 
@@ -152,9 +152,22 @@ We have limited review capacity. Small, focused fixes are the most likely to be 
 
 - Read [CONTRIBUTING.md](./CONTRIBUTING.md) before you report a bug or open a pull request.
 - Put feature requests in [Ideas](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-- Build from source with the [development runbook](./docs/operations/development.md#first-checkout). The [architecture overview](./docs/internals/overview.md) explains how it works.
+- Build from source with the [development runbook](./docs/operations/00_development.md#first-checkout). The [architecture overview](./docs/internals/01_architecture.md) explains how it works.
 - Get help in [Discord](https://discord.gg/jn4EGJjrvv).
 
 ## License
 
-[MIT](./LICENSE)
+The source code in this repository is licensed under the [MIT License](./LICENSE).
+
+## Trademarks and forks
+
+The MIT license applies **only to the source code**. It does not grant any rights to T3 Tools, Inc.'s trademarks, branding, or trade dress, including the **T3 Code** name, wordmark, logos, and application icons.
+
+If you fork, redistribute, or build on T3 Code's source code:
+
+- **Use your own branding.** Replace the T3 Code name, wordmark, logos, and application icons in any public fork, redistributed build, website, package, or app store listing.
+- **Be explicitly clear that your project is unofficial.** Do not use the T3 Code name, wordmark, logo, or branding in your own projects without making it unmistakably clear that your project is unofficial and not affiliated with or endorsed by T3 Tools, Inc.
+
+Using our name, wordmark, logo, or branding in a way that suggests official status or affiliation is trademark infringement and unlawful. **Any project indicating or implying that it is an official version of T3 Code when it is not will be pursued to the full extent of the law.**
+
+See [TRADEMARK.md](./TRADEMARK.md) for the full trademark and branding policy.

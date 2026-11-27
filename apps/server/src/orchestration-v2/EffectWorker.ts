@@ -22,6 +22,7 @@ import {
 import * as RunFinalizationService from "./RunFinalizationService.ts";
 import * as ResourceCleanupService from "./ResourceCleanupService.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
+import * as ProjectionMaintenance from "./ProjectionMaintenance.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as CheckpointRollbackService from "./CheckpointRollbackService.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
@@ -67,8 +68,10 @@ function isNonRetryableProviderTurnControlFailure(effectType: string, errorText:
 }
 
 // Keep an owner for starting runs when persistence or restart cleanup fails.
-const ownsStartingRun = (effectType: EffectOutbox.OrchestrationEffectV2["request"]["type"]) =>
-  effectType === "provider-turn.start" || effectType === "provider-turn.restart";
+const ownsStartingRun = (request: EffectOutbox.OrchestrationEffectV2["request"]) =>
+  request.type === "provider-turn.start" ||
+  request.type === "provider-turn.restart" ||
+  (request.type === "provider-session.detach" && request.handoffRunId !== undefined);
 
 const cannotSettleRun = (cause: Cause.Cause<unknown>) =>
   Cause.findErrorOption(cause).pipe(
@@ -105,6 +108,7 @@ export const layerExecutor: Layer.Layer<
   | SideChatLifecycleService.SideChatLifecycleService
   | ThreadManagementService.ThreadManagementService
   | ProjectionStore.ProjectionStoreV2
+  | ProjectionMaintenance.ProjectionMaintenanceV2
   | ServerSettings.ServerSettingsService
 > = Layer.effect(
   OrchestrationEffectExecutorV2,
@@ -122,6 +126,7 @@ export const layerExecutor: Layer.Layer<
     const sideChatLifecycle = yield* SideChatLifecycleService.SideChatLifecycleService;
     const threads = yield* ThreadManagementService.ThreadManagementService;
     const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+    const projectionMaintenance = yield* ProjectionMaintenance.ProjectionMaintenanceV2;
     const settings = yield* ServerSettings.ServerSettingsService;
     const startRun = (
       effect: EffectOutbox.OrchestrationEffectV2,
@@ -172,6 +177,7 @@ export const layerExecutor: Layer.Layer<
               ...(effect.request.processLossCount === undefined
                 ? {}
                 : { processLossCount: effect.request.processLossCount }),
+              ...(effect.request.cause === undefined ? {} : { cause: effect.request.cause }),
             }).pipe(
               Effect.provideService(ThreadManagementService.ThreadManagementService, threads),
               Effect.provideService(ServerSettings.ServerSettingsService, settings),
@@ -190,26 +196,58 @@ export const layerExecutor: Layer.Layer<
               ),
             );
           }
-          case "provider-session.detach":
-            return providerSessions
-              .detach({
-                providerSessionId: effect.request.providerSessionId,
-                threadId: effect.threadId,
-                ...(effect.request.detail === undefined ? {} : { detail: effect.request.detail }),
-                ...(effect.request.revokeMcpCredential === undefined
-                  ? {}
-                  : { revokeMcpCredential: effect.request.revokeMcpCredential }),
-              })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new OrchestrationEffectExecutionError({
-                      effectId: effect.id,
-                      effectType: effect.request.type,
+          case "provider-session.detach": {
+            const { handoffRunId } = effect.request;
+            const detach = providerSessions.detach({
+              providerSessionId: effect.request.providerSessionId,
+              threadId: effect.threadId,
+              ...(effect.request.detail === undefined ? {} : { detail: effect.request.detail }),
+              ...(effect.request.revokeMcpCredential === undefined
+                ? {}
+                : { revokeMcpCredential: effect.request.revokeMcpCredential }),
+              ...(effect.request.handoffProviderThread === undefined
+                ? {}
+                : { handoffProviderThread: effect.request.handoffProviderThread }),
+            });
+            return Effect.gen(function* () {
+              if (handoffRunId === undefined) return yield* detach;
+              const run = yield* projectionStore.getRun(effect.threadId, handoffRunId);
+              const attemptId = run?.activeAttemptId;
+              const rootNodeId = run?.rootNodeId;
+              if (run?.status !== "starting" || attemptId == null || rootNodeId == null) return;
+              yield* detach.pipe(
+                Effect.catch((cause) =>
+                  Effect.logWarning(
+                    "Provider account handoff could not release the source thread",
+                    {
+                      runId: handoffRunId,
                       cause,
-                    }),
+                    },
+                  ).pipe(
+                    Effect.andThen(
+                      providerTurnStart.failStartingRun({
+                        threadId: effect.threadId,
+                        runId: handoffRunId,
+                        attemptId,
+                        rootNodeId,
+                        message:
+                          "The previous provider did not release this conversation. Wait a moment and try again.",
+                      }),
+                    ),
+                  ),
                 ),
               );
+            }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationEffectExecutionError({
+                    effectId: effect.id,
+                    effectType: effect.request.type,
+                    cause,
+                  }),
+              ),
+            );
+          }
           case "provider-session.apply-model-selection":
             return providerTurnControl
               .applyModelSelection({
@@ -399,8 +437,7 @@ export const layerExecutor: Layer.Layer<
                         threadId: effect.threadId,
                         messageId: message.id,
                         ...(error.steerDeclined ? { steerFollowUpOfRunId: run.id } : {}),
-                        ...(error.steerDeclined &&
-                        effect.request.steerFollowUpAfterRunOrdinal !== undefined
+                        ...(effect.request.steerFollowUpAfterRunOrdinal !== undefined
                           ? {
                               steerFollowUpAfterRunOrdinal:
                                 effect.request.steerFollowUpAfterRunOrdinal,
@@ -559,6 +596,7 @@ export const layerExecutor: Layer.Layer<
                 providerThreadId: effect.request.providerThreadId,
                 checkpointId: effect.request.checkpointId,
                 scopeId: effect.request.scopeId,
+                requestId: effect.commandId,
                 ...(effect.request.restoreFiles === undefined
                   ? {}
                   : { restoreFiles: effect.request.restoreFiles }),
@@ -688,6 +726,18 @@ export const layerExecutor: Layer.Layer<
               ),
             );
           }
+          case "thread-content.purge":
+            return projectionMaintenance.purgeDeletedThread(effect.threadId).pipe(
+              Effect.asVoid,
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationEffectExecutionError({
+                    effectId: effect.id,
+                    effectType: effect.request.type,
+                    cause,
+                  }),
+              ),
+            );
           case "thread-title.generate":
             return threadTitleRegeneration
               .execute({
@@ -1002,7 +1052,7 @@ export const layerWithOptions = (
                 .succeed({ effectId: effect.id, workerId })
                 .pipe(Effect.onError((cause) => terminalizeClaim(effect, cause)))
             : effect.attemptCount >= maxAttempts &&
-                (!ownsStartingRun(effect.request.type) || cannotSettleRun(exit.cause))
+                (!ownsStartingRun(effect.request) || cannotSettleRun(exit.cause))
               ? yield* outbox
                   .fail({ effectId: effect.id, workerId, error })
                   .pipe(Effect.onError((cause) => terminalizeClaim(effect, cause)))

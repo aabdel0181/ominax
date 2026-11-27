@@ -9,6 +9,7 @@ import { T3_LEARN_EXECUTABLE_NAME, T3_LEARN_LEGACY } from "@t3tools/shared/t3Lea
 
 import * as ProcessRunner from "../processRunner.ts";
 import { BOOT_SERVICE_UNIT_FILE } from "./bootService.ts";
+import { RESTORE_OOMD_WATCH_SCRIPT } from "./userManagerOom.ts";
 
 // T3 Code writes the same units' drop-ins; its own name keeps either undo off the other's.
 const PROTECT_DROP_IN = `90-${T3_LEARN_EXECUTABLE_NAME}-protect.conf`;
@@ -218,10 +219,12 @@ export const detectRemoteAccessUnits = run("list remote-access services", "syste
   Effect.withSpan("ServiceProtection.detectRemoteAccessUnits"),
 );
 
-const reloadUserManager = run("reload systemd user units", "systemctl", [
-  "--user",
-  "daemon-reload",
-]);
+const reloadUserManager = Effect.andThen(
+  run("reload systemd user units", "systemctl", ["--user", "daemon-reload"]),
+  run("restore systemd-oomd's watch", "/bin/sh", ["-c", RESTORE_OOMD_WATCH_SCRIPT]).pipe(
+    Effect.ignore,
+  ),
+);
 
 const writeDropIns = Effect.fn("ServiceProtection.writeDropIns")(function* (
   dropIns: ReadonlyArray<DropIn>,

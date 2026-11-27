@@ -79,6 +79,13 @@ it.effect(
           source: "manual",
         },
         {
+          id: "lesson-side-chat",
+          host: "github.com",
+          repository: "acme/web",
+          number: 7,
+          source: "created",
+        },
+        {
           id: "dismissed",
           host: "github.com",
           repository: "acme/web",
@@ -113,6 +120,7 @@ it.effect(
           settledOverride: ["settled", "archived"].includes(fixture.id) ? "settled" : null,
           settledAt: fixture.id === "auto-settled" ? archivedAt : null,
           ...(fixture.id === "side-chat" ? { lineage: { sideChat: true } } : {}),
+          ...(fixture.id === "lesson-side-chat" ? { sideChat: { lessonThreadId: "active" } } : {}),
           pullRequests: [{ ...fixture, linkedAt: createdAt, snapshot: null, stack: null }],
         });
         yield* sql`
@@ -279,6 +287,17 @@ it("signals linked-thread changes only when a linked answer could change", () =>
     "changed",
     null,
   ]);
+
+  const issue = { tracker: "linear", host: "linear.app", scope: "eng", key: "ENG-7" };
+  const issueLinks = makeLinkedThreadsChangeDetector();
+  expect(
+    [
+      event("thread.created", {}),
+      event("thread.issue-synced", { issues: [issue as never] }),
+      event("thread.issue-synced", { issues: [issue as never] }),
+      event("thread.issue-synced", { issues: [] }),
+    ].map(issueLinks),
+  ).toEqual([null, "changed", null, "changed"]);
 
   const afterRestart = makeLinkedThreadsChangeDetector();
   expect(afterRestart(event("thread.created", { title: "New" }))).toBe(null);

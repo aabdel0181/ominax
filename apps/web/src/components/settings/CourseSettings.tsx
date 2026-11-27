@@ -9,7 +9,7 @@ import { errorMessage } from "../CommandPalette.logic";
 import { Button } from "../ui/button";
 import { ScopedSwitch } from "./ScopedSwitch";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 const coursesAtom = environmentAtomList("server-courses", (id) =>
@@ -24,6 +24,7 @@ const clearPermissionsAtom = environmentAtomList(
   serverEnvironment.clearVisuals.permissionAtom,
 );
 export function CourseSettingsSection() {
+  const searchableSetting = useSearchableSetting();
   const { connectedEnvironments } = useSettingsScope();
   const supported = connectedEnvironments.filter(
     (e) => e.serverConfig?.environment.capabilities.courses === true,

@@ -29,6 +29,7 @@ import * as Schema from "effect/Schema";
 import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
+import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -195,6 +196,7 @@ const ThreadConfigureTool = Tool.make("t3_thread_configure", {
     modelSelection: Schema.optional(ModelSelection),
   }),
   success: Schema.Union([threadConfiguration, OrchestrationV2DispatchCommandResult]),
+  dependencies: [...commandTool.dependencies, ProviderRegistry.ProviderRegistry],
 }).annotate(Tool.Destructive, true);
 
 const ThreadTransferTool = Tool.make("t3_thread_transfer", {
@@ -274,6 +276,19 @@ const ScheduledTaskRunTool = Tool.make("run_scheduled_task_now", {
   .annotate(Tool.Destructive, true)
   .annotate(Tool.OpenWorld, true);
 
+const SubmitOutputTool = Tool.make("t3_submit_output", {
+  ...commandTool,
+  description:
+    "Return this turn's result as data, when the message asked for one. `json`: JSON text matching the schema it gave. A rejection says what did not fit; fix it and call again.",
+  // Stored on the run, which every client of the thread holds.
+  parameters: Schema.Struct({ json: Schema.String.check(Schema.isMaxLength(200000)) }),
+  success: Schema.Struct({ runId: RunId }),
+})
+  // It writes only the caller's own run, so a read-only or plan-mode agent can still answer.
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
+
 export const ThreadToolkit = Toolkit.make(
   LessonCreateTool,
   ScheduledTaskRunTool,
@@ -283,4 +298,5 @@ export const ThreadToolkit = Toolkit.make(
   ThreadOrganizeTool,
   PendingRequestTool,
   QueueTool,
+  SubmitOutputTool,
 );

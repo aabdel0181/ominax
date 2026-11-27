@@ -5,12 +5,15 @@ import { useLayoutEffect, useRef } from "react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
 import {
+  deriveLatestThreadRun,
   deriveRunlessWorkStartedAt,
   deriveThreadActivityRun,
   deriveThreadStructureRuntime,
 } from "@t3tools/client-runtime/state/thread-execution";
+import type { SideThreadOpenIntent } from "@t3tools/client-runtime/side-thread";
 import type {
   AssistantCitation,
+  EnvironmentId,
   ProviderApprovalDecision,
   RuntimeRequestId,
   ScopedThreadRef,
@@ -20,6 +23,7 @@ import { Atom } from "effect/reactivity";
 
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
+import { useEnvironmentProviders } from "~/state/environments";
 import { environmentThreadDetails } from "~/state/threads";
 import { answeredCardAnswers } from "@t3tools/shared/quizCard";
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
@@ -72,7 +76,11 @@ export function SideChatTimeline(props: {
         embedTitle?: string,
       ) => boolean)
     | undefined;
-  readonly onOpenThread: (threadId: ThreadId) => void;
+  readonly onOpenThread: (
+    threadId: ThreadId,
+    environmentId?: EnvironmentId,
+    intent?: SideThreadOpenIntent,
+  ) => void;
   /** Opens a side chat nested in this one from its mark. */
   readonly onOpenSideChat?: (threadId: ThreadId) => void;
   readonly workspaceRoot: string | undefined;
@@ -95,7 +103,8 @@ export function SideChatTimeline(props: {
   const citationHistory = useCitedHistory(props.citationRequest);
 
   // Run state as ChatView derives it for a server thread.
-  const activityRun = projection === null ? null : deriveThreadActivityRun(projection);
+  const providers = useEnvironmentProviders().get(props.sideChatRef.environmentId);
+  const activityRun = projection === null ? null : deriveThreadActivityRun(projection, providers);
   const runtime = projection === null ? null : deriveThreadStructureRuntime(projection);
   const runlessWorkStartedAt = projection === null ? null : deriveRunlessWorkStartedAt(projection);
   const isWorking = deriveTimelineWorking({
@@ -197,7 +206,17 @@ export function SideChatTimeline(props: {
           listRef={props.listRef}
           runs={projection?.runs ?? []}
           latestRun={activityRun}
-          providerStartingLabel={activityRun?.providerStartingLabel ?? null}
+          providerStartingLabel={activityRun?.providerStartingLabelMsg ?? null}
+          providerStarting={
+            activityRun?.providerStartingLabelMsg ? (activityRun.providerStarting ?? null) : null
+          }
+          usageLimitRunId={
+            projection !== null &&
+            runtime?.status === "failed" &&
+            runtime.lastErrorClass === "usage_limit"
+              ? (deriveLatestThreadRun(projection)?.runId ?? null)
+              : null
+          }
           runningRunId={runtime?.activeRunId ?? null}
           turnDiffSummaries={[]}
           activeThreadEnvironmentId={props.sideChatRef.environmentId}

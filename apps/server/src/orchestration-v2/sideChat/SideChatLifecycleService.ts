@@ -22,6 +22,7 @@ import * as Stream from "effect/Stream";
 import type * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
 import type * as ServerSettings from "../../serverSettings.ts";
 import type * as TextGeneration from "../../textGeneration/TextGeneration.ts";
+import { isSlashCommandMessage } from "../ContextHandoffDelivery.ts";
 import * as EventSink from "../EventSink.ts";
 import * as ProjectionStore from "../ProjectionStore.ts";
 import type * as ProjectStore from "../ProjectStore.ts";
@@ -181,7 +182,8 @@ const make = Effect.gen(function* () {
         if (
           run?.status !== "starting" ||
           message === undefined ||
-          !isUserAuthoredSideChatTrigger(message)
+          !isUserAuthoredSideChatTrigger(message) ||
+          isSlashCommandMessage(message)
         ) {
           return;
         }

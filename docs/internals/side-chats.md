@@ -62,7 +62,7 @@ lesson is answering while the opening is built, it also receives that turn's lat
 appended as `$name` after the user text, in provider text only, on the turn that delivers the opening (the first turn or a later
 fresh native thread), when the run's provider lists them in its cached catalog (the run's cwd snapshot
 if a client warmed it, otherwise the machine list); nothing is scanned at turn start. A
-first message that is a slash command, `/goal` or `/compact` gets none. After `/goal` or `/compact`,
+first message that is a slash command, `/goal` or `/compact` gets none. After any slash command,
 Claude's opening and skills wait for the next turn, while Codex injects the opening during the command
 turn. Grok expands only a leading mention, so it gets none; Claude expands one skill natively per
 message; OpenCode v1, Antigravity, the ACP registry and Muse get the text only.
@@ -70,7 +70,7 @@ message; OpenCode v1, Antigravity, the ACP registry and Muse get the text only.
 Notes attach at run start, not dispatch, so a queued message sees notes that became ready meanwhile.
 [`awaitNotesForRunStart`](../../apps/server/src/orchestration-v2/sideChat/SideChatLifecycleService.ts)
 runs inside the `provider-turn.start` effect. It returns before any tree read unless a person sent the
-message and `hasSideChatChildren` is true. It waits in the effect, not a command, because the
+message, it is not a slash command (whose turn defers inline context) and `hasSideChatChildren` is true. It waits in the effect, not a command, because the
 completions it waits for take the lesson's lock. The wait holds one of the worker's 4 slots, and the
 notes need a lane slot and a worker slot of their own, so four waiting turn starts would hold every
 slot. `SIDE_CHAT_WAIT_CAP_MS` bounds that; a turn that misses it goes ahead and the note rides the next
@@ -151,4 +151,5 @@ open from thread details and on mobile. Every list, search, older-settled and ag
 exempts both (`!isListedThreadLineage(lineage) || isSideChatThread(thread)`). A T3 Learn side chat's
 lineage reads as a listed fork, so the tag filter's `visibilityParentKey` hides it with its lesson
 ([threadTagFilter](../../packages/client-runtime/src/state/threadTagFilter.ts)). T3 Learn's panel tab
-kind is `lesson-side-chat`, so upstream's `side-chat` tab code never sees a T3 Learn side chat.
+kind is `lesson-side-chat`, so upstream's `thread` tab code (its side chats and subagents) never sees a
+T3 Learn side chat.
