@@ -109,6 +109,7 @@
       // fixtures run under node. T3 Learn ships one update track, so nothing opens
       // upstream's track-switch dialog; it stays as upstream wrote it.
       "entry": [
+        "src/epubPreviewMain.tsx!",
         "scripts/warm-dep-cache.ts",
         "test/fixtures/**/*.mjs",
         "src/components/settings/UpdateTrackSwitchDialog.tsx",

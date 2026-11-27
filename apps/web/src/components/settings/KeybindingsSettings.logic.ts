@@ -258,7 +258,15 @@ const KEYBINDING_GROUPS = [
   {
     id: "navigation",
     title: msg("Navigation"),
-    prefixes: ["sidebar", "rightPanel", "commandPalette", "filePicker", "projectSearch", "editor"],
+    prefixes: [
+      "navigation",
+      "sidebar",
+      "rightPanel",
+      "commandPalette",
+      "filePicker",
+      "projectSearch",
+      "editor",
+    ],
   },
   { id: "threads", title: msg("Threads"), prefixes: ["thread", "chat", "pullRequest", "sideChat"] },
   { id: "composer", title: msg("Composer"), prefixes: ["composer", "modelPicker"] },
@@ -387,6 +395,7 @@ export function filterKeybindingRows(
   rows: ReadonlyArray<KeybindingRow>,
   query: string,
   resolve: MessageResolver = m,
+  platform = navigator.platform,
 ): ReadonlyArray<KeybindingRow> {
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) return rows;
@@ -395,6 +404,8 @@ export function filterKeybindingRows(
       row.command.toLowerCase().includes(normalizedQuery) ||
       commandLabel(row.command, resolve).toLowerCase().includes(normalizedQuery) ||
       row.key.toLowerCase().includes(normalizedQuery) ||
+      // The row shows the platform label ("Ctrl+K"), not the stored "mod+k".
+      formatShortcutLabel(row.binding.shortcut, platform).toLowerCase().includes(normalizedQuery) ||
       row.when.toLowerCase().includes(normalizedQuery) ||
       row.source.toLowerCase().includes(normalizedQuery)
     );
@@ -481,6 +492,8 @@ const COMMAND_LABELS: Partial<Record<KeybindingCommand, string>> = {
   "terminal.splitVertical": msg("Terminal: Split Vertical"),
   "terminal.new": msg("Terminal: New"),
   "terminal.close": msg("Terminal: Close"),
+  "terminal.previous": msg("Terminal: Previous"),
+  "terminal.next": msg("Terminal: Next"),
   "rightPanel.toggle": msg("Right Panel: Toggle"),
   "rightPanel.new": msg("Right Panel: New"),
   "threadPanel.toggle": msg("Thread Panel: Toggle"),
