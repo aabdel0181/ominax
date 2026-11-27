@@ -1043,6 +1043,7 @@ it("a shortcut conditioned on rightPanelOpen sees the thread's open right panel"
 });
 
 it("Cmd+W closes the selected right-panel tabs together", async () => {
+  using _welcomeGuide = skipLessonGuides();
   await page.viewport(1280, 800);
   const thread = threadWithHistory("thread-close-selected-tabs", 1);
   using _environment = installFakeEnvironment([thread]);
@@ -1206,6 +1207,7 @@ it("opening Settings without a page event closes the composer model picker and p
 });
 
 it("a new thread on a branch with changes opens them from thread details", async () => {
+  using _welcomeGuide = skipLessonGuides();
   using _environment = installFakeEnvironment([]);
   using _status = answerRpc(WS_METHODS.subscribeVcsStatus, () =>
     Stream.concat(

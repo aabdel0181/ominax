@@ -176,6 +176,8 @@ it("/compact stays in the slash menu while a turn runs, since a typed command qu
   __setClientSettingsForTests({
     ...DEFAULT_CLIENT_SETTINGS,
     onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+    // OminaX defaults follow-ups to queue; this case is about a steering composer.
+    followUpBehavior: "steer",
   });
   const router = getRouter(
     createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${history.id}`] }),
