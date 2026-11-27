@@ -2933,8 +2933,9 @@ export const layer: Layer.Layer<
           ) {
             yield* addLessonSideChatContext(yield* buildLessonSideChatOpening(lessonSideChat));
             dropRepeatedLateSummary();
-            yield* mentionSideChatSkills(replacement.nativeThreadRef.nativeId);
           }
+          // An opening carried from an earlier run is pending again for the fresh thread too.
+          yield* mentionSideChatSkills(replacement.nativeThreadRef.nativeId);
           deliveryTarget = {
             providerThread: recoveredThread,
             budget: freshContext.budget,

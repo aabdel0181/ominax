@@ -22,6 +22,7 @@ import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -806,7 +807,7 @@ describe("side chat opening context", () => {
 
   it.effect.each([
     { bytes: 22_500, fails: false },
-    { bytes: 67_500, fails: true },
+    { bytes: 34_500, fails: true },
   ])("delivers an opening of $bytes bytes whole or fails the turn", ({ bytes, fails }) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -817,7 +818,7 @@ describe("side chat opening context", () => {
           yield* createLesson({ worktreePath: cwd });
           const excerpt = "界".repeat(4_000);
           const excerptContext = "語".repeat(1_500);
-          const summary = "文".repeat(fails ? 17_000 : 2_000);
+          const summary = "文".repeat(fails ? 6_000 : 2_000);
           yield* seedSideChatThread({
             threadId: SIDE_CHAT_THREAD_ID,
             anchorThreadId: LESSON_THREAD_ID,
@@ -861,7 +862,14 @@ describe("side chat opening context", () => {
             assert.include(prompt, summary);
             assert.equal(opening?.delivery?.status, "inline");
           }
-        }).pipe(Effect.provide(layer));
+        }).pipe(
+          Effect.provide(layer),
+          // At 1,024 tokens (4 KB) only the side-chat opening's 32 KB floor lets it through.
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromUnknown({ T3CODE_CONTEXT_HANDOFF_TOKEN_CAP: 1024 }),
+          ),
+        );
       }),
     ),
   );
@@ -1010,14 +1018,15 @@ describe("side chat opening context", () => {
   );
 
   // "start": the session is gone only when the turn starts (an ACP agent restarted under it).
-  it.effect.each(["resume", "start"] as const)(
+  // "start after a stop": the stopped run's sent opening is carried into the next run.
+  it.effect.each(["resume", "start", "start after a stop"] as const)(
     "gives the opening context again when the native thread is replaced at %s",
     (replacedAt) =>
       Effect.scoped(
         Effect.gen(function* () {
           const loseNativeSessionOnce = yield* Ref.make(false);
           const { cwd, layer, prompts } = yield* deliveryHarness(
-            `side-chat-opening-replaced-${replacedAt}`,
+            `side-chat-opening-replaced-${replacedAt.replaceAll(" ", "-")}`,
             {
               failResume: replacedAt === "resume",
               loseNativeSessionOnce,
@@ -1031,8 +1040,11 @@ describe("side chat opening context", () => {
             const orchestrator = yield* Orchestrator.OrchestratorV2;
             const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
             yield* openAndAsk(cwd);
-            yield* completeLatestRun(SIDE_CHAT_THREAD_ID);
-            if (replacedAt === "start") {
+            yield* completeLatestRun(
+              SIDE_CHAT_THREAD_ID,
+              replacedAt === "start after a stop" ? "interrupted" : "completed",
+            );
+            if (replacedAt !== "resume") {
               yield* Ref.set(loseNativeSessionOnce, true);
             } else {
               // A live session answers resume itself; detaching it makes the next turn really try.
