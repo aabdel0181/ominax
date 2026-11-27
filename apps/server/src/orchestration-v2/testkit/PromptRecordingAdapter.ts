@@ -13,7 +13,9 @@ import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
+import * as EffectAcpErrors from "effect-acp/errors";
 
 export interface RecordedPrompt {
   readonly threadId: ThreadId;
@@ -38,6 +40,8 @@ export const makePromptRecordingAdapter = Effect.fn("makePromptRecordingAdapter"
     readonly cwd: string;
     /** Every native resume fails, so each turn after the first binds a fresh native thread. */
     readonly failResume?: boolean;
+    /** The next turn start finds its native session gone, as an ACP agent restarted under it. */
+    readonly loseNativeSessionOnce?: Ref.Ref<boolean>;
     /** What every turn answers before it completes. */
     readonly replyText?: string;
     /** Record context handoffs through the native injection path. */
@@ -244,6 +248,21 @@ export const makePromptRecordingAdapter = Effect.fn("makePromptRecordingAdapter"
               }
             : {}),
           startTurn: Effect.fn("PromptRecordingAdapter.startTurn")(function* (turn) {
+            if (
+              input.loseNativeSessionOnce !== undefined &&
+              (yield* Ref.getAndSet(input.loseNativeSessionOnce, false))
+            ) {
+              return yield* new ProviderAdapter.ProviderAdapterTurnStartError({
+                driver,
+                threadId: turn.threadId,
+                providerThreadId: turn.providerThread.id,
+                runId: turn.runId,
+                cause: EffectAcpErrors.AcpRequestError.fromProtocolError(
+                  { code: -32603, message: "Session not found" },
+                  { method: "session/load" },
+                ),
+              });
+            }
             prompts.push({ threadId: turn.threadId, text: turn.message.text });
             yield* publishProviderTurn(turn, "running");
             if (replyText === undefined) return;

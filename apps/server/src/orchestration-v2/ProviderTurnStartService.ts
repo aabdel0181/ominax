@@ -1537,8 +1537,9 @@ export const layer: Layer.Layer<
           missedRunIds,
           budget: Effect.gen(function* () {
             return handoffBudget({
+              // A side chat's opening gets at least 8,000 tokens, a 32 KB cap.
               tokenCap:
-                projection.thread.sideChat === undefined ? tokenCap : Math.max(32_000, tokenCap),
+                projection.thread.sideChat === undefined ? tokenCap : Math.max(8_000, tokenCap),
               modelContextWindow,
               userText: restartNote === "" ? userText : `${restartNote}\n\n${userText}`,
               attachments: providerMessage.attachments,
@@ -2330,13 +2331,10 @@ export const layer: Layer.Layer<
         }
         return settings;
       });
-      if (
-        lessonSideChat !== undefined &&
-        (providerThread.nativeThreadRef === null || !sameNativeThread) &&
-        !hasOwnOpening &&
-        !handoffs.some(isSideChatOpeningHandoff)
-      ) {
-        const sources = yield* loadSideChatOpeningSources(projectionStore, lessonSideChat).pipe(
+      const buildLessonSideChatOpening = Effect.fn(
+        "ProviderTurnStartService.buildLessonSideChatOpening",
+      )(function* (sideChat: NonNullable<typeof lessonSideChat>) {
+        const sources = yield* loadSideChatOpeningSources(projectionStore, sideChat).pipe(
           Effect.catch((error) =>
             Effect.logWarning("Side chat opening sources are unavailable", {
               threadId: projection.thread.id,
@@ -2353,25 +2351,80 @@ export const layer: Layer.Layer<
           ),
         );
         lessonSideChatSettings = yield* loadLessonSideChatSettings();
-        lessonSideChatContext = buildSideChatOpeningContext({
+        return buildSideChatOpeningContext({
           run,
           rootNodeId: rootNode.id,
           providerThreadId: providerThread.id,
           summaryText: buildSideChatOpeningSummaryText({
-            opening: lessonSideChat.opening,
-            excerpt: lessonSideChat.excerpt,
-            excerptContext: lessonSideChat.excerptContext,
-            embedTitle: lessonSideChat.anchor.embedTitle,
+            opening: sideChat.opening,
+            excerpt: sideChat.excerpt,
+            excerptContext: sideChat.excerptContext,
+            embedTitle: sideChat.anchor.embedTitle,
             ...sources,
             sideChatInstructions: lessonSideChatSettings.sideChatInstructions,
           }),
-          withSummary: readySideChatSummary(lessonSideChat.opening) !== null,
+          withSummary: readySideChatSummary(sideChat.opening) !== null,
           turnItemId: idAllocator.derive.runSignalTurnItem({
             runId,
             signal: `context-handoff:${openingHandoffId}`,
           }),
           createdAt: now,
         });
+      });
+      const addLessonSideChatContext = Effect.fn(
+        "ProviderTurnStartService.addLessonSideChatContext",
+      )(function* (context: SideChatContextHandoff) {
+        yield* eventSink.write({
+          events: [
+            {
+              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
+              type: "context-handoff.updated",
+              threadId: projection.thread.id,
+              runId,
+              providerInstanceId: run.providerInstanceId,
+              occurredAt: now,
+              payload: context.handoff,
+            },
+            {
+              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
+              type: "turn-item.updated",
+              threadId: projection.thread.id,
+              runId,
+              nodeId: rootNode.id,
+              providerInstanceId: run.providerInstanceId,
+              occurredAt: now,
+              payload: context.turnItem,
+            },
+          ],
+        });
+        // The opening comes before everything else the run carries; a late summary is the newest.
+        effectiveHandoffs = isSideChatOpeningHandoff(context.handoff)
+          ? [context.handoff, ...effectiveHandoffs]
+          : [...effectiveHandoffs, context.handoff];
+      });
+      // A late summary carried from a stopped run would repeat the summary that a fresh native
+      // thread's opening already carries.
+      const dropRepeatedLateSummary = () => {
+        if (
+          lessonSideChat !== undefined &&
+          sideChatOpeningCarriesSummary(
+            lessonSideChat.opening,
+            [...projection.contextHandoffs, ...effectiveHandoffs],
+            providerThread.id,
+          )
+        ) {
+          effectiveHandoffs = effectiveHandoffs.filter(
+            (handoff) => !isSideChatLateSummaryHandoff(handoff),
+          );
+        }
+      };
+      if (
+        lessonSideChat !== undefined &&
+        (providerThread.nativeThreadRef === null || !sameNativeThread) &&
+        !hasOwnOpening &&
+        !handoffs.some(isSideChatOpeningHandoff)
+      ) {
+        lessonSideChatContext = yield* buildLessonSideChatOpening(lessonSideChat);
       } else if (lessonSideChat !== undefined && !hasOwnOpening) {
         // An opening sent before the summary was ready held the fallback; the summary follows alone,
         // on a later run than the opening's own retries so the two keep their timeline order.
@@ -2391,48 +2444,9 @@ export const layer: Layer.Layer<
         }
       }
       if (lessonSideChatContext !== undefined) {
-        yield* eventSink.write({
-          events: [
-            {
-              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
-              type: "context-handoff.updated",
-              threadId: projection.thread.id,
-              runId,
-              providerInstanceId: run.providerInstanceId,
-              occurredAt: now,
-              payload: lessonSideChatContext.handoff,
-            },
-            {
-              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
-              type: "turn-item.updated",
-              threadId: projection.thread.id,
-              runId,
-              nodeId: rootNode.id,
-              providerInstanceId: run.providerInstanceId,
-              occurredAt: now,
-              payload: lessonSideChatContext.turnItem,
-            },
-          ],
-        });
-        // The opening comes before everything else the run carries; a late summary is the newest.
-        effectiveHandoffs = isSideChatOpeningHandoff(lessonSideChatContext.handoff)
-          ? [lessonSideChatContext.handoff, ...effectiveHandoffs]
-          : [...effectiveHandoffs, lessonSideChatContext.handoff];
+        yield* addLessonSideChatContext(lessonSideChatContext);
       }
-      // A late summary carried from a stopped run would repeat the summary that a fresh native
-      // thread's opening already carries.
-      if (
-        lessonSideChat !== undefined &&
-        sideChatOpeningCarriesSummary(
-          lessonSideChat.opening,
-          [...projection.contextHandoffs, ...effectiveHandoffs],
-          providerThread.id,
-        )
-      ) {
-        effectiveHandoffs = effectiveHandoffs.filter(
-          (handoff) => !isSideChatLateSummaryHandoff(handoff),
-        );
-      }
+      dropRepeatedLateSummary();
       const runningProviderThread: OrchestrationV2ProviderThread = {
         ...loadedProviderThread,
         contextUsage: handoffUsage,
@@ -2453,30 +2467,34 @@ export const layer: Layer.Layer<
         createdAt: providerThread.createdAt,
         updatedAt: now,
       };
-      const nativeThreadId = runningProviderThread.nativeThreadRef?.nativeId ?? undefined;
-      const carriesSideChatOpening = effectiveHandoffs.some(
-        (handoff) =>
-          isSideChatOpeningHandoff(handoff) && isPendingContextHandoff(handoff, nativeThreadId),
+      const mentionSideChatSkills = Effect.fn("ProviderTurnStartService.mentionSideChatSkills")(
+        function* (nativeThreadId: string | undefined) {
+          const carriesSideChatOpening = effectiveHandoffs.some(
+            (handoff) =>
+              isSideChatOpeningHandoff(handoff) && isPendingContextHandoff(handoff, nativeThreadId),
+          );
+          if (lessonSideChatSettings === undefined && carriesSideChatOpening) {
+            lessonSideChatSettings = yield* loadLessonSideChatSettings();
+          }
+          if (carriesSideChatOpening && lessonSideChatSettings?.sideChatSkills.length) {
+            const dropped: string[] = [];
+            providerUserText = buildSideChatSkillMentions({
+              text: userText,
+              configuredNames: lessonSideChatSettings.sideChatSkills,
+              skills: providerWorkspaceSkills,
+              openingTurn: !slashCommand,
+              onDropped: (name) => dropped.push(name),
+            });
+            if (dropped.length > 0) {
+              yield* Effect.logDebug("Dropped unavailable side-chat skills", {
+                runId: run.id,
+                names: dropped,
+              });
+            }
+          }
+        },
       );
-      if (lessonSideChatSettings === undefined && carriesSideChatOpening) {
-        lessonSideChatSettings = yield* loadLessonSideChatSettings();
-      }
-      if (carriesSideChatOpening && lessonSideChatSettings?.sideChatSkills.length) {
-        const dropped: string[] = [];
-        providerUserText = buildSideChatSkillMentions({
-          text: userText,
-          configuredNames: lessonSideChatSettings.sideChatSkills,
-          skills: providerWorkspaceSkills,
-          openingTurn: !slashCommand,
-          onDropped: (name) => dropped.push(name),
-        });
-        if (dropped.length > 0) {
-          yield* Effect.logDebug("Dropped unavailable side-chat skills", {
-            runId: run.id,
-            names: dropped,
-          });
-        }
-      }
+      yield* mentionSideChatSkills(runningProviderThread.nativeThreadRef?.nativeId ?? undefined);
       const runningRun: OrchestrationV2Run = {
         ...run,
         status: "running",
@@ -2907,6 +2925,16 @@ export const layer: Layer.Layer<
           if (!recoveryWrite.committed) return undefined;
           resumeFellBack = true;
           effectiveHandoffs = withRecoveryHandoff(handoff);
+          // The fresh native thread knows nothing of the lesson either.
+          if (
+            lessonSideChat !== undefined &&
+            !hasOwnOpening &&
+            !effectiveHandoffs.some(isSideChatOpeningHandoff)
+          ) {
+            yield* addLessonSideChatContext(yield* buildLessonSideChatOpening(lessonSideChat));
+            dropRepeatedLateSummary();
+            yield* mentionSideChatSkills(replacement.nativeThreadRef.nativeId);
+          }
           deliveryTarget = {
             providerThread: recoveredThread,
             budget: freshContext.budget,
